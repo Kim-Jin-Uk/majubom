@@ -1,0 +1,70 @@
+# ── 절대 커밋 금지 ──────────────────────────────────────
+# Firebase 서비스 계정 키 (유출 시 프로젝트 전체 장악 가능)
+*serviceAccount*.json
+*service-account*.json
+*-firebase-adminsdk-*.json
+firebase-debug.log
+firebase-debug.*.log
+.firebase/
+.firebaserc.local
+
+# 환경변수 — .env.example만 커밋한다
+.env
+.env.*
+!.env.example
+
+# Neon / Postgres 접속 문자열이 흘러들 수 있는 파일
+*.pgpass
+drizzle/.credentials
+dump.sql
+*.dump
+
+# 인증서 · 키
+*.pem
+*.key
+*.p8
+*.p12
+*.mobileprovision
+
+# ── 로컬 전용 (커밋하지 않음) ──────────────────────────
+# 머신마다 값이 다르고 개인 계정 정보가 들어가므로 저장소에 두지 않는다
+/scripts/setup-git-identity.sh
+/scripts/create-issues.mjs
+/scripts/issues.json
+
+# ── 빌드 산출물 ────────────────────────────────────────
+node_modules/
+.next/
+out/
+build/
+dist/
+.turbo/
+*.tsbuildinfo
+next-env.d.ts
+
+# ── 테스트 · 캐시 ──────────────────────────────────────
+coverage/
+.nyc_output/
+playwright-report/
+test-results/
+.eslintcache
+.vercel/
+
+# ── OS · 에디터 ────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+.idea/
+*.iml
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# ── 로그 ───────────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*

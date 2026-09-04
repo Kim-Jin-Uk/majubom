@@ -1,0 +1,11 @@
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.webp binary
+*.ico binary
+*.pdf binary
+*.md text diff=markdown
+*.ts text diff=typescript
+*.tsx text diff=typescript
+pnpm-lock.yaml -diff linguist-generated
+package-lock.json -diff linguist-generated

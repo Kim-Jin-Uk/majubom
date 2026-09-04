@@ -1,0 +1,49 @@
+# Firebase App Hosting 백엔드 설정 (프로덕션 기본값)
+# 이 파일은 커밋해도 안전하다 — 시크릿은 값이 아니라 Secret Manager 이름만 적는다.
+# 스테이징은 apphosting.staging.yaml 로 덮어쓴다.
+
+runConfig:
+  minInstances: 0        # 무료 한도 유지. 콜드스타트 감수
+  maxInstances: 3        # 종량제 폭주 방어선 (06 리스크 T1)
+  concurrency: 80
+  cpu: 1
+  memoryMiB: 512
+
+env:
+  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    value: majubom
+    availability: [BUILD, RUNTIME]
+
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    value: ""            # 클라이언트 노출 전제 값. 콘솔에서 채운다
+    availability: [BUILD, RUNTIME]
+
+  # ── 시크릿: Cloud Secret Manager 참조 ──
+  # 등록: firebase apphosting:secrets:set DATABASE_URL
+  - variable: DATABASE_URL
+    secret: DATABASE_URL
+    availability: [RUNTIME]
+
+  - variable: AUTH_SECRET
+    secret: AUTH_SECRET
+    availability: [RUNTIME]
+
+  - variable: AUTH_KAKAO_SECRET
+    secret: AUTH_KAKAO_SECRET
+    availability: [RUNTIME]
+
+  - variable: FIREBASE_ADMIN_PRIVATE_KEY
+    secret: FIREBASE_ADMIN_PRIVATE_KEY
+    availability: [RUNTIME]
+
+  - variable: R2_SECRET_ACCESS_KEY
+    secret: R2_SECRET_ACCESS_KEY
+    availability: [RUNTIME]
+
+  - variable: RESEND_API_KEY
+    secret: RESEND_API_KEY
+    availability: [RUNTIME]
+
+  - variable: CRON_SECRET
+    secret: CRON_SECRET
+    availability: [RUNTIME]
