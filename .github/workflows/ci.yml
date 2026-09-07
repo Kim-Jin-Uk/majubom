@@ -1,34 +1,49 @@
-name: CI
+# CI 게이트 — 정본: 08_코드관리_전략 §6.1~6.4
+#
+# - 트리거는 pull_request 만. push:[main] 은 두지 않는다 — 머지 전 PR에서 이미 검증했다 (08 §6.2)
+# - 잡 이름 verify / firestore-rules / secret-scan 은 브랜치 보호의 required status check 문자열과
+#   정확히 일치해야 한다. 이름을 바꾸면 저장소 설정도 같이 바꿀 것.
+# - paths-ignore 는 절대 쓰지 않는다: 경로 필터로 스킵된 워크플로는 required check 이 영구 Pending 이 되어
+#   머지가 막힌다. 조건이 필요하면 잡 레벨 `if:` 를 쓴다 (if 로 스킵된 잡은 success 로 보고된다).
+name: ci
 
 on:
-  push:
-    branches: [main]
   pull_request:
-    branches: [main]
+    branches: [main, release]
 
-# 같은 브랜치의 이전 실행은 취소 — Free 2,000분 아끼기
+# PR 브랜치에 새 푸시가 오면 이전 실행은 취소한다 (배포 워크플로가 아니므로 안전).
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
-jobs:
-  verify:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+permissions:
+  contents: read
 
+jobs:
+  # ── 타입 · 린트 · 마이그레이션 · 스키마 불변 제약 · 테스트 ─────────────────
+  verify:
+    name: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     services:
       postgres:
         image: postgres:16
         env:
+          POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: majubom_test
+        ports:
+          - 5432:5432
         options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
+          --health-cmd "pg_isready -U postgres -d majubom_test"
+          --health-interval 5s
           --health-timeout 5s
-          --health-retries 5
-        ports: ['5432:5432']
-
+          --health-retries 10
+    env:
+      # 임시 DB 이므로 pooled/unpooled 구분이 없다. 러너(scripts/db/_conn.ts)는 UNPOOLED 를 우선 읽는다.
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/majubom_test
+      DATABASE_URL_UNPOOLED: postgresql://postgres:postgres@localhost:5432/majubom_test
+      NODE_ENV: test
     steps:
       - uses: actions/checkout@v4
 
@@ -45,37 +60,59 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Migrate (EXCLUDE 제약 포함)
+      - name: Apply migrations (temp Postgres)
         run: npm run db:migrate
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/majubom_test
 
-      - name: Test
+      # 08 §6.1 스키마 불변 제약 — btree_gist · EXCLUDE 제약 · NOT NULL · CASCADE 금지 · 드리프트.
+      # FR-BOOK-020 의 핵심 장치가 조용히 사라지는 모든 경로를 여기서 잡는다.
+      - name: Schema invariants
+        run: npm run db:check
+
+      - name: Unit tests
         run: npm test
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/majubom_test
 
+  # ── Firestore 보안 규칙 (에뮬레이터 + @firebase/rules-unit-testing) ─────────
   firestore-rules:
+    name: firestore-rules
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
-      - name: Firestore 보안 규칙 테스트 (FR-CHAT-020)
-        run: npx firebase emulators:exec --only firestore "npm run test:rules"
 
+      - run: npm ci
+
+      # firebase-tools 가 내려받는 에뮬레이터 JAR 캐시. 없으면 매번 재다운로드(1~2분) — 08 §6.2.
+      # 키에 firebase-tools 버전을 넣어 CLI 가 올라가면 새 JAR 을 받도록 한다.
+      - name: Resolve firebase-tools version
+        id: fbt
+        run: echo "version=$(node -p "require('firebase-tools/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}-fbt${{ steps.fbt.outputs.version }}-${{ hashFiles('firebase.json') }}
+          restore-keys: |
+            firebase-emulators-${{ runner.os }}-fbt${{ steps.fbt.outputs.version }}-
+
+      # Java 는 ubuntu-latest 에 프리인스톨 (08 §6.4). `demo-` 프리픽스 프로젝트 ID 라 자격증명이 필요 없다.
+      - name: Rules tests in emulator
+        run: npx firebase emulators:exec --only firestore --project demo-majubom "npm run test:rules"
+
+  # ── 시크릿 스캔 ──────────────────────────────────────────────────────────
   secret-scan:
+    name: secret-scan
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-      - name: gitleaks
-        uses: gitleaks/gitleaks-action@v2
+          fetch-depth: 0 # 전체 히스토리 — PR 의 모든 커밋을 스캔한다
+
+      - uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
