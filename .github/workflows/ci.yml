@@ -99,7 +99,14 @@ jobs:
           restore-keys: |
             firebase-emulators-${{ runner.os }}-fbt${{ steps.fbt.outputs.version }}-
 
-      # Java 는 ubuntu-latest 에 프리인스톨 (08 §6.4). `demo-` 프리픽스 프로젝트 ID 라 자격증명이 필요 없다.
+      # firebase-tools 15 는 Java 21 이상을 요구한다 — ubuntu-latest 기본 JDK 는 17 이라 명시적으로 올린다.
+      # (첫 CI 실행에서 "no longer supports Java version before 21" 로 실패했다.)
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      # `demo-` 프리픽스 프로젝트 ID 라 자격증명이 필요 없다.
       - name: Rules tests in emulator
         run: npx firebase emulators:exec --only firestore --project demo-majubom "npm run test:rules"
 
