@@ -1,0 +1,45 @@
+rules_version = '2';
+
+// Firestore 보안 규칙 — 정본: 02_기능명세서 §3.11 FR-CHAT-020 "실시간 계층 인가".
+// 클라이언트가 Firestore를 직접 구독하므로 API 스코프 검사만으로는 부족하다.
+// roomId 를 바꿔 리스너를 붙이는 우회를 여기서 막는다.
+//
+// 규칙이 참조하는 커스텀 클레임 (FR-AUTH-030 에서 로그인 시 심는다):
+//   request.auth.token.businessId     — 사업장 스태프의 소속 사업장
+//   request.auth.token.canHandleChat  — 채팅 응대 권한
+//   request.auth.token.admin          — 플랫폼 관리자
+service cloud.firestore {
+  match /databases/{db}/documents {
+
+    match /chatRooms/{roomId} {
+      function room()       { return get(/databases/$(db)/documents/chatRooms/$(roomId)).data; }
+      function isCustomer() { return request.auth != null
+                                && request.auth.uid == room().customerId; }
+      function isStaff()    { return request.auth != null
+                                && request.auth.token.businessId == room().businessId
+                                && request.auth.token.canHandleChat == true; }
+      // 필드 부재는 에러가 아니라 false다. .get(field, default)로 명시 처리하지 않으면
+      // reportStatus가 없는 기존 문서에서 관리자 조회가 조용히 막힌다.
+      function isReviewer() { return request.auth != null
+                                && request.auth.token.admin == true
+                                && room().get('reportStatus', 'NONE') == 'PENDING'; }
+
+      allow read: if isCustomer() || isStaff() || isReviewer();
+      allow create, update, delete: if false;      // 방 생성·상태 변경은 서버(Admin SDK)만
+
+      match /messages/{msgId} {
+        allow read:   if isCustomer() || isStaff() || isReviewer();
+        allow create: if (isCustomer() || isStaff())
+                      && request.resource.data.senderType in ['CUSTOMER', 'BIZ']
+                      && request.resource.data.content is string
+                      && request.resource.data.content.size() <= 1000;
+        allow update, delete: if false;            // 수정 불가, soft delete는 서버에서만
+      }
+    }
+
+    // 그 외 모든 경로는 클라이언트 접근 불가 (서버 Admin SDK 전용).
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
