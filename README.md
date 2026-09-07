@@ -10,7 +10,7 @@
 
 ## 스택
 
-- **Next.js 15 (App Router)** · TypeScript · Drizzle
+- **Next.js 16 (App Router, Turbopack)** · TypeScript · React 19 · Drizzle ORM
 - **PostgreSQL (Neon)** — 예약 엔진. `EXCLUDE USING gist`로 이중 예약을 DB가 물리적으로 거부
 - **Firestore** — 채팅만. 보안 규칙으로 인가
 - **Firebase App Hosting** — 배포 (Blaze 종량제 필수)
@@ -19,21 +19,38 @@
 ## 로컬 실행
 
 ```bash
-cp .env.example .env.local     # 값 채우기
+cp .env.example .env.local     # DATABASE_URL 둘은 필수, 나머지는 필요할 때
 npm ci
-npm run db:migrate
+npm run db:migrate             # 또는 npm run db:reset (1기 전용 — 스키마 초기화 후 재적용)
+npm run db:check               # 스키마 불변 제약 9종 확인
 npm run dev
 ```
 
-## 브랜치 · 커밋
+로컬 Postgres는 16 이상. `CREATE EXTENSION btree_gist` 권한이 있는 역할이어야 한다 (첫 마이그레이션이 확장을 만든다).
+
+| 명령 | 하는 일 |
+|---|---|
+| `npm run verify` | typecheck + lint + test — **push 전에 한 번** |
+| `npm test` | vitest 유닛 (슬롯 계산 40건은 `todo`, 구현은 이슈 #7) |
+| `npm run test:rules:emu` | Firestore 보안 규칙 테스트 (에뮬레이터 기동 포함, Java 필요) |
+| `npm run db:generate` | 스키마 변경 → 마이그레이션 SQL 생성 |
+| `npm run db:migrate` | 마이그레이션 적용 (직결 연결 · `lock_timeout 3s` · 재시도) |
+| `npm run db:check` | 불변 제약 검사 — CI `verify` 잡에서도 돈다 |
+
+### 1기 게이트
+
+고객이 없는 W1–W15 동안 프로덕션 URL은 `GATE_ENABLED=true`(기본)로 색인 차단(`X-Robots-Tag`, `robots.txt Disallow`)되고,
+`GATE_BASIC_AUTH=user:pass`가 있으면 Basic Auth가 걸린다. `/api/auth/*`·`/api/health`는 예외. W16에 `GATE_ENABLED=false`.
+
+## 브랜치 · 커밋 · 이슈
 
 정본은 `majubom-docs/08_코드관리_전략.md`다. 요약하면:
 
-- 작업은 `feat/*` · `fix/*` · `db/*`에서 하고 PR로 `main`에 합친다. **Squash merge만.**
+- **메인 이슈(`epic`) 1개 = 브랜치 `feat/<N>-<slug>` 1개 = PR 1개.** 세부 이슈는 브랜치 없이 커밋 본문에 `#번호`를 멘션한다.
+- PR 본문에 `Closes #<메인>`과 세부 이슈 `Closes #…`를 나열하면 머지 시 전부 닫힌다. **Squash merge만.**
 - W15부터 `release`가 프로덕션이고 `main`은 스테이징이 된다.
-- PR 제목은 `<type>(<scope>): <제목>` — type은 `feat` `fix` `db` `refactor` `chore` 5종, scope는 선택.
-- **로컬 커밋 메시지는 자유다.** squash로 사라진다.
-- `db/*` PR은 `08` 5.6의 체크 항목을 채운다.
+- PR 제목은 `<type>(<scope>): <제목>` — type은 `feat` `fix` `db` `refactor` `chore`, scope는 선택. 로컬 커밋 제목은 자유.
+- `db/*` PR은 `08` 5.6의 체크 항목을 채운다. 마이그레이션에 `CASCADE`를 쓰지 않는다 — `db:check`가 잡는다.
 
 ## 중단하고 돌아올 때
 
