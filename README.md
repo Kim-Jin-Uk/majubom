@@ -38,11 +38,24 @@ npm run dev
 | `npm run db:generate` | 스키마 변경 → 마이그레이션 SQL 생성 |
 | `npm run db:migrate` | 마이그레이션 적용 (직결 연결 · `lock_timeout 3s` · 재시도) |
 | `npm run db:check` | 불변 제약 검사 — CI `verify` 잡에서도 돈다 |
+| `npm run admin:promote -- <email>` | 사용자를 ADMIN 으로 승격 (첫 `/admin` 진입에서 TOTP 등록 강제) |
+| `npm run job:cleanup-unverified` | 7일 지난 미검증 사업자 신청 삭제 (프로덕션은 Cloud Scheduler → `/api/cron/cleanup-unverified`) |
+
+### 인증
+
+Auth.js v5 + 서버 저장 리프레시 토큰. **액세스 스냅샷(JWT 쿠키) 15분 / 리프레시(회전) 30일**, 갱신과 콘솔 매 요청 상태 재확인은
+`src/proxy.ts` 가 한다. 설계 근거와 결정 목록은 [src/features/auth/README.md](src/features/auth/README.md).
+
+- 로컬 실행에는 `AUTH_SECRET`(32자+) 과 `AUTH_URL`(dev 포트) 이 필요하다. 소셜 로그인은 `AUTH_GOOGLE_*` / `AUTH_KAKAO_*` 가 있을 때만 켜진다.
+- 메일(OTP·초대·재설정)은 `RESEND_API_KEY` 가 없으면 **서버 콘솔에 본문이 찍힌다** — 로컬에서는 거기서 코드·링크를 꺼내 쓴다.
+- 화면: `/login` `/signup` `/signup/complete` `/signup/business` (+`/verify`) `/forgot-password` `/reset-password/[t]` `/invite/[t]`
+  `/login/totp` · `/console` `/console/members` `/me/sessions` `/admin` (콘솔·관리자 화면은 자리표시자).
 
 ### 1기 게이트
 
 고객이 없는 W1–W15 동안 프로덕션 URL은 `GATE_ENABLED=true`(기본)로 색인 차단(`X-Robots-Tag`, `robots.txt Disallow`)되고,
 `GATE_BASIC_AUTH=user:pass`가 있으면 Basic Auth가 걸린다. `/api/auth/*`·`/api/health`는 예외. W16에 `GATE_ENABLED=false`.
+게이트 뒤에 세션 처리(갱신·접근 제어)가 이어지며, 세션 처리에서 예외가 나도 게이트와 공개 페이지는 계속 동작한다.
 
 ## 브랜치 · 커밋 · 이슈
 
