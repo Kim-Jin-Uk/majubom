@@ -38,6 +38,8 @@ describe("productInputSchema (FR-PRD-010 세 스위치)", () => {
     expect(productInputSchema.safeParse({ ...base, durationMin: 62 }).success).toBe(false);
     expect(productInputSchema.safeParse({ ...base, durationMin: 485 }).success).toBe(false);
     expect(productInputSchema.safeParse({ ...base, capacityPerSlot: 2, maxPartySize: 3 }).success).toBe(false);
+    // 정원 1 은 팀 단위 — 공간형 프리셋(정원 1 · 최대 4명) 이 통과해야 한다
+    expect(productInputSchema.safeParse({ ...base, capacityPerSlot: 1, maxPartySize: 4 }).success).toBe(true);
     expect(productInputSchema.safeParse({ ...base, name: "가".repeat(41) }).success).toBe(false);
     expect(productInputSchema.safeParse({ ...base, images: Array(6).fill("https://x/a.jpg") }).success).toBe(false);
     expect(productInputSchema.safeParse({ ...base, images: ["javascript:alert(1)"] }).success).toBe(false);

@@ -138,7 +138,8 @@ export async function futureReservationCount(productId: string, q: DbLike = db):
  * 이 상품의 미래 REQUESTED/CONFIRMED 예약이 한 자원 안에서 한때 최대 몇 명 겹치는가 — 자원별로 peakOccupancy(스윕라인) 를 돌려 최댓값.
  * occupyRange(버퍼 포함 스냅샷)를 기준으로 하므로 이용 시간이 다른 예약의 부분 겹침도 정확히 센다.
  */
-export async function peakFutureOccupancy(productId: string, q: DbLike = db): Promise<number> {
+/** @param unit persons = partySize 합(좌석 단위, 정원 N) · teams = 예약 건수(팀 단위, 정원 1) */
+export async function peakFutureOccupancy(productId: string, q: DbLike = db, unit: "persons" | "teams" = "persons"): Promise<number> {
   const rows = await q
     .select({
       resourceId: reservations.resourceId,
@@ -151,7 +152,7 @@ export async function peakFutureOccupancy(productId: string, q: DbLike = db): Pr
   const byResource = new Map<string, OccupyingReservation[]>();
   for (const r of rows) {
     const list = byResource.get(r.resourceId) ?? [];
-    list.push({ occupyRange: { start: pgTimestamp(r.start), end: pgTimestamp(r.end) }, partySize: r.partySize });
+    list.push({ occupyRange: { start: pgTimestamp(r.start), end: pgTimestamp(r.end) }, partySize: unit === "teams" ? 1 : r.partySize });
     byResource.set(r.resourceId, list);
   }
   let peak = 0;
@@ -307,9 +308,11 @@ export async function updateProduct(businessId: string, productId: string, input
         // 정원을 미래 예약의 **순간 최대 동시 인원**(자원별 스윕라인, FR-BOOK-010 peakOccupancy)보다 낮게 내리는 것은 거부 —
         // 이미 받은 손님을 앉힐 자리가 없어진다. 같은 start_at 합산은 이용 시간이 다른 예약의 부분 겹침을 놓친다
         if (next.capacityPerSlot < cur.capacityPerSlot) {
-          const maxBooked = await peakFutureOccupancy(productId, tx);
+          // 정원 1 로 내리는 건 "한 팀 독점" 으로 바꾸는 것 — 인원이 아니라 겹치는 예약 건수가 1 을 넘으면 안 된다 (가정 A1)
+          const teams = next.capacityPerSlot === 1;
+          const maxBooked = await peakFutureOccupancy(productId, tx, teams ? "teams" : "persons");
           if (next.capacityPerSlot < maxBooked) {
-            throw new HttpError(400, "INVALID_BODY", { issues: [{ path: ["capacityPerSlot"], message: `미래 예약이 한때 최대 ${maxBooked}명 겹쳐 있어 그보다 낮출 수 없습니다` }], fields: ["capacityPerSlot"], maxBooked });
+            throw new HttpError(400, "INVALID_BODY", { issues: [{ path: ["capacityPerSlot"], message: teams ? `미래 예약이 한때 ${maxBooked}팀 겹쳐 있어 한 팀 독점(정원 1)으로 바꿀 수 없습니다` : `미래 예약이 한때 최대 ${maxBooked}명 겹쳐 있어 그보다 낮출 수 없습니다` }], fields: ["capacityPerSlot"], maxBooked });
           }
         }
         // 미래 예약이 있는 자원은 해제 불가 — 먼저 이관·취소해야 한다

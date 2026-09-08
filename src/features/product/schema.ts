@@ -67,7 +67,9 @@ export const productInputSchema = z
         }
       });
     }
-    if (p.maxPartySize > p.capacityPerSlot) ctx.addIssue({ code: "custom", path: ["maxPartySize"], message: "1건 최대 인원은 슬롯당 정원을 넘을 수 없습니다" });
+    // 정원 1 = 한 팀이 슬롯을 통째로 쓴다(팀 단위, 인원과 비교하지 않는다 — 공간형 "정원 1 · 최대 4명" 이 성립하는 해석, 예약 엔진 가정 A1).
+    // 정원 N>1 = 좌석 단위. 그때만 1건 인원이 정원을 넘을 수 없다
+    if (p.capacityPerSlot > 1 && p.maxPartySize > p.capacityPerSlot) ctx.addIssue({ code: "custom", path: ["maxPartySize"], message: "정원이 2명 이상이면 1건 최대 인원은 정원을 넘을 수 없습니다" });
   });
 
 export type ProductInput = z.output<typeof productInputSchema>;

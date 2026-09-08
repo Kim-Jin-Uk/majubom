@@ -76,7 +76,7 @@ function applyPreset(key: PresetKey, resources: ResourceItem[], base: Draft): Dr
     durationMin: String(v.durationMin),
     durationOptions: v.durationOptions ?? [],
     capacityPerSlot: String(v.capacityPerSlot ?? minCap),
-    maxPartySize: String(Math.min(v.maxPartySize, v.capacityPerSlot ?? minCap)),
+    maxPartySize: String(v.capacityPerSlot === 1 ? v.maxPartySize : Math.min(v.maxPartySize, v.capacityPerSlot ?? minCap)),
     resourceSelectMode: v.resourceSelectMode,
     bufferBeforeMin: String(v.bufferBeforeMin),
     bufferAfterMin: String(v.bufferAfterMin),
@@ -484,10 +484,10 @@ export function ProductForm({ businessId, resources, initial, mode, limited, rea
       <section style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         <h2>정원</h2>
         <div className="grid-2">
-          <Field label="슬롯당 정원" htmlFor="p-cap" error={errors.capacityPerSlot} hint={minCap !== null ? `연결한 자원의 정원(${minCap}명) 이하` : "한 회차(슬롯)에 받을 수 있는 총 인원"}>
+          <Field label="슬롯당 정원" htmlFor="p-cap" error={errors.capacityPerSlot} hint={`${minCap !== null ? `연결한 자원의 정원(${minCap}명) 이하. ` : ""}1이면 한 팀이 슬롯을 통째로 써요(방·담당자), 2 이상이면 좌석 수예요(수업)`}>
             <Input id="p-cap" type="number" min={1} max={500} required value={d.capacityPerSlot} onChange={(e) => set("capacityPerSlot", e.target.value)} disabled={lockShape} aria-invalid={!!errors.capacityPerSlot} />
           </Field>
-          <Field label="1건 최대 인원" htmlFor="p-party" error={errors.maxPartySize} hint="고객 한 명이 한 번에 예약할 수 있는 인원">
+          <Field label="1건 최대 인원" htmlFor="p-party" error={errors.maxPartySize} hint={Number(d.capacityPerSlot) > 1 ? "고객 한 명이 한 번에 예약할 수 있는 인원 — 정원 이하" : "한 팀의 인원 상한 (예: 4인실이면 4)"}>
             <Input id="p-party" type="number" min={1} max={500} required value={d.maxPartySize} onChange={(e) => set("maxPartySize", e.target.value)} disabled={lockShape} aria-invalid={!!errors.maxPartySize} />
           </Field>
         </div>
