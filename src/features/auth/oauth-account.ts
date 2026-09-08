@@ -67,10 +67,13 @@ export async function resolveOAuthUser(id: OAuthIdentity): Promise<ResolveResult
   if (byEmail) {
     if (!id.emailVerified) return { kind: "denied", code: "email_taken" };
     if (byEmail.status !== "ACTIVE") return { kind: "denied", code: "inactive" };
-    await db
+    // 낙관적 잠금: 그 사이 다른 소셜이 먼저 연결됐으면 0행 — 이번 로그인은 거절한다
+    const linked = await db
       .update(users)
       .set({ provider: id.provider, providerAccountId: id.providerAccountId, emailVerifiedAt: new Date() })
-      .where(and(eq(users.id, byEmail.id), eq(users.provider, byEmail.provider)));
+      .where(and(eq(users.id, byEmail.id), eq(users.provider, byEmail.provider)))
+      .returning({ id: users.id });
+    if (linked.length !== 1) return { kind: "denied", code: "email_taken" };
     return { kind: "user", uid: byEmail.id };
   }
 

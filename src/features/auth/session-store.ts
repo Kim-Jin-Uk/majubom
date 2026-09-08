@@ -1,5 +1,5 @@
 import { and, desc, eq, gt, isNull, sql } from "drizzle-orm";
-import { db } from "@/db/client";
+import { db, type DbLike } from "@/db/client";
 import { sessions } from "@/db/schema";
 import { deviceLabel, type RequestMeta } from "@/lib/request-meta";
 import { REFRESH_TTL_SEC, ROTATION_GRACE_SEC } from "./constants";
@@ -110,8 +110,8 @@ export async function revokeSession(sid: string, userId?: string): Promise<boole
 }
 
 /** 비활성화·정지·비밀번호 변경: 사용자 세션 전부 폐기. 폐기된 수를 돌려준다 */
-export async function revokeAllSessions(userId: string, exceptSid?: string): Promise<number> {
-  const rows = await db
+export async function revokeAllSessions(userId: string, exceptSid?: string, tx: DbLike = db): Promise<number> {
+  const rows = await tx
     .update(sessions)
     .set({ revokedAt: new Date() })
     .where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt), exceptSid ? sql`${sessions.id} <> ${exceptSid}` : undefined))

@@ -9,8 +9,8 @@ import { LogoutButton } from "@/features/auth/ui/LogoutButton";
 export const metadata = { title: "콘솔 — 마주,봄" };
 
 /**
- * 콘솔 자리표시자. 접근 제어(로그인·소속·상태·이메일 검증)는 프록시가 끝냈다 — 여기 오면 통과한 사용자다.
- * 실제 대시보드는 #59(8-1), 온보딩 위저드는 #25(3-1). 지금은 상태 배너와 다음 단계만 보여준다.
+ * 콘솔 자리표시자. 접근 제어(로그인·소속·상태·이메일 검증)는 프록시가, 상태 배너는 layout.tsx 가 맡는다.
+ * 실제 대시보드는 #59(8-1), 온보딩 위저드는 #25(3-1). 지금은 다음 단계만 보여준다.
  */
 export default async function ConsoleHome() {
   const s = await auth();
@@ -18,9 +18,6 @@ export default async function ConsoleHome() {
   if (!s?.user.id || !m) redirect("/login?next=%2Fconsole");
   return (
     <main style={{ minHeight: "100dvh", display: "flex", flexDirection: "column" }}>
-      {m.businessStatus === "PENDING" && <div className="banner">심사 중 — 승인되면 예약 페이지가 공개됩니다. 그동안 매장·자원·상품을 준비해 두세요.</div>}
-      {m.businessStatus === "REJECTED" && <div className="banner">가입 신청이 반려되었습니다. 메일의 사유를 확인하고 다시 신청할 수 있어요.</div>}
-      {m.businessStatus === "SUSPENDED" && <div className="banner">사업장이 일시정지되어 읽기 전용입니다. 예약 취소와 고객 상담은 계속 할 수 있어요.</div>}
       <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderBottom: "1px solid var(--border)" }}>
         <Link href="/console" aria-label="콘솔 홈">
           <Logo size={24} />

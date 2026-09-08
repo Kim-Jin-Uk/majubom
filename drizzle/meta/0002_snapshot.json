@@ -1,5 +1,5 @@
 {
-  "id": "e7659913-2002-418f-8dbd-a3ee18832652",
+  "id": "4263b7c2-10b6-4e80-b752-6597ad2474e9",
   "prevId": "aaf7767f-32f3-453d-922b-c770363ddd43",
   "version": "7",
   "dialect": "postgresql",
@@ -67,6 +67,12 @@
         "totp_enabled_at": {
           "name": "totp_enabled_at",
           "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "totp_last_step": {
+          "name": "totp_last_step",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false
         },
@@ -3387,7 +3393,7 @@
           "name": "user_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "token_hash": {
           "name": "token_hash",

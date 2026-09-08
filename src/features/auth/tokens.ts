@@ -1,4 +1,4 @@
-import { and, eq, gt, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, lt, sql } from "drizzle-orm";
 import { db, type DbLike } from "@/db/client";
 import { authTokens } from "@/db/schema";
 import { EMAIL_VERIFY_TTL_HOURS, INVITE_TTL_HOURS, OTP_MAX_ATTEMPTS, OTP_TTL_MIN, PASSWORD_RESET_TTL_MIN } from "./constants";
@@ -45,8 +45,12 @@ export async function consumeToken(kind: Exclude<TokenKind, "EMAIL_OTP">, raw: s
     .set({ usedAt: now })
     .where(and(eq(authTokens.kind, kind), eq(authTokens.tokenHash, hash), isNull(authTokens.usedAt), gt(authTokens.expiresAt, now)))
     .returning({ id: authTokens.id, userId: authTokens.userId });
-  if (rows.length === 1) return { ok: true, userId: rows[0].userId, tokenId: rows[0].id };
-  const [row] = await tx.select({ usedAt: authTokens.usedAt, expiresAt: authTokens.expiresAt }).from(authTokens).where(eq(authTokens.tokenHash, hash)).limit(1);
+  if (rows.length === 1 && rows[0].userId) return { ok: true, userId: rows[0].userId, tokenId: rows[0].id };
+  const [row] = await tx
+    .select({ usedAt: authTokens.usedAt, expiresAt: authTokens.expiresAt })
+    .from(authTokens)
+    .where(and(eq(authTokens.kind, kind), eq(authTokens.tokenHash, hash)))
+    .limit(1);
   if (!row) return { ok: false, reason: "INVALID" };
   if (row.usedAt) return { ok: false, reason: "USED" };
   return { ok: false, reason: "EXPIRED" };
@@ -60,7 +64,7 @@ export async function peekToken(kind: Exclude<TokenKind, "EMAIL_OTP">, raw: stri
     .from(authTokens)
     .where(and(eq(authTokens.kind, kind), eq(authTokens.tokenHash, sha256(raw))))
     .limit(1);
-  if (!row) return { ok: false, reason: "INVALID" };
+  if (!row || !row.userId) return { ok: false, reason: "INVALID" };
   if (row.usedAt) return { ok: false, reason: "USED" };
   if (row.expiresAt <= new Date()) return { ok: false, reason: "EXPIRED" };
   return { ok: true, userId: row.userId, tokenId: row.id };
@@ -86,22 +90,33 @@ export async function issueOtp(userId: string, ip: string | null, tx: DbLike = d
 export type OtpResult = { ok: true } | { ok: false; reason: "INVALID" | "EXPIRED" | "TOO_MANY" | "NONE" };
 
 /**
- * OTP 검증. 살아 있는 토큰 하나(최신)를 대상으로 하고, 틀리면 attempts+1, OTP_MAX_ATTEMPTS 를 넘으면 폐기한다.
- * 맞으면 used_at 을 찍는다.
+ * OTP 검증. 살아 있는 최신 토큰 하나를 대상으로, **시도 횟수 증가와 상한 검사를 한 UPDATE 로** 처리한다 —
+ * `UPDATE … SET attempts = attempts + 1 WHERE … AND attempts < MAX RETURNING token_hash`. 읽고-검사하고-쓰는 방식이면
+ * 동시 요청 N개가 전부 attempts=0 을 읽어 상한이 무력해진다(리뷰 지적). 맞으면 used_at 을 찍고, 상한에 닿으면 폐기한다.
  */
 export async function verifyOtp(userId: string, code: string, tx: DbLike = db): Promise<OtpResult> {
   const now = new Date();
   const [live] = await tx
-    .select({ id: authTokens.id, tokenHash: authTokens.tokenHash, attempts: authTokens.attempts, expiresAt: authTokens.expiresAt })
+    .select({ id: authTokens.id, expiresAt: authTokens.expiresAt, attempts: authTokens.attempts })
     .from(authTokens)
     .where(and(eq(authTokens.userId, userId), eq(authTokens.kind, "EMAIL_OTP"), isNull(authTokens.usedAt)))
-    .orderBy(sql`${authTokens.createdAt} desc`)
+    .orderBy(desc(authTokens.createdAt))
     .limit(1);
   if (!live) return { ok: false, reason: "NONE" };
   if (live.expiresAt <= now) return { ok: false, reason: "EXPIRED" };
-  if (live.attempts >= OTP_MAX_ATTEMPTS) return { ok: false, reason: "TOO_MANY" };
 
-  if (live.tokenHash === sha256(`${userId}:${code}`)) {
+  // 원자적으로 시도 1회를 소비한다. 상한에 이미 닿았으면 0행
+  const [claimed] = await tx
+    .update(authTokens)
+    .set({ attempts: sql`${authTokens.attempts} + 1` })
+    .where(and(eq(authTokens.id, live.id), isNull(authTokens.usedAt), lt(authTokens.attempts, OTP_MAX_ATTEMPTS)))
+    .returning({ tokenHash: authTokens.tokenHash, attempts: authTokens.attempts });
+  if (!claimed) {
+    await tx.update(authTokens).set({ usedAt: now }).where(and(eq(authTokens.id, live.id), isNull(authTokens.usedAt)));
+    return { ok: false, reason: "TOO_MANY" };
+  }
+
+  if (claimed.tokenHash === sha256(`${userId}:${code}`)) {
     const rows = await tx
       .update(authTokens)
       .set({ usedAt: now })
@@ -109,12 +124,7 @@ export async function verifyOtp(userId: string, code: string, tx: DbLike = db): 
       .returning({ id: authTokens.id });
     return rows.length === 1 ? { ok: true } : { ok: false, reason: "INVALID" };
   }
-  const [updated] = await tx
-    .update(authTokens)
-    .set({ attempts: sql`${authTokens.attempts} + 1` })
-    .where(eq(authTokens.id, live.id))
-    .returning({ attempts: authTokens.attempts });
-  if (updated && updated.attempts >= OTP_MAX_ATTEMPTS) {
+  if (claimed.attempts >= OTP_MAX_ATTEMPTS) {
     await tx.update(authTokens).set({ usedAt: now }).where(eq(authTokens.id, live.id));
     return { ok: false, reason: "TOO_MANY" };
   }

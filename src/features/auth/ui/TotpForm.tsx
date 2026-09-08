@@ -30,7 +30,8 @@ export function TotpForm({ enrolled, next }: { enrolled: boolean; next: string }
     const r = await apiPost<{ ok: true; enabledNow: boolean }>("/api/auth/totp/verify", { code });
     if (!r.ok) {
       setBusy(false);
-      setMsg(r.error === "TOTP_INVALID" ? "코드가 맞지 않습니다" : r.error === "TOTP_NO_SECRET" ? "먼저 인증 앱 등록을 시작해 주세요" : describeError(r));
+      if (r.error === "TOTP_HARD_LOCK") return hardNavigate("/login?reason=TOTP_HARD_LOCK");
+      setMsg(r.error === "TOTP_INVALID" ? "코드가 맞지 않습니다 (같은 코드는 한 번만 쓸 수 있어요)" : r.error === "TOTP_NO_SECRET" ? "먼저 인증 앱 등록을 시작해 주세요" : describeError(r));
       return;
     }
     hardNavigate(next);

@@ -24,6 +24,7 @@ const REASON_TEXT: Record<string, string> = {
   USER_INACTIVE: "이용이 정지된 계정입니다",
   MEMBER_INACTIVE: "사업장 접근 권한이 없습니다. 초대를 먼저 수락하거나 사업자에게 문의하세요",
   BUSINESS_BLOCKED: "사업장이 차단되어 콘솔에 접근할 수 없습니다",
+  TOTP_HARD_LOCK: "2단계 인증 실패가 너무 많아 로그아웃되었습니다. 다시 로그인해 주세요",
 };
 
 export function LoginForm({ providers, next, error, code, reason, verified, notice }: { providers: Array<"kakao" | "google">; next: string; error?: string; code?: string; reason?: string; verified?: string; notice?: "reset" | "invited" | null }) {

@@ -1,6 +1,6 @@
 import { and, eq, gt, isNull, lt, sql } from "drizzle-orm";
 import { db, type DbLike } from "@/db/client";
-import { authTokens, businessMembers, businessSlugHistory, businesses, sessions, users } from "@/db/schema";
+import { auditLogs, authTokens, businessMembers, businessSlugHistory, businesses, resources, sessions, users } from "@/db/schema";
 import { DEFAULT_POLICY, temporarySlug, type BusinessCategory } from "@/features/business/policy-defaults";
 import { absoluteUrl } from "@/lib/api";
 import { sendMail } from "@/lib/mail";
@@ -35,14 +35,16 @@ export function walkinEmail(businessId: string): string {
   return `walkin+${businessId}@internal`;
 }
 
-/** 동일 IP 시간당 3건 (OTP 발급 행 수로 센다) */
+/**
+ * 동일 IP 시간당 3건 (OTP 발급 행 수로 센다). IP 를 알 수 없으면(헤더 위조·프록시 없음) "알 수 없음" 버킷(ip IS NULL)으로
+ * 같이 세어 fail-closed — 건너뛰면 헤더 한 줄로 제한이 사라진다. 신청을 지워도 발급 행은 남는다(auth_tokens.user_id nullable).
+ */
 async function assertIpQuota(ip: string | null): Promise<void> {
-  if (!ip) return; // 로컬·프록시 없는 환경. 프로덕션은 항상 x-forwarded-for 가 있다
   const since = new Date(Date.now() - 3600_000);
   const [{ n }] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(authTokens)
-    .where(and(eq(authTokens.kind, "EMAIL_OTP"), eq(authTokens.ip, ip), gt(authTokens.createdAt, since)));
+    .where(and(eq(authTokens.kind, "EMAIL_OTP"), ip ? eq(authTokens.ip, ip) : isNull(authTokens.ip), gt(authTokens.createdAt, since)));
   if (n >= BUSINESS_SIGNUP_PER_IP_PER_HOUR) throw new HttpError(429, "RATE_LIMITED", { retryAfterSec: 3600 });
 }
 
@@ -88,6 +90,7 @@ export async function applyBusiness(input: BusinessSignupInput, meta: RequestMet
 
   // 미검증(삭제 대기) 신청이 같은 사업자번호·이메일을 점유 중이면 치우고 새로 시작한다. 그 외 중복은 거절
   if (dup && dup.emailVerifiedAt !== null) throw new HttpError(409, "BIZ_REG_NO_TAKEN");
+  const stalePurge: string[] = [];
   if (emailOwner) {
     const [m] = await db
       .select({ businessId: businessMembers.businessId, verified: businesses.emailVerifiedAt })
@@ -96,15 +99,14 @@ export async function applyBusiness(input: BusinessSignupInput, meta: RequestMet
       .where(and(eq(businessMembers.userId, emailOwner.id), eq(businessMembers.role, "OWNER")))
       .limit(1);
     if (!m || m.verified !== null) throw new HttpError(409, "EMAIL_TAKEN");
-    if (!dup || dup.id !== m.businessId) {
-      // 이메일은 미검증 신청 것인데 사업자번호가 다르다 → 옛 신청을 치운다 (아래 dup 처리와 합류)
-      await db.transaction((tx) => purgeBusiness(m.businessId, tx));
-    }
+    // 이메일이 다른 미검증 신청의 것이면 그 신청도 같은 트랜잭션에서 치운다
+    if (!dup || dup.id !== m.businessId) stalePurge.push(m.businessId);
   }
 
   const passwordHash = await hashPassword(input.password);
 
   const result = await db.transaction(async (tx) => {
+    for (const id of stalePurge) await purgeBusiness(id, tx);
     if (dup) await purgeBusiness(dup.id, tx);
 
     const [u] = await tx
@@ -151,9 +153,9 @@ async function sendOtp(userId: string, email: string, ip: string | null): Promis
 
 /** OTP 재발송. 계정 존재 여부를 응답으로 구분하지 않는다 — 항상 성공처럼 답한다 */
 export async function resendBusinessOtp(email: string, meta: RequestMeta): Promise<void> {
+  await assertIpQuota(meta.ip); // 조회보다 먼저 — 계정이 있을 때만 429 가 나면 존재 여부 오라클이 된다
   const target = await unverifiedOwner(email);
   if (!target) return;
-  await assertIpQuota(meta.ip);
   await sendOtp(target.userId, email, meta.ip);
 }
 
@@ -173,13 +175,15 @@ export type VerifyOutcome = { ok: true } | { ok: false; reason: "INVALID" | "EXP
 export async function verifyBusinessEmail(email: string, code: string): Promise<VerifyOutcome> {
   const target = await unverifiedOwner(email);
   if (!target) return { ok: false, reason: "NONE" };
-  const r = await verifyOtp(target.userId, code);
-  if (!r.ok) return r;
-  const now = new Date();
-  await db.transaction(async (tx) => {
+  const r = await db.transaction(async (tx) => {
+    const v = await verifyOtp(target.userId, code, tx);
+    if (!v.ok) return v;
+    const now = new Date();
     await tx.update(businesses).set({ emailVerifiedAt: now }).where(eq(businesses.id, target.businessId));
     await tx.update(users).set({ emailVerifiedAt: now }).where(eq(users.id, target.userId));
+    return v;
   });
+  if (!r.ok) return r;
   // 접수 확인 메일. 관리자 알림(BUSINESS_APPLIED)은 알림 에픽(#57 이후)에서 Notification 테이블로 — 여기서는 로그만
   await sendMail(businessAppliedMail(email, target.businessName, absoluteUrl("/console"))).catch((e) => console.error("[business-signup] applied mail failed:", (e as Error).message));
   console.info(`[business-signup] applied businessId=${target.businessId}`);
@@ -187,8 +191,10 @@ export async function verifyBusinessEmail(email: string, code: string): Promise<
 }
 
 /**
- * 사업장과 그에 딸린 것(소유자 계정 포함)을 지운다 — 미검증 신청 정리·재신청 전용. FK 에 CASCADE 가 없으니 순서대로.
- * 검증된(emailVerifiedAt 있는) 사업장은 지우지 않는다 — 그건 삭제가 아니라 상태 전이(FR-ADM-020)다.
+ * 사업장과 그에 딸린 것을 지운다 — 미검증 신청 정리·재신청 전용. 검증된 사업장은 지우지 않는다(그건 FR-ADM-020 상태 전이다).
+ * FK 에 CASCADE 가 없으니 자식부터: resources(초대가 만든 STAFF) → business_members → slug_history → businesses.
+ * 사용자는 물리 삭제 대신 다른 곳(audit_logs.actor_id 등)이 참조할 수 있으므로: 참조가 남았으면 **익명화**(WITHDRAWN,
+ * 이메일·이름 치환)하고, 참조가 없을 때만 지운다. auth_tokens 는 user_id 만 NULL 로 — IP 레이트리밋 카운터로 남긴다.
  */
 export async function purgeBusiness(businessId: string, tx: DbLike = db): Promise<void> {
   const members = await tx.select({ userId: businessMembers.userId }).from(businessMembers).where(eq(businessMembers.businessId, businessId));
@@ -196,6 +202,7 @@ export async function purgeBusiness(businessId: string, tx: DbLike = db): Promis
   const [walkin] = await tx.select({ id: users.id }).from(users).where(eq(users.email, walkinEmail(businessId))).limit(1);
   if (walkin) userIds.push(walkin.id);
 
+  await tx.delete(resources).where(eq(resources.businessId, businessId));
   await tx.delete(businessMembers).where(eq(businessMembers.businessId, businessId));
   await tx.delete(businessSlugHistory).where(eq(businessSlugHistory.businessId, businessId));
   await tx.delete(businesses).where(eq(businesses.id, businessId));
@@ -203,21 +210,36 @@ export async function purgeBusiness(businessId: string, tx: DbLike = db): Promis
     // 다른 사업장에도 속한 사용자는 남긴다 (이 흐름에서는 생기지 않지만 방어)
     const [other] = await tx.select({ id: businessMembers.id }).from(businessMembers).where(eq(businessMembers.userId, uid)).limit(1);
     if (other) continue;
-    await tx.delete(authTokens).where(eq(authTokens.userId, uid));
+    await tx.update(authTokens).set({ userId: null, usedAt: sql`coalesce(${authTokens.usedAt}, now())` }).where(eq(authTokens.userId, uid));
     await tx.delete(sessions).where(eq(sessions.userId, uid));
-    await tx.delete(users).where(eq(users.id, uid));
+    const [ref] = await tx.select({ id: auditLogs.id }).from(auditLogs).where(eq(auditLogs.actorId, uid)).limit(1);
+    if (ref) {
+      await tx
+        .update(users)
+        .set({ email: `deleted+${uid}@internal`, name: "삭제된 계정", phone: null, passwordHash: null, providerAccountId: null, totpSecretEnc: null, status: "WITHDRAWN" })
+        .where(eq(users.id, uid));
+    } else {
+      await tx.delete(users).where(eq(users.id, uid));
+    }
   }
 }
 
-/** 배치: emailVerifiedAt IS NULL 이고 7일 지난 신청 삭제. 지운 사업장 수를 돌려준다 */
+/** 배치: emailVerifiedAt IS NULL 이고 7일 지난 신청 삭제. 한 건이 실패해도 나머지는 계속한다. 지운 수를 돌려준다 */
 export async function cleanupUnverifiedBusinesses(now = new Date()): Promise<number> {
   const cutoff = new Date(now.getTime() - UNVERIFIED_BUSINESS_TTL_DAYS * 86400_000);
   const stale = await db
     .select({ id: businesses.id })
     .from(businesses)
     .where(and(isNull(businesses.emailVerifiedAt), lt(businesses.createdAt, cutoff)));
+  let deleted = 0;
   for (const b of stale) {
-    await db.transaction((tx) => purgeBusiness(b.id, tx));
+    try {
+      await db.transaction((tx) => purgeBusiness(b.id, tx));
+      deleted++;
+    } catch (e) {
+      // 한 건의 FK 잔여 참조가 배치 전체를 영구 정지시키면 안 된다 — 기록하고 다음으로
+      console.error(`[cleanup-unverified] businessId=${b.id} 삭제 실패:`, (e as Error).message);
+    }
   }
-  return stale.length;
+  return deleted;
 }

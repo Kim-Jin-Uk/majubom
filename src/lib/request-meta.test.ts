@@ -2,12 +2,16 @@ import { describe, expect, it } from "vitest";
 import { deviceLabel, normalizeIp, requestMeta } from "./request-meta";
 
 describe("normalizeIp", () => {
-  it("x-forwarded-for 첫 값 · IPv4-mapped · 쓰레기 거부", () => {
-    expect(normalizeIp("203.0.113.9, 10.0.0.1")).toBe("203.0.113.9");
-    expect(normalizeIp("::ffff:203.0.113.9")).toBe("203.0.113.9");
-    expect(normalizeIp("2001:db8::1")).toBe("2001:db8::1");
-    expect(normalizeIp("999.1.1.1")).toBeNull();
-    expect(normalizeIp("'; DROP TABLE users; --")).toBeNull();
+  it("x-forwarded-for 는 오른쪽(프록시가 붙인 값) 기준 · 신뢰 홉 수 건너뛰기 · IPv4-mapped · 쓰레기 거부", () => {
+    // 클라이언트가 왼쪽에 위조값을 넣어도 오른쪽 값이 이긴다
+    expect(normalizeIp("1.2.3.4, 203.0.113.9", 0)).toBe("203.0.113.9");
+    expect(normalizeIp("203.0.113.9, 10.0.0.1", 1)).toBe("203.0.113.9");
+    expect(normalizeIp("203.0.113.9", 1)).toBeNull(); // 홉 수보다 짧으면 알 수 없음
+    expect(normalizeIp("::ffff:203.0.113.9", 0)).toBe("203.0.113.9");
+    expect(normalizeIp("2001:db8::1", 0)).toBe("2001:db8::1");
+    expect(normalizeIp("999.1.1.1", 0)).toBeNull();
+    expect(normalizeIp("zzz", 0)).toBeNull();
+    expect(normalizeIp("'; DROP TABLE users; --", 0)).toBeNull();
     expect(normalizeIp(null)).toBeNull();
   });
   it("requestMeta 는 UA 를 512 자로 자른다", () => {

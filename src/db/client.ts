@@ -17,7 +17,9 @@ export const pool =
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 10_000, // Neon 콜드스타트 대비
   });
-if (process.env.NODE_ENV !== "production") globalForDb.pool = pool;
+// production 에서도 캐시한다: Next 16 은 proxy.ts 를 별도 번들로 컴파일하므로 이 모듈이 두 번 평가된다.
+// globalThis 로 묶지 않으면 인스턴스당 Pool 이 2개(max 5 × 2) 생긴다 (리뷰 지적). 프로세스는 하나라 공유해도 안전하다.
+globalForDb.pool = pool;
 
 export const db = drizzle(pool, { schema });
 export type Db = typeof db;

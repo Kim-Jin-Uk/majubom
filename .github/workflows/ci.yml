@@ -76,6 +76,10 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      # 번들링 단계에서만 나는 실패(프록시 별도 번들·정적 생성)를 게이트 안에 넣는다. env 없이 도는 것을 전제로 한다 — serverEnv() 는 지연 평가
+      - name: Build
+        run: npm run build
+
   # ── Firestore 보안 규칙 (에뮬레이터 + @firebase/rules-unit-testing) ─────────
   firestore-rules:
     name: firestore-rules

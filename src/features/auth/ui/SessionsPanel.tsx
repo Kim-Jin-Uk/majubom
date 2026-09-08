@@ -9,7 +9,8 @@ import { apiDelete, describeError } from "@/lib/client-api";
 type Item = Omit<SessionListItem, "createdAt" | "lastUsedAt" | "expiresAt"> & { createdAt: string; lastUsedAt: string; expiresAt: string };
 
 function fmt(iso: string) {
-  return new Date(iso).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  // 서버(UTC)·브라우저(KST) 렌더가 어긋나지 않게 타임존을 고정한다 (사업장 기본 timezone 과 동일)
+  return new Date(iso).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 /** 기기 관리 — 활성 리프레시 세션 목록·개별/일괄 폐기. 현재 기기를 폐기하면 바로 로그아웃한다 */
@@ -62,7 +63,7 @@ export function SessionsPanel({ initial }: { initial: Item[] }) {
                 <td className="muted">{fmt(s.createdAt)}</td>
                 <td className="muted">{fmt(s.expiresAt)}</td>
                 <td>
-                  <Button size="sm" variant={s.current ? "danger" : "default"} type="button" onClick={() => revoke(s.id, s.current)} loading={busy === s.id}>
+                  <Button size="sm" variant={s.current ? "danger" : "default"} type="button" onClick={() => revoke(s.id, s.current)} loading={busy === s.id} disabled={busy !== null}>
                     {s.current ? "로그아웃" : "폐기"}
                   </Button>
                 </td>
@@ -77,7 +78,8 @@ export function SessionsPanel({ initial }: { initial: Item[] }) {
         </Button>
       )}
       <p className="muted" style={{ fontSize: 12, margin: 0 }}>
-        세션은 로그인 후 30일에 만료되며, 15분마다 자동 갱신됩니다. 비밀번호를 바꾸면 모든 기기가 로그아웃됩니다.
+        세션은 로그인 후 30일에 만료되며 15분마다 자동 갱신됩니다. 폐기한 기기는 콘솔·관리자·이 화면에서는 즉시, 그 밖의 화면에서는 최대 15분 안에 로그아웃됩니다.
+        비밀번호를 바꾸면 모든 기기가 로그아웃됩니다.
       </p>
     </div>
   );

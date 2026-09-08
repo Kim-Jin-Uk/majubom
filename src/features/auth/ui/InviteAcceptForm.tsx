@@ -29,7 +29,7 @@ export function InviteAcceptForm({ token, preview, invalidReason }: { token: str
     setBusy(true);
     setErrors({});
     setMsg(null);
-    const r = await apiPost<{ ok: true; email: string }>(`/api/auth/invite/${token}`, preview?.needsPassword ? { password } : {});
+    const r = await apiPost<{ ok: true; email: string }>(`/api/auth/invitations/${token}/accept`, preview?.needsPassword ? { password } : {});
     if (!r.ok) {
       setBusy(false);
       if (r.issues) setErrors(fieldErrors(r.issues));

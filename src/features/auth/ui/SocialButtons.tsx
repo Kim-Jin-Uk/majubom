@@ -14,7 +14,7 @@ export function SocialButtons({ providers, next }: { providers: Array<"kakao" | 
       )}
       {providers.includes("google") && (
         <Button type="button" block onClick={() => signIn("google", { redirectTo: next })}>
-          Google 로 계속하기
+          Google로 계속하기
         </Button>
       )}
     </div>

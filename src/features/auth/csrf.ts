@@ -21,7 +21,8 @@ export function assertSameOrigin(req: Request): void {
     throw new HttpError(403, "CSRF", { site });
   }
   const origin = req.headers.get("origin");
-  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
+  // 비교 기준은 우리가 아는 호스트(AUTH_URL)다 — x-forwarded-host 는 프록시가 정규화하지 않으면 공격자 값끼리의 비교가 된다
+  const host = expectedHost() ?? req.headers.get("host");
   if (!origin || !host) throw new HttpError(403, "CSRF", { reason: "NO_ORIGIN" });
   let originHost: string;
   try {
@@ -30,4 +31,14 @@ export function assertSameOrigin(req: Request): void {
     throw new HttpError(403, "CSRF", { reason: "BAD_ORIGIN" });
   }
   if (originHost !== host) throw new HttpError(403, "CSRF", { reason: "ORIGIN_MISMATCH" });
+}
+
+function expectedHost(): string | null {
+  const u = process.env.AUTH_URL;
+  if (!u) return null;
+  try {
+    return new URL(u).host;
+  } catch {
+    return null;
+  }
 }

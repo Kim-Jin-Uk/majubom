@@ -10,6 +10,9 @@ export class HttpError extends Error {
     super(code);
   }
   toResponse(): NextResponse {
-    return NextResponse.json({ error: this.code, ...this.extra }, { status: this.status, headers: { "Cache-Control": "no-store" } });
+    const headers: Record<string, string> = { "Cache-Control": "no-store" };
+    const retry = this.extra.retryAfterSec;
+    if (typeof retry === "number" && retry > 0) headers["Retry-After"] = String(Math.ceil(retry));
+    return NextResponse.json({ error: this.code, ...this.extra }, { status: this.status, headers });
   }
 }

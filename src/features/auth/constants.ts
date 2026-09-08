@@ -21,6 +21,10 @@ export const UNVERIFIED_BUSINESS_TTL_DAYS = 7;
 export const LOGIN_FAIL_WINDOW_MIN = 15;
 export const LOGIN_FAIL_FREE_ATTEMPTS = 5;
 export const LOGIN_FAIL_MAX_DELAY_SEC = 32;
+/** IP 단위: 15분 창에 이만큼 실패하면 그 IP 의 로그인 시도를 거절 (계정을 바꿔 가며 찍는 공격) */
+export const LOGIN_FAIL_IP_MAX_PER_WINDOW = 50;
+/** TOTP 연속 실패 상한 — 넘으면 세션을 폐기해 비밀번호부터 다시 */
+export const TOTP_FAIL_HARD_LOCK = 10;
 
 export const COOKIE_SESSION = "majubom.session"; // Auth.js 세션 JWT (액세스 스냅샷)
 export const COOKIE_REFRESH = "majubom.refresh"; // 서버 저장 리프레시 토큰 원문 (sid.secret)
@@ -28,6 +32,7 @@ export const COOKIE_REFRESH = "majubom.refresh"; // 서버 저장 리프레시 �
 /** 로그인이 필요한 경로 접두 (프록시가 리다이렉트). API 는 401 로 답한다 */
 export const PROTECTED_PAGE_PREFIXES = ["/console", "/admin", "/me"];
 export const PROTECTED_API_PREFIXES = ["/api/console", "/api/admin", "/api/me"];
-/** 매 요청 상태 재확인 대상 (콘솔·관리자) */
+/** 매 요청 상태·세션 재확인 대상 (콘솔·관리자 + 기기 관리 — 폐기가 15분 늦으면 기기 관리 자체가 무의미하다) */
 export const CONSOLE_PREFIXES = ["/console", "/api/console"];
+export const RECHECK_PREFIXES = ["/console", "/api/console", "/admin", "/api/admin", "/me", "/api/me"];
 export const ADMIN_PREFIXES = ["/admin", "/api/admin"];

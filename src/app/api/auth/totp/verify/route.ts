@@ -4,6 +4,7 @@ import { unstable_update } from "@/features/auth/auth";
 import { serverProof } from "@/features/auth/crypto";
 import { assertSameOrigin } from "@/features/auth/csrf";
 import { handle, HttpError, requireUser } from "@/features/auth/guards";
+import { revokeSession } from "@/features/auth/session-store";
 import { verifyTotp } from "@/features/auth/totp";
 import { otpSchema } from "@/features/auth/validation";
 import { readJson } from "@/lib/api";
@@ -23,6 +24,11 @@ export const POST = handle(async (req) => {
   const r = await verifyTotp(v.uid, code, requestMeta(req.headers));
   if (!r.ok) {
     if (r.reason === "LOCKED") throw new HttpError(429, "RATE_LIMITED", { retryAfterSec: r.retryAfterSec });
+    if (r.reason === "HARD_LOCK") {
+      // 연속 10회 실패 — 이 세션을 끝낸다. 비밀번호부터 다시 (프록시가 다음 요청에서 쿠키를 지운다)
+      await revokeSession(v.sid, v.uid);
+      throw new HttpError(403, "TOTP_HARD_LOCK");
+    }
     throw new HttpError(400, `TOTP_${r.reason}`);
   }
   await unstable_update({ mfaProof: serverProof("mfa", v.sid, process.env.AUTH_SECRET ?? "") } as never);

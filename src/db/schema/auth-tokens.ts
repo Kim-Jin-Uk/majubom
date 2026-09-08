@@ -15,16 +15,16 @@ import { users } from "./users";
  *
  * 원문은 저장하지 않는다 — token_hash 는 SHA-256. OTP 는 `sha256(userId + ":" + code)` 로 사용자에 묶는다.
  * used_at 이 찍히면 재사용 불가. attempts 는 OTP 오입력 횟수(5회 초과 시 폐기).
- * ip 는 발급 IP — 사업자 가입 "동일 IP 시간당 3건" 레이트리밋의 근거.
+ * ip 는 발급 IP — 사업자 가입 "동일 IP 시간당 3건" 레이트리밋의 근거. 그래서 user_id 는 nullable: 신청을 지워도
+ * 발급 행은 남아 카운터가 초기화되지 않는다 (지웠다가 다시 신청해 제한을 우회하는 것을 막는다).
  */
 export const authTokens = pgTable(
   "auth_tokens",
   {
     id: uuidPk(),
     kind: authTokenKindEnum("kind").notNull(),
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => users.id),
+    /** 사용자 삭제(미검증 신청 정리) 시 NULL 로 남긴다 — IP 레이트리밋 카운터로 계속 쓰이기 때문 */
+    userId: uuid("user_id").references(() => users.id),
     tokenHash: text("token_hash").notNull().unique(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     usedAt: timestamp("used_at", { withTimezone: true }),

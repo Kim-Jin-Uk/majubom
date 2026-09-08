@@ -47,7 +47,8 @@ export function Button({ variant = "default", block, size = "md", loading, class
   const cls = ["btn", variant !== "default" && `btn--${variant}`, block && "btn--block", size === "sm" && "btn--sm", className].filter(Boolean).join(" ");
   return (
     <button {...rest} className={cls} disabled={disabled || loading} aria-busy={loading || undefined}>
-      {loading ? "잠시만요…" : children}
+      {children}
+      {loading && <span aria-hidden="true">…</span>}
     </button>
   );
 }

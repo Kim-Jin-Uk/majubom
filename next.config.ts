@@ -8,8 +8,24 @@ import { withSentryConfig } from "@sentry/nextjs/config";
  */
 const r2Public = process.env.R2_PUBLIC_BASE_URL ? new URL(process.env.R2_PUBLIC_BASE_URL) : null;
 
+/**
+ * 보안 헤더 (08 §2 보안). CSP 는 프레임 삽입만 막는 최소형 — 스크립트 CSP 는 Next 인라인 스크립트(테마 초기화)와 nonce 배선이
+ * 필요해 콘솔 화면이 붙는 시점에 함께 넣는다. HSTS 는 App Hosting 이 항상 HTTPS 이므로 안전하다.
+ */
+const securityHeaders = [
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  { key: "X-Frame-Options", value: "DENY" },
+  { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+  { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+  ...(process.env.NODE_ENV === "production" ? [{ key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" }] : []),
+];
+
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  async headers() {
+    return [{ source: "/(.*)", headers: securityHeaders }];
+  },
   images: {
     formats: ["image/avif", "image/webp"],
     remotePatterns: r2Public

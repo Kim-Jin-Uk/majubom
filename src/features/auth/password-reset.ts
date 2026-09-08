@@ -8,6 +8,8 @@ import { passwordResetMail, passwordResetSocialOnlyMail } from "@/lib/mail/templ
 import type { RequestMeta } from "@/lib/request-meta";
 import { PASSWORD_RESET_TTL_MIN } from "./constants";
 import { hashPassword } from "./crypto";
+import { revokeFirebaseAccess } from "@/lib/firebase/admin";
+import { flags } from "@/lib/flags";
 import { revokeAllSessions } from "./session-store";
 import { consumeToken, issueToken, peekToken } from "./tokens";
 
@@ -44,10 +46,13 @@ export async function confirmPasswordReset(raw: string, password: string, meta: 
     const t = await consumeToken("PASSWORD_RESET", raw, tx);
     if (!t.ok) return t;
     await tx.update(users).set({ passwordHash, emailVerifiedAt: new Date() }).where(eq(users.id, t.userId));
+    // "성공 시 리프레시 전부 폐기" 는 비밀번호 교체와 한 트랜잭션이어야 한다 — 커밋 뒤 폐기가 실패하면 옛 세션이 살아남는다
+    await revokeAllSessions(t.userId, undefined, tx);
     return t;
   });
   if (!r.ok) return { ok: false, reason: r.reason };
-  await revokeAllSessions(r.userId);
   await writeAudit({ action: "PASSWORD_CHANGE", actorId: r.userId, actorRole: "CUSTOMER", targetType: "USER", targetId: r.userId, diff: { via: "RESET_LINK" }, meta });
+  // Firestore 채팅 자격도 함께 끊는다 (FR-AUTH-030 "권한 회수 시 revokeRefreshTokens"). 채팅이 꺼진 환경에서는 할 일이 없다
+  if (flags.chat) await revokeFirebaseAccess(r.userId).catch((e) => console.error("[password-reset] firebase revoke failed:", (e as Error).message));
   return { ok: true };
 }

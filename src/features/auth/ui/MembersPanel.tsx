@@ -109,7 +109,7 @@ export function MembersPanel({ initial, isOwner }: { initial: MemberListItem[]; 
         <form className="form" onSubmit={invite}>
           <h2 style={{ margin: "8px 0 0", fontSize: 16 }}>매니저 초대</h2>
           <p className="sub" style={{ marginBottom: 0 }}>
-            초대 링크(72시간·1회)를 메일로 보냅니다. 매니저가 직접 비밀번호를 정해요 — 임시 비밀번호는 만들지 않습니다. STAFF 자원이 함께 만들어져 근무표에 편입됩니다.
+            초대 링크(72시간·1회)를 메일로 보냅니다. 매니저가 직접 비밀번호를 정해요 — 임시 비밀번호는 만들지 않습니다. 같은 이름으로 등록된 담당자(STAFF 자원)가 있으면 그 자원에 연결되고, 없으면 새로 만들어져 근무표에 편입됩니다.
           </p>
           <div className="row">
             <Field label="이름" htmlFor="m-name" error={errors.name}>

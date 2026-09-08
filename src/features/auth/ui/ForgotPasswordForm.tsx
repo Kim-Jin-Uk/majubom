@@ -14,6 +14,7 @@ export function ForgotPasswordForm() {
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
+    setMsg(null);
     const r = await apiPost("/api/auth/password-reset", { email });
     setBusy(false);
     if (!r.ok) return setMsg(describeError(r));

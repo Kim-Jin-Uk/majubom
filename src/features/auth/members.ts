@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { businessMembers, businesses, resources, users, type MemberPermissions } from "@/db/schema";
 import { absoluteUrl } from "@/lib/api";
@@ -59,11 +59,25 @@ export async function inviteManager(businessId: string, inviter: { uid: string; 
       .insert(businessMembers)
       .values({ userId, businessId, role: "MANAGER", status: "INVITED", permissions: input.permissions })
       .returning({ id: businessMembers.id });
+    // 자원 연결 (FR-AUTH-020 "기존 담당자 연결"): 지정된 resourceId → 아니면 같은 이름의 계정 없는 STAFF 자원 자동 연결 → 아니면 새로 생성
+    let linked = 0;
     if (input.resourceId) {
-      await tx.update(resources).set({ memberId: m.id }).where(and(eq(resources.id, input.resourceId), isNull(resources.memberId)));
+      linked = (await tx.update(resources).set({ memberId: m.id }).where(and(eq(resources.id, input.resourceId), isNull(resources.memberId))).returning({ id: resources.id })).length;
+      if (linked !== 1) throw new HttpError(409, "RESOURCE_NOT_LINKABLE");
     } else {
-      await tx.insert(resources).values({ businessId, type: "STAFF", memberId: m.id, name: input.name, capacity: 1 });
+      linked = (
+        await tx
+          .update(resources)
+          .set({ memberId: m.id })
+          .where(
+            and(
+              eq(resources.id, sql`(select id from ${resources} where ${resources.businessId} = ${businessId} and ${resources.type} = 'STAFF' and ${resources.memberId} is null and lower(${resources.name}) = lower(${input.name}) order by ${resources.createdAt} limit 1)`),
+            ),
+          )
+          .returning({ id: resources.id })
+      ).length;
     }
+    if (linked === 0) await tx.insert(resources).values({ businessId, type: "STAFF", memberId: m.id, name: input.name, capacity: 1 });
     await writeAudit(
       { action: "MEMBER_CREATE", actorId: inviter.uid, actorRole: "OWNER", businessId, targetType: "BUSINESS_MEMBER", targetId: m.id, diff: { email: hashPii(input.email), permissions: input.permissions }, meta },
       tx,
@@ -135,20 +149,31 @@ export async function acceptInvite(raw: string, password: string | undefined): P
   if (pre_ctx.passwordHash === null && !password) return { ok: false, reason: "PASSWORD_REQUIRED" };
 
   const passwordHash = password ? await hashPassword(password) : null;
-  return db.transaction(async (tx) => {
-    const t = await consumeToken("INVITE", raw, tx);
-    if (!t.ok) return { ok: false, reason: t.reason };
-    const patch: Partial<typeof users.$inferInsert> = { emailVerifiedAt: new Date() };
-    if (passwordHash) patch.passwordHash = passwordHash;
-    await tx.update(users).set(patch).where(eq(users.id, t.userId));
-    const rows = await tx
-      .update(businessMembers)
-      .set({ status: "ACTIVE" })
-      .where(and(eq(businessMembers.id, pre_ctx.memberId), eq(businessMembers.status, "INVITED")))
-      .returning({ id: businessMembers.id });
-    if (rows.length !== 1) return { ok: false, reason: "NOT_INVITED" };
-    return { ok: true, email: pre_ctx.email };
-  });
+  // 트랜잭션 안의 실패는 **던져서** 롤백시킨다 — 드리즐에서 콜백의 return 은 항상 COMMIT 이다.
+  class Abort extends Error {
+    constructor(public reason: "INVALID" | "EXPIRED" | "USED" | "NOT_INVITED") {
+      super(reason);
+    }
+  }
+  try {
+    return await db.transaction(async (tx) => {
+      const t = await consumeToken("INVITE", raw, tx);
+      if (!t.ok) throw new Abort(t.reason);
+      const patch: Partial<typeof users.$inferInsert> = { emailVerifiedAt: new Date() };
+      if (passwordHash) patch.passwordHash = passwordHash;
+      await tx.update(users).set(patch).where(eq(users.id, t.userId));
+      const rows = await tx
+        .update(businessMembers)
+        .set({ status: "ACTIVE" })
+        .where(and(eq(businessMembers.id, pre_ctx.memberId), eq(businessMembers.status, "INVITED")))
+        .returning({ id: businessMembers.id });
+      if (rows.length !== 1) throw new Abort("NOT_INVITED");
+      return { ok: true as const, email: pre_ctx.email };
+    });
+  } catch (e) {
+    if (e instanceof Abort) return { ok: false, reason: e.reason };
+    throw e;
+  }
 }
 
 export type MemberListItem = {

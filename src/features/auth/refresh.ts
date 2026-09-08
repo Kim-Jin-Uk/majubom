@@ -1,7 +1,7 @@
 import { decode, encode, type JWT } from "@auth/core/jwt";
 import type { NextRequest } from "next/server";
 import { requestMeta } from "@/lib/request-meta";
-import { ACCESS_TTL_SEC, ADMIN_PREFIXES, CONSOLE_PREFIXES, COOKIE_REFRESH, COOKIE_SESSION, REFRESH_TTL_SEC } from "./constants";
+import { ACCESS_TTL_SEC, ADMIN_PREFIXES, CONSOLE_PREFIXES, COOKIE_REFRESH, COOKIE_SESSION, RECHECK_PREFIXES, REFRESH_TTL_SEC } from "./constants";
 import { clearedRefreshCookie, clearedSessionCookie, refreshCookie } from "./cookies";
 import { consoleAccess, loadPrincipal, principalEquals, userLoginDenial, type AccessDenial, type Principal } from "./principal";
 import { isSessionAlive, parseRefresh, rotateSession } from "./session-store";
@@ -13,8 +13,8 @@ import "./types";
  * 1. 세션 쿠키(JWT)를 복호화한다. 없으면 anon.
  * 2. accessExp(15분)이 지났으면 리프레시 쿠키를 sessions 테이블과 대조해 **회전**하고 principal 을 다시 읽어 JWT 를 새로 쓴다.
  *    회전 실패(폐기·만료·재사용) → 두 쿠키를 지운다 = 로그아웃.
- * 3. 콘솔·관리자 경로는 accessExp 와 무관하게 **매 요청** User·BusinessMember·Business 상태를 재확인한다
- *    (명세: "콘솔 미들웨어는 매 요청 status 재확인"). 스냅샷이 바뀌었으면 JWT 를 다시 쓴다 — 권한 변경이 15분을 기다리지 않는다.
+ * 3. 콘솔·관리자·기기 관리 경로는 accessExp 와 무관하게 **매 요청** User·BusinessMember·Business 상태와 세션 폐기 여부를
+ *    재확인한다 (명세: "콘솔 미들웨어는 매 요청 status 재확인"). 스냅샷이 바뀌었으면 JWT 를 다시 쓴다 — 권한 변경이 15분을 기다리지 않는다.
  *
  * 이 모듈은 결정만 내리고 응답은 만들지 않는다. 쿠키 변경 목록을 돌려주고 proxy.ts 가 응답에 싣는다.
  */
@@ -36,6 +36,12 @@ function startsWithAny(path: string, prefixes: string[]): boolean {
   return prefixes.some((p) => path === p || path.startsWith(p + "/") || path.startsWith(p + "?"));
 }
 
+/** 매 요청 상태·세션 재확인 대상 — 콘솔·관리자·기기 관리 */
+export function isRecheckPath(path: string): boolean {
+  return startsWithAny(path, RECHECK_PREFIXES);
+}
+
+/** 콘솔 접근 판정(소속·사업장 상태)을 적용하는 경로 — 콘솔·관리자만. /me 는 고객도 쓴다 */
 export function isConsolePath(path: string): boolean {
   return startsWithAny(path, CONSOLE_PREFIXES) || startsWithAny(path, ADMIN_PREFIXES);
 }
@@ -73,6 +79,7 @@ export async function refreshSession(req: NextRequest): Promise<RefreshOutcome> 
   const needsRefresh = !token.accessExp || token.accessExp <= now;
   const path = req.nextUrl.pathname;
   const onConsole = isConsolePath(path);
+  const recheck = isRecheckPath(path);
   const cookies: CookieOp[] = [];
   let changed = false;
 
@@ -88,10 +95,10 @@ export async function refreshSession(req: NextRequest): Promise<RefreshOutcome> 
   }
 
   // 콘솔은 기기 폐기(/api/me/sessions)도 즉시 반영한다 — 회전 때만 보면 최대 15분 늦는다
-  if (onConsole && !needsRefresh && !(await isSessionAlive(token.sid))) return logout("REFRESH_REVOKED");
+  if (recheck && !needsRefresh && !(await isSessionAlive(token.sid))) return logout("REFRESH_REVOKED");
 
   let principal = token.p ?? null;
-  if (needsRefresh || onConsole || !principal) {
+  if (needsRefresh || recheck || !principal) {
     const fresh = await loadPrincipal(token.uid);
     if (!fresh || userLoginDenial(fresh)) return logout("USER_INACTIVE");
     if (!principal || !principalEquals(principal, fresh)) {

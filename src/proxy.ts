@@ -23,8 +23,13 @@ import { refreshSession, type RefreshOutcome } from "@/features/auth/refresh";
 const ROBOTS_HEADER = "noindex, nofollow";
 const REALM = "majubom-preview";
 
-/** Basic Auth 를 요구하지 않는 경로 접두 */
-const AUTH_EXEMPT_PREFIXES = ["/api/auth/", "/api/health", "/_next/", "/favicon.ico", "/robots.txt"];
+/**
+ * Basic Auth 를 요구하지 않는 경로. Auth.js 엔드포인트(소셜 콜백이 게이트를 통과해야 한다)·헬스체크·크론(자체 Bearer 인증)·정적 자산만.
+ * 우리 자체 인증 라우트(/api/auth/signup, business-signup, password-reset …)는 **게이트 안**이다 — 1기 동안 가입·메일 발송이
+ * 인터넷에 열리면 CAPTCHA 없이 둔 근거가 사라진다(리뷰 지적). 접두는 경계("/")를 지켜 /api/healthz 같은 우회를 막는다.
+ */
+const AUTH_EXEMPT_EXACT = ["/api/health", "/favicon.ico", "/robots.txt", "/api/auth/csrf", "/api/auth/session", "/api/auth/providers"];
+const AUTH_EXEMPT_PREFIXES = ["/api/auth/callback", "/api/auth/signin", "/api/auth/signout", "/api/auth/error", "/api/cron", "/_next"];
 
 function parseBool(raw: string | undefined, fallback: boolean): boolean {
   if (raw === undefined || raw === "") return fallback;
@@ -35,7 +40,7 @@ function parseBool(raw: string | undefined, fallback: boolean): boolean {
 }
 
 function isAuthExempt(pathname: string): boolean {
-  return AUTH_EXEMPT_PREFIXES.some((p) => pathname === p || pathname.startsWith(p));
+  return AUTH_EXEMPT_EXACT.includes(pathname) || AUTH_EXEMPT_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
 }
 
 /**
@@ -120,6 +125,10 @@ async function handleSession(request: NextRequest): Promise<{ block: NextRespons
   const protectedApi = startsWithAny(pathname, PROTECTED_API_PREFIXES);
   const admin = startsWithAny(pathname, ADMIN_PREFIXES);
 
+  // /api/auth/* 는 세션 처리를 건너뛴다 — Auth.js 와 우리 라우트(unstable_update)가 스스로 쿠키를 쓰므로, 프록시까지 같은 이름의
+  // Set-Cookie 를 실으면 순서에 따라 한쪽이 유실된다(예: TOTP 통과 직후 mfa=ok 가 사라지는 경합). 이 경로들은 보호 대상도 아니다.
+  if (pathname === "/api/auth" || pathname.startsWith("/api/auth/")) return { block: null, outcome: { state: "anon", cookies: [] } };
+
   let outcome: RefreshOutcome;
   try {
     outcome = await refreshSession(request);
@@ -142,7 +151,8 @@ async function handleSession(request: NextRequest): Promise<{ block: NextRespons
   }
 
   if (admin) {
-    if (outcome.principal.globalRole !== "ADMIN") return { block: applyCookies(isApi ? json(404, "NOT_FOUND") : NextResponse.rewrite(new URL("/404", request.url)), outcome), outcome };
+    // 존재를 노출하지 않는다: 없는 경로로 rewrite 하면 Next 가 not-found 를 **404 상태**로 렌더한다 (rewrite 자체는 상태를 바꾸지 않는다)
+    if (outcome.principal.globalRole !== "ADMIN") return { block: applyCookies(isApi ? json(404, "NOT_FOUND") : NextResponse.rewrite(new URL("/__not_found__", request.url)), outcome), outcome };
     if (outcome.token.mfa !== "ok") {
       if (isApi) return { block: applyCookies(json(403, "MFA_REQUIRED"), outcome), outcome };
       const url = request.nextUrl.clone();
@@ -210,7 +220,7 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // 정적 자산·이미지 최적화는 제외 — 색인 대상도 아니고 요청마다 게이트를 태울 이유가 없다.
-  // 나머지(페이지, API, robots.txt, favicon)는 전부 거친다; Basic Auth 예외는 코드에서 건다.
-  matcher: ["/((?!_next/static|_next/image).*)"],
+  // 정적 자산·이미지 최적화·favicon 은 제외 — 색인 대상도 아니고 요청마다 게이트·세션 처리를 태울 이유가 없다.
+  // 나머지(페이지, API, robots.txt)는 전부 거친다; Basic Auth 예외는 코드에서 건다.
+  matcher: ["/((?!_next/static|_next/image|favicon\\.ico).*)"],
 };

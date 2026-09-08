@@ -31,7 +31,7 @@ async function apiCall<T>(url: string, init: RequestInit): Promise<ApiResult<T>>
     error: typeof data.error === "string" ? data.error : `HTTP_${res.status}`,
     message: typeof data.message === "string" ? data.message : undefined,
     issues: Array.isArray(data.issues) ? (data.issues as ApiIssue[]) : undefined,
-    retryAfterSec: retry ? Number(retry) : undefined,
+    retryAfterSec: retry ? Number(retry) : typeof data.retryAfterSec === "number" ? data.retryAfterSec : undefined,
     data,
   };
 }
@@ -56,6 +56,8 @@ export function describeError(r: { error: string; message?: string; retryAfterSe
       return "이미 사용 중인 이메일입니다";
     case "BIZ_REG_NO_TAKEN":
       return "이미 등록된 사업자번호입니다";
+    case "CONFLICT":
+      return "같은 내용이 방금 등록되었습니다. 새로 고친 뒤 다시 확인해 주세요";
     case "RATE_LIMITED":
       return `요청이 너무 많습니다. ${r.retryAfterSec ? `${r.retryAfterSec}초 후` : "잠시 후"} 다시 시도해 주세요`;
     case "UNAUTHENTICATED":

@@ -8,10 +8,10 @@ import { z } from "zod";
 import { db } from "@/db/client";
 import { users } from "@/db/schema";
 import { requestMeta, type RequestMeta } from "@/lib/request-meta";
-import { ACCESS_TTL_SEC, COOKIE_SESSION, REFRESH_TTL_SEC } from "./constants";
+import { ACCESS_TTL_SEC, COOKIE_SESSION, LOGIN_FAIL_WINDOW_MIN, REFRESH_TTL_SEC } from "./constants";
 import { refreshCookie } from "./cookies";
 import { hashPassword, passwordNeedsRehash, verifyPassword, verifyServerProof } from "./crypto";
-import { loginBackoff, recordLoginFail } from "./login-backoff";
+import { ipBlocked, loginBackoff, recordLoginFail } from "./login-backoff";
 import { readIdentity, resolveOAuthUser } from "./oauth-account";
 import { loadPrincipal, userLoginDenial, type Principal } from "./principal";
 import { createSession, revokeSession } from "./session-store";
@@ -53,11 +53,10 @@ function providers(): NextAuthConfig["providers"] {
         const { email, password } = parsed.data;
         const meta = requestMeta(request.headers);
 
+        // IP 상한(계정을 바꿔 가며 찍는 공격) → 계정 백오프. 둘 다 걸린 시도는 로그를 남기지 않는다 — 증폭 방지
+        if (await ipBlocked(meta.ip)) throw new LoginError("locked", LOGIN_FAIL_WINDOW_MIN * 60);
         const backoff = await loginBackoff(email);
-        if (backoff.blocked) {
-          await recordLoginFail(email, meta, "BACKOFF");
-          throw new LoginError("locked", backoff.retryAfterSec);
-        }
+        if (backoff.blocked) throw new LoginError("locked", backoff.retryAfterSec);
 
         const [u] = await db
           .select({ id: users.id, name: users.name, email: users.email, passwordHash: users.passwordHash, status: users.status, provider: users.provider })
