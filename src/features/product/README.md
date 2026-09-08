@@ -28,8 +28,9 @@ lib/upload-client.ts          presign → 브라우저가 R2 에 직접 PUT. R2 
 
 **예약 형태 변경은 확인을 받는다.** `startMode·fixedStartTimes·slotIntervalMin·durationMin·durationOptions·버퍼·capacityPerSlot·담당 자원` 이 바뀌고 미래
 REQUESTED/CONFIRMED 예약이 있으면 `confirmAffected` 없이는 409 `AFFECTS_RESERVATIONS {count}` — 폼이 "기존 예약 N건은 예약 당시 설정을 유지합니다" 로 묻고 다시 보낸다.
-거부(400)되는 것 둘: 정원을 미래 회차의 최대 점유(자원·시작 시각별 party_size 합)보다 낮게 / 미래 예약이 있는 자원의 연결 해제. 기존 예약 행의 스냅샷은 건드리지 않는다.
-같은 start_at 만 묶으므로 FREE+이용시간 옵션 상품의 부분 겹침 동시 인원은 덜 셀 수 있다 — 정확한 순간 최대 동시 인원은 예약 엔진(FR-BOOK-010)의 계산이다.
+거부(400)되는 것 둘: 정원을 미래 예약의 **순간 최대 동시 인원**보다 낮게 / 미래 예약이 있는 자원의 연결 해제. 기존 예약 행의 스냅샷은 건드리지 않는다.
+동시 인원은 `features/booking/peak-occupancy.ts` 의 `peakOccupancy`(FR-BOOK-010 스윕라인)를 자원별로 돌려 구한다 — 같은 start_at 합산은 이용 시간이 다른 예약의 부분 겹침을 놓친다
+(10:00~11:00 3명 + 10:30~12:00 2명 = 순간 5명). 예약 엔진과 같은 함수를 쓰므로 두 계산이 어긋나지 않는다.
 이미 연결된 자원이 비활성이 됐어도 유지는 허용한다(새로 연결만 막는다) — 아니면 예약이 남은 비활성 자원 때문에 상품이 영영 수정 불가가 된다.
 
 **매니저의 수정은 다른 스키마로 받는다.** `editProduct` 권한 + 본인 계정이 연결된 STAFF 자원이 담당인 상품에 한해 `productLimitedInputSchema`(설명·사진·ACTIVE↔HIDDEN).

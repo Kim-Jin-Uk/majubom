@@ -2,6 +2,7 @@ import { and, asc, eq, gt, inArray, ne, sql } from "drizzle-orm";
 import { db, type DbLike } from "@/db/client";
 import { businesses, productResources, products, reservations, resources, type FixedStartTime, type OpeningHour } from "@/db/schema";
 import { HttpError } from "@/features/auth/errors";
+import { peakOccupancy, type OccupyingReservation } from "@/features/booking/peak-occupancy";
 import { toMin } from "@/features/business/hours";
 import { writeAudit } from "@/lib/audit";
 import type { RequestMeta } from "@/lib/request-meta";
@@ -131,6 +132,40 @@ export async function futureReservationCount(productId: string, q: DbLike = db):
     .from(reservations)
     .where(and(eq(reservations.productId, productId), inArray(reservations.status, ["REQUESTED", "CONFIRMED"]), gt(reservations.startAt, new Date())));
   return n;
+}
+
+/**
+ * 이 상품의 미래 REQUESTED/CONFIRMED 예약이 한 자원 안에서 한때 최대 몇 명 겹치는가 — 자원별로 peakOccupancy(스윕라인) 를 돌려 최댓값.
+ * occupyRange(버퍼 포함 스냅샷)를 기준으로 하므로 이용 시간이 다른 예약의 부분 겹침도 정확히 센다.
+ */
+export async function peakFutureOccupancy(productId: string, q: DbLike = db): Promise<number> {
+  const rows = await q
+    .select({
+      resourceId: reservations.resourceId,
+      start: sql<string>`lower(${reservations.occupyRange})::text`,
+      end: sql<string>`upper(${reservations.occupyRange})::text`,
+      partySize: reservations.partySize,
+    })
+    .from(reservations)
+    .where(and(eq(reservations.productId, productId), inArray(reservations.status, ["REQUESTED", "CONFIRMED"]), gt(reservations.startAt, new Date())));
+  const byResource = new Map<string, OccupyingReservation[]>();
+  for (const r of rows) {
+    const list = byResource.get(r.resourceId) ?? [];
+    list.push({ occupyRange: { start: pgTimestamp(r.start), end: pgTimestamp(r.end) }, partySize: r.partySize });
+    byResource.set(r.resourceId, list);
+  }
+  let peak = 0;
+  for (const list of byResource.values()) {
+    // 그 자원의 예약 전체를 덮는 구간에서의 최대 동시 인원
+    const span = { start: Math.min(...list.map((x) => Date.parse(x.occupyRange.start as string))), end: Math.max(...list.map((x) => Date.parse(x.occupyRange.end as string))) };
+    peak = Math.max(peak, peakOccupancy(span, list));
+  }
+  return peak;
+}
+
+/** PG 의 timestamptz 텍스트("2026-09-10 10:00:00+00") 를 Date.parse 가 읽는 ISO 로 */
+function pgTimestamp(s: string): string {
+  return s.replace(" ", "T").replace(/([+-]\d{2})$/, "$1:00");
 }
 
 /** 가장 긴 영업일의 영업 구간(분). 익일 마감은 close+24h. 영업시간이 없으면 null (검사를 건너뛴다 — 1단계 전일 수 있다) */
@@ -269,16 +304,12 @@ export async function updateProduct(businessId: string, productId: string, input
     if (shapeChanged) {
       affected = await futureReservationCount(productId, tx);
       if (affected > 0) {
-        // 정원을 미래 회차(자원·시작 시각별 party_size 합) 중 최대보다 낮게 내리는 것은 거부 — 이미 받은 손님을 앉힐 자리가 없어진다.
-        // 같은 start_at 만 묶으므로 FREE+이용시간 옵션 상품의 부분 겹침 동시 인원은 덜 셀 수 있다 — 정확한 순간 최대는 예약 엔진(FR-BOOK-010)의 몫
+        // 정원을 미래 예약의 **순간 최대 동시 인원**(자원별 스윕라인, FR-BOOK-010 peakOccupancy)보다 낮게 내리는 것은 거부 —
+        // 이미 받은 손님을 앉힐 자리가 없어진다. 같은 start_at 합산은 이용 시간이 다른 예약의 부분 겹침을 놓친다
         if (next.capacityPerSlot < cur.capacityPerSlot) {
-          const [{ maxBooked }] = await tx
-            .select({ maxBooked: sql<number>`coalesce(max(s), 0)::int` })
-            .from(
-              sql`(select sum(${reservations.partySize}) as s from ${reservations} where ${reservations.productId} = ${productId} and ${reservations.status} in ('REQUESTED','CONFIRMED') and ${reservations.startAt} > now() group by ${reservations.resourceId}, ${reservations.startAt}) t`,
-            );
+          const maxBooked = await peakFutureOccupancy(productId, tx);
           if (next.capacityPerSlot < maxBooked) {
-            throw new HttpError(400, "INVALID_BODY", { issues: [{ path: ["capacityPerSlot"], message: `미래 회차에 이미 ${maxBooked}명이 예약돼 있어 그보다 낮출 수 없습니다` }], fields: ["capacityPerSlot"], maxBooked });
+            throw new HttpError(400, "INVALID_BODY", { issues: [{ path: ["capacityPerSlot"], message: `미래 예약이 한때 최대 ${maxBooked}명 겹쳐 있어 그보다 낮출 수 없습니다` }], fields: ["capacityPerSlot"], maxBooked });
           }
         }
         // 미래 예약이 있는 자원은 해제 불가 — 먼저 이관·취소해야 한다
