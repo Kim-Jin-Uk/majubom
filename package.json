@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "engines": {
-    "node": ">=22"
+    "node": ">=22",
+    "npm": "^11"
   },
   "scripts": {
     "dev": "next dev",
@@ -48,6 +49,6 @@
     "firebase-tools": "^15",
     "tsx": "^4",
     "typescript": "^5",
-    "vitest": "~4.0.0"
+    "vitest": "~4.1.0"
   }
 }
