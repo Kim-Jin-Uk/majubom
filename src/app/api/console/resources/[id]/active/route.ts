@@ -3,7 +3,7 @@ import { z } from "zod";
 import { assertSameOrigin } from "@/features/auth/csrf";
 import { assertWritable, handle, requireOwner } from "@/features/auth/guards";
 import { setResourceActive } from "@/features/business/resources";
-import { readJson } from "@/lib/api";
+import { readJson, uuidParam } from "@/lib/api";
 
 const Body = z.object({ isActive: z.boolean() });
 
@@ -12,7 +12,7 @@ export const PATCH = handle(async (req, ctx) => {
   assertSameOrigin(req);
   assertWritable(req);
   const v = await requireOwner();
-  const { id } = await ctx.params;
+  const id = uuidParam((await ctx.params).id);
   const { isActive } = await readJson(req, Body);
   await setResourceActive(v.membership.businessId, id, isActive);
   return NextResponse.json({ ok: true });

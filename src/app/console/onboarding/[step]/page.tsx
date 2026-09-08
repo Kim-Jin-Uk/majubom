@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Alert, Button } from "@/components/ui";
+import { Alert } from "@/components/ui";
 import { listMembers } from "@/features/auth/members";
 import { getPolicy, isPolicyTouched } from "@/features/business/policy";
 import { getPublishStatus, wizardSteps } from "@/features/business/publish-gate";
@@ -14,7 +14,6 @@ import { WizardSide } from "@/features/business/ui/WizardSide";
 import { consoleViewer, publicBase } from "@/features/business/ui/console-viewer";
 import { flags } from "@/lib/flags";
 
-export const metadata = { title: "매장 준비하기 — 마주,봄 콘솔" };
 
 const TITLES: Record<number, [string, string]> = {
   1: ["매장 정보와 영업시간을 알려주세요", "예약 페이지 상단과 예약 가능 시간의 기준이 됩니다. 언제든 설정에서 바꿀 수 있어요."],
@@ -24,6 +23,11 @@ const TITLES: Record<number, [string, string]> = {
   5: ["예약 정책", "자동 확정, 취소 마감, 선행 시간 같은 운영 규칙입니다. 기본값도 대부분의 매장에 잘 맞아요."],
   6: ["고객 상담 설정", "예약 페이지에서 고객이 바로 말을 걸 수 있는 채팅 창구입니다."],
 };
+
+export async function generateMetadata({ params }: { params: Promise<{ step: string }> }) {
+  const n = Number((await params).step);
+  return { title: `${TITLES[n]?.[0] ?? "매장 준비하기"} — 마주,봄 콘솔` };
+}
 
 /** 온보딩 위저드 (FR-BIZ-010~030, #25). 단계는 URL 로, 완료 여부는 실제 데이터로 판정 — 별도 진행 상태를 저장하지 않는다 */
 export default async function OnboardingStep({ params }: { params: Promise<{ step: string }> }) {
@@ -62,12 +66,12 @@ export default async function OnboardingStep({ params }: { params: Promise<{ ste
         <Alert kind="info">{text}</Alert>
         <div className="actions">
           {n < 6 && steps[n].available && (
-            <Link href={`/console/onboarding/${n + 1}`}>
-              <Button variant="primary">다음 단계</Button>
+            <Link href={`/console/onboarding/${n + 1}`} className="btn btn--primary">
+              다음 단계
             </Link>
           )}
-          <Link href="/console">
-            <Button>콘솔 홈</Button>
+          <Link href="/console" className="btn">
+            콘솔 홈
           </Link>
         </div>
       </>
@@ -94,7 +98,7 @@ export default async function OnboardingStep({ params }: { params: Promise<{ ste
             <h1>{title}</h1>
             <p className="lead">{lead}</p>
           </div>
-          {!v.isOwner && n !== 2 && <Alert kind="warn">매장 정보와 정책은 사업자 계정만 바꿀 수 있어요. 내용은 볼 수 있습니다.</Alert>}
+          {!v.isOwner && !steps[n - 1].comingSoon && <Alert kind="warn">{n === 2 ? "담당자·공간 등록은 사업자 계정만 할 수 있어요. 목록은 볼 수 있습니다." : "매장 정보와 정책은 사업자 계정만 바꿀 수 있어요. 내용은 볼 수 있습니다."}</Alert>}
           {body}
         </main>
       </div>

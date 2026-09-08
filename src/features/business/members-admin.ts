@@ -38,7 +38,7 @@ export async function updateMemberPermissions(businessId: string, memberId: stri
   for (const k of PERMISSION_KEYS) if (Boolean(before[k]) !== Boolean(next[k])) diff[k] = { from: Boolean(before[k]), to: Boolean(next[k]) };
   if (Object.keys(diff).length === 0) return before;
   await db.transaction(async (tx) => {
-    await tx.update(businessMembers).set({ permissions: next }).where(eq(businessMembers.id, memberId));
+    await tx.update(businessMembers).set({ permissions: next }).where(and(eq(businessMembers.id, memberId), eq(businessMembers.businessId, businessId)));
     await writeAudit({ action: "MEMBER_PERMISSION_UPDATE", actorId: actor.uid, actorRole: "OWNER", businessId, targetType: "BUSINESS_MEMBER", targetId: memberId, diff, meta }, tx);
   });
   return next;
@@ -46,14 +46,20 @@ export async function updateMemberPermissions(businessId: string, memberId: stri
 
 export async function setMemberActive(businessId: string, memberId: string, active: boolean, actor: { uid: string }, meta: RequestMeta): Promise<void> {
   const m = await loadManager(businessId, memberId);
+  const scope = and(eq(businessMembers.id, memberId), eq(businessMembers.businessId, businessId));
   if (active) {
     if (m.status !== "INACTIVE") throw new HttpError(409, "NOT_INACTIVE");
-    await db.update(businessMembers).set({ status: "ACTIVE" }).where(eq(businessMembers.id, memberId));
+    await db.transaction(async (tx) => {
+      await tx.update(businessMembers).set({ status: "ACTIVE" }).where(scope);
+      await writeAudit({ action: "MEMBER_PERMISSION_UPDATE", actorId: actor.uid, actorRole: "OWNER", businessId, targetType: "BUSINESS_MEMBER", targetId: memberId, diff: { status: { from: "INACTIVE", to: "ACTIVE" } }, meta }, tx);
+    });
     return;
   }
   if (m.status === "INACTIVE") return;
+  // INVITED 는 비활성화 대상이 아니다 — 비활성→재활성 경로로 초대 수락(비밀번호·동의) 없이 ACTIVE 가 되는 걸 막는다
+  if (m.status !== "ACTIVE") throw new HttpError(409, "NOT_ACTIVE");
   await db.transaction(async (tx) => {
-    await tx.update(businessMembers).set({ status: "INACTIVE" }).where(eq(businessMembers.id, memberId));
+    await tx.update(businessMembers).set({ status: "INACTIVE" }).where(scope);
     await tx.update(resources).set({ isActive: false }).where(eq(resources.memberId, memberId));
     await revokeAllSessions(m.userId, undefined, tx);
     await writeAudit({ action: "MEMBER_DEACTIVATE", actorId: actor.uid, actorRole: "OWNER", businessId, targetType: "BUSINESS_MEMBER", targetId: memberId, diff: { status: { from: m.status, to: "INACTIVE" } }, meta }, tx);

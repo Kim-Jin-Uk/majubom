@@ -15,7 +15,8 @@ describe("policySchema (FR-BIZ-020)", () => {
   });
   it("소수·누락 키는 거절 (전체 교체 API 라 부분 입력을 받지 않는다)", () => {
     expect(policySchema.safeParse({ ...DEFAULT_POLICY, minLeadTimeMin: 1.5 }).success).toBe(false);
-    const { autoConfirm: _drop, ...rest } = DEFAULT_POLICY;
+    const rest: Partial<typeof DEFAULT_POLICY> = { ...DEFAULT_POLICY };
+    delete rest.autoConfirm;
     expect(policySchema.safeParse(rest).success).toBe(false);
   });
 });

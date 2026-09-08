@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { Alert, Button, Field, Input } from "@/components/ui";
 import type { MemberListItem } from "@/features/auth/members";
@@ -22,11 +23,19 @@ const ERR_TEXT: Record<string, string> = {
   OWNER_ONLY: "사업자만 초대할 수 있습니다",
   OWNER_NOT_EDITABLE: "사업자 본인은 바꿀 수 없습니다",
   NOT_INACTIVE: "이미 활동 중인 구성원입니다",
+  NOT_ACTIVE: "초대를 아직 수락하지 않은 구성원은 비활성화할 수 없습니다",
 };
 
 /** FR-AUTH-020 매니저 초대·목록·재발송. 서버 컴포넌트가 초기 목록을 넘기고, 변경 후에는 GET 으로 다시 읽는다 */
 export function MembersPanel({ initial, isOwner }: { initial: MemberListItem[]; isOwner: boolean }) {
+  const router = useRouter();
   const [members, setMembers] = useState(initial);
+  // 서버가 다시 렌더(router.refresh)하면 새 목록을 따른다 — 같은 화면의 자원 패널이 바꾼 것도 보여야 한다 (렌더 중 상태 조정 패턴)
+  const [seen, setSeen] = useState(initial);
+  if (initial !== seen) {
+    setSeen(initial);
+    setMembers(initial);
+  }
   const [form, setForm] = useState({ name: "", email: "", phone: "" });
   const [perms, setPerms] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -58,13 +67,14 @@ export function MembersPanel({ initial, isOwner }: { initial: MemberListItem[]; 
       setMsg({ kind: "error", text: ERR_TEXT[r.error] ?? describeError(r) });
       return;
     }
-    setMsg({ kind: "ok", text: active ? `${m.name} 님을 다시 활성화했습니다. 다시 로그인하면 콘솔을 쓸 수 있어요.` : `${m.name} 님을 비활성화했습니다.` });
+    setMsg({ kind: "ok", text: active ? `${m.name} 님을 다시 활성화했습니다. 다시 로그인하면 콘솔을 쓸 수 있어요. 담당자 자원은 비활성 상태로 남아 있으니 필요하면 다시 켜 주세요.` : `${m.name} 님을 비활성화했습니다.` });
     await reload();
   }
 
   async function reload() {
     const r = await fetch("/api/console/members", { credentials: "same-origin" });
     if (r.ok) setMembers(((await r.json()) as { members: MemberListItem[] }).members);
+    router.refresh(); // 초대·비활성화는 자원(STAFF)도 바꾼다 — 형제 패널이 새 데이터를 받게
   }
 
   async function invite(e: FormEvent) {
@@ -162,11 +172,12 @@ export function MembersPanel({ initial, isOwner }: { initial: MemberListItem[]; 
                             </Button>
                           )
                         )}
-                        {m.status === "INACTIVE" ? (
+                        {m.status === "INACTIVE" && (
                           <Button size="sm" type="button" onClick={() => setActive(m, true)} disabled={busy}>
                             재활성화
                           </Button>
-                        ) : (
+                        )}
+                        {m.status === "ACTIVE" && (
                           <Button size="sm" type="button" variant="danger" onClick={() => setActive(m, false)} disabled={busy}>
                             비활성화
                           </Button>

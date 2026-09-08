@@ -837,6 +837,12 @@ button {
   background: var(--primary);
   border-radius: 999px;
 }
+@media (max-width: 480px) {
+  .hours-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+}
 @media (max-width: 860px) {
   .wizard {
     grid-template-columns: 1fr;
@@ -852,13 +858,22 @@ button {
   .grid-2 {
     grid-template-columns: 1fr;
   }
-  .console-nav,
+  .console-head {
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 8px 14px;
+  }
   .console-head .who {
     display: none;
   }
-  .console-head {
-    gap: 10px;
-    padding: 8px 14px;
+  .console-nav {
+    order: 3;
+    width: 100%;
+    margin-left: 0;
+    overflow-x: auto;
+  }
+  .console-body {
+    padding: 20px 16px 40px;
   }
   .pubcond {
     margin-top: 0;

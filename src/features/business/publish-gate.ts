@@ -58,15 +58,21 @@ export async function getPublishStatus(businessId: string): Promise<PublishStatu
 }
 
 /** 위저드 단계 상태 — 사이드바·진행률. 단계 번호는 기획서 6.1 순서 */
-export type WizardStep = { n: 1 | 2 | 3 | 4 | 5 | 6; key: "info" | "resources" | "product" | "brand" | "policy" | "chat"; label: string; done: boolean; required: boolean; available: boolean };
+/** comingSoon: 화면은 있지만 실제 입력은 다음 에픽 — "다음 할 일" 추천에서 건너뛴다 */
+export type WizardStep = { n: 1 | 2 | 3 | 4 | 5 | 6; key: "info" | "resources" | "product" | "brand" | "policy" | "chat"; label: string; done: boolean; required: boolean; available: boolean; comingSoon?: boolean };
 
 export function wizardSteps(p: PublishStatus, opts: { chatEnabled: boolean; policyTouched: boolean; brandTouched: boolean }): WizardStep[] {
   return [
     { n: 1, key: "info", label: "매장 정보 · 영업시간", done: p.infoComplete, required: true, available: true },
     { n: 2, key: "resources", label: "담당자 · 공간 등록", done: p.activeResources > 0, required: true, available: true },
-    { n: 3, key: "product", label: "첫 예약 상품", done: p.activeProducts > 0, required: true, available: true },
-    { n: 4, key: "brand", label: "홈페이지 로고 · 색상", done: opts.brandTouched, required: false, available: true },
+    { n: 3, key: "product", label: "첫 예약 상품", done: p.activeProducts > 0, required: true, available: true, comingSoon: true },
+    { n: 4, key: "brand", label: "홈페이지 로고 · 색상", done: opts.brandTouched, required: false, available: true, comingSoon: true },
     { n: 5, key: "policy", label: "예약 정책", done: opts.policyTouched, required: false, available: true },
-    { n: 6, key: "chat", label: "고객 상담 설정", done: false, required: false, available: opts.chatEnabled },
+    { n: 6, key: "chat", label: "고객 상담 설정", done: false, required: false, available: opts.chatEnabled, comingSoon: true },
   ];
+}
+
+/** 다음에 할 단계 — 아직 안 끝난 필수 단계 중 실제로 할 수 있는 것. 없으면 null (남은 필수가 전부 "준비 중" 이거나 다 끝났다) */
+export function nextWizardStep(steps: WizardStep[]): WizardStep | null {
+  return steps.find((s) => s.required && !s.done && s.available && !s.comingSoon) ?? null;
 }

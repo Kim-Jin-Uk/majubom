@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { Alert, Button, Input } from "@/components/ui";
 import type { BusinessPolicy } from "@/db/schema";
@@ -48,7 +49,7 @@ export function PolicyForm({ initial, mode, readOnly }: { initial: BusinessPolic
       return;
     }
     if (mode === "wizard") {
-      router.push("/console/onboarding");
+      router.push("/console");
       router.refresh();
       return;
     }
@@ -94,18 +95,18 @@ export function PolicyForm({ initial, mode, readOnly }: { initial: BusinessPolic
           </div>
         ))}
       </div>
-      {!readOnly && (
-        <div className="actions">
+      <div className="actions">
+        {!readOnly && (
           <Button type="submit" variant="primary" loading={busy}>
             {mode === "wizard" ? "저장하고 마치기" : "저장"}
           </Button>
-          {mode === "wizard" && (
-            <Button type="button" onClick={() => router.push("/console/onboarding")}>
-              기본값으로 두기
-            </Button>
-          )}
-        </div>
-      )}
+        )}
+        {mode === "wizard" && (
+          <Link href="/console" className="btn">
+            {readOnly ? "콘솔 홈" : "건너뛰기"}
+          </Link>
+        )}
+      </div>
     </form>
   );
 }

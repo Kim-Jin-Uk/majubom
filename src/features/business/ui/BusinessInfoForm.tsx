@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { Alert, Button, Field, Input } from "@/components/ui";
@@ -27,6 +28,7 @@ const SLUG_ERR: Record<string, string> = {
   SLUG_TAKEN: "다른 사업장이 쓰고 있거나 썼던 주소입니다",
   SLUG_RESERVED: "사용할 수 없는 주소입니다",
   SLUG_SAME: "지금 주소와 같습니다",
+  SLUG_LIMIT: "주소는 30일에 3번까지만 바꿀 수 있어요",
 };
 
 /**
@@ -78,16 +80,21 @@ export function BusinessInfoForm({ initial, mode, readOnly, publicBase }: { init
       if (r.issues) {
         setErrors(fieldErrors(r.issues));
         const hour = r.issues.find((i) => i.path[0] === "openingHours");
-        setMsg({ kind: "error", text: hour ? `영업시간: ${hour.message}` : "입력 내용을 확인해 주세요" });
+        if (hour) {
+          // path[1] 은 보낸 배열(켜진 요일만)의 인덱스 → 요일 이름으로
+          const sent = rows.map((x, dow) => ({ ...x, dow })).filter((x) => x.enabled);
+          const day = typeof hour.path[1] === "number" ? sent[hour.path[1]]?.dow : undefined;
+          setMsg({ kind: "error", text: `영업시간${day !== undefined ? ` (${DOW[day]}요일)` : ""}: ${hour.message}` });
+        } else setMsg({ kind: "error", text: "입력 내용을 확인해 주세요" });
       } else setMsg({ kind: "error", text: describeError(r) });
       return;
     }
-    if (mode === "wizard") {
+    if (mode === "wizard" && complete) {
       router.push("/console/onboarding/2");
       router.refresh();
       return;
     }
-    setMsg({ kind: "ok", text: "저장했습니다" });
+    setMsg({ kind: "ok", text: mode === "wizard" && !complete ? `저장했습니다. 1단계를 마치려면 ${missing.join(" · ")} 이(가) 더 필요해요.` : "저장했습니다" });
     router.refresh();
   }
 
@@ -106,6 +113,15 @@ export function BusinessInfoForm({ initial, mode, readOnly, publicBase }: { init
   }
 
   const dis = readOnly || busy;
+  /** 1단계 완료 조건 (서버 isInfoComplete 와 같다) — 버튼 문구와 안내에 쓴다 */
+  const missing = [
+    !f.name.trim() && "상호",
+    !f.phone.trim() && "매장 전화",
+    !f.address.trim() && "주소",
+    !rows.some((r) => r.enabled) && "영업시간 1일 이상",
+    savedSlug.startsWith("b-") && "공개 주소",
+  ].filter((x): x is string => Boolean(x));
+  const complete = missing.length === 0;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
@@ -179,22 +195,7 @@ export function BusinessInfoForm({ initial, mode, readOnly, publicBase }: { init
             </div>
           ))}
         </div>
-        {!readOnly && (
-          <div className="actions">
-            <Button type="submit" variant="primary" loading={busy}>
-              {mode === "wizard" ? "저장하고 다음" : "저장"}
-            </Button>
-            {mode === "wizard" && (
-              <Button type="button" onClick={() => router.push("/console/onboarding/2")}>
-                건너뛰기
-              </Button>
-            )}
-          </div>
-        )}
-      </form>
-
-      <section className="panel">
-        <h2>공개 주소</h2>
+        <h2 style={{ marginTop: 6 }}>공개 주소</h2>
         <p className="sub">
           고객이 예약하러 오는 주소입니다. 영소문자·숫자·하이픈 3~30자. <b>한 번 쓴 주소는 바꾼 뒤에도 다른 사업장이 쓸 수 없고</b>, 옛 주소로 들어온 손님은 새 주소로 안내됩니다.
         </p>
@@ -202,7 +203,7 @@ export function BusinessInfoForm({ initial, mode, readOnly, publicBase }: { init
         <Field label="주소" htmlFor="b-slug" hint={savedSlug.startsWith("b-") ? (mode === "wizard" ? "아직 임시 주소입니다 — 주소까지 정해야 1단계가 완료돼요" : "아직 임시 주소입니다 — 정해 주세요") : `현재: ${publicBase}/@${savedSlug}`}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <span className="muted" style={{ whiteSpace: "nowrap", fontSize: 13 }}>{publicBase.replace(/^https?:\/\//, "")}/@</span>
-            <Input id="b-slug" style={{ flex: 1, minWidth: 160 }} value={slug} onChange={(e) => setSlug(e.target.value.toLowerCase())} disabled={readOnly || slugBusy} placeholder="my-salon" pattern="[a-z0-9-]{3,30}" />
+            <Input id="b-slug" style={{ flex: 1, minWidth: 160 }} value={slug} onChange={(e) => setSlug(e.target.value.toLowerCase())} disabled={readOnly || slugBusy} placeholder="my-salon" pattern="[a-z0-9\-]{3,30}" />
             {!readOnly && (
               <Button type="button" onClick={saveSlug} loading={slugBusy} disabled={!slug || slug === savedSlug}>
                 주소 저장
@@ -210,7 +211,21 @@ export function BusinessInfoForm({ initial, mode, readOnly, publicBase }: { init
             )}
           </div>
         </Field>
-      </section>
+        <div className="actions">
+          {!readOnly && (
+            <Button type="submit" variant="primary" loading={busy}>
+              {mode === "wizard" ? (complete ? "저장하고 다음" : "저장") : "저장"}
+            </Button>
+          )}
+          {mode === "wizard" && (
+            <Link href="/console/onboarding/2" className="btn">
+              {readOnly ? "다음 단계" : "건너뛰기"}
+            </Link>
+          )}
+          {mode === "wizard" && !readOnly && !complete && <span className="muted" style={{ fontSize: 12.5 }}>1단계 완료까지: {missing.join(" · ")}</span>}
+        </div>
+      </form>
+
     </div>
   );
 }

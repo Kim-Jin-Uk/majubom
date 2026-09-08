@@ -3,7 +3,7 @@ import { z } from "zod";
 import { assertSameOrigin } from "@/features/auth/csrf";
 import { assertWritable, handle, requireOwner } from "@/features/auth/guards";
 import { getMember, permissionsSchema, setMemberActive, updateMemberPermissions } from "@/features/business/members-admin";
-import { readJson } from "@/lib/api";
+import { readJson, uuidParam } from "@/lib/api";
 import { requestMeta } from "@/lib/request-meta";
 
 const Body = z
@@ -13,7 +13,7 @@ const Body = z
 /** GET /api/console/members/:id — 구성원 상세 · PATCH — 권한 변경 / 비활성·재활성 (OWNER, #30). OWNER 본인은 대상이 아니다(403) */
 export const GET = handle(async (_req, ctx) => {
   const v = await requireOwner();
-  const { id } = await ctx.params;
+  const id = uuidParam((await ctx.params).id);
   return NextResponse.json({ member: await getMember(v.membership.businessId, id) });
 });
 
@@ -21,7 +21,7 @@ export const PATCH = handle(async (req, ctx) => {
   assertSameOrigin(req);
   assertWritable(req);
   const v = await requireOwner();
-  const { id } = await ctx.params;
+  const id = uuidParam((await ctx.params).id);
   const body = await readJson(req, Body);
   const meta = requestMeta(req.headers);
   let permissions;

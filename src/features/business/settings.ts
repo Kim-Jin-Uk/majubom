@@ -1,10 +1,11 @@
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, gt, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db/client";
 import { businessSlugHistory, businesses, type OpeningHour } from "@/db/schema";
 import { HttpError } from "@/features/auth/errors";
 import { writeAudit } from "@/lib/audit";
 import type { RequestMeta } from "@/lib/request-meta";
+import { phoneSchema } from "@/features/auth/validation";
 import { BUSINESS_CATEGORY_CODES } from "./policy-defaults";
 
 /**
@@ -60,19 +61,35 @@ export const slugSchema = z
   .trim()
   .toLowerCase()
   .regex(/^[a-z0-9-]{3,30}$/, "영소문자·숫자·하이픈 3~30자")
-  .refine((s) => !s.startsWith("-") && !s.endsWith("-"), "하이픈으로 시작하거나 끝날 수 없습니다");
+  .refine((s) => !s.startsWith("-") && !s.endsWith("-"), "하이픈으로 시작하거나 끝날 수 없습니다")
+  .refine((s) => !s.startsWith("b-"), "b- 로 시작하는 주소는 임시 주소용입니다");
 
 /** 예약어 — 공개 URL /@{slug} 와 충돌하거나 오해를 부르는 것 */
-const RESERVED_SLUGS = new Set(["admin", "console", "api", "login", "signup", "me", "majubom", "help", "about", "www", "app", "static", "_next"]);
+const RESERVED_SLUGS = new Set(["admin", "console", "api", "login", "signup", "me", "majubom", "help", "about", "www", "app", "static", "_next", "support", "terms", "privacy", "notice", "official", "assets", "sitemap", "invite", "reset-password", "forgot-password"]);
+
+/** 30일 slug 변경 횟수 제한 — 옛 slug 가 영구 예약되므로 무제한이면 주소 선점(스쿼팅)에 쓰인다 */
+export const SLUG_CHANGES_PER_30D = 3;
 
 export const businessInfoSchema = z.object({
   name: z.string().trim().min(1, "상호를 입력해 주세요").max(100),
   category: z.enum(BUSINESS_CATEGORY_CODES),
-  phone: z.string().trim().max(32).optional().nullable(),
+  phone: phoneSchema.optional().nullable(),
   address: z.string().trim().max(300).optional().nullable(),
   addressDetail: z.string().trim().max(200).optional().nullable(),
   description: z.string().trim().max(2000).optional().nullable(),
-  timezone: z.string().trim().min(1).max(64).default("Asia/Seoul"),
+  timezone: z
+    .string()
+    .trim()
+    .max(64)
+    .default("Asia/Seoul")
+    .refine((tz) => {
+      try {
+        new Intl.DateTimeFormat("en", { timeZone: tz });
+        return true;
+      } catch {
+        return false;
+      }
+    }, "지원하지 않는 시간대입니다"),
   openingHours: openingHoursSchema,
 });
 export type BusinessInfoInput = z.infer<typeof businessInfoSchema>;
@@ -135,7 +152,7 @@ export async function updateBusinessInfo(businessId: string, input: BusinessInfo
   if (rows.length !== 1) throw new HttpError(404, "NOT_FOUND");
 }
 
-export type SlugChangeResult = { ok: true; slug: string } | { ok: false; reason: "TAKEN" | "RESERVED" | "SAME" };
+export type SlugChangeResult = { ok: true; slug: string } | { ok: false; reason: "TAKEN" | "RESERVED" | "SAME" | "LIMIT" };
 
 /** slug 변경. 옛 slug 는 history 에 그대로 남아 영구 예약된다(한 번 쓰인 slug 는 다른 사업장이 못 쓴다). */
 export async function changeSlug(businessId: string, slug: string, actor: { uid: string; role: "OWNER" | "MANAGER" }, meta: RequestMeta): Promise<SlugChangeResult> {
@@ -151,6 +168,12 @@ export async function changeSlug(businessId: string, slug: string, actor: { uid:
       .where(and(eq(businessSlugHistory.slug, slug), ne(businessSlugHistory.businessId, businessId)))
       .limit(1);
     if (taken) return { ok: false, reason: "TAKEN" } as const;
+    const [{ recent }] = await tx
+      .select({ recent: sql<number>`count(*)::int` })
+      .from(businessSlugHistory)
+      // 가입 때 자동으로 받은 임시 slug(b-…) 는 세지 않는다
+      .where(and(eq(businessSlugHistory.businessId, businessId), gt(businessSlugHistory.createdAt, sql`now() - interval '30 days'`), sql`${businessSlugHistory.slug} not like 'b-%'`));
+    if (recent >= SLUG_CHANGES_PER_30D) return { ok: false, reason: "LIMIT" } as const;
     await tx.update(businesses).set({ slug }).where(eq(businesses.id, businessId));
     const [mine] = await tx
       .select({ id: businessSlugHistory.id })

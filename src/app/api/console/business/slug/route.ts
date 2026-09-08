@@ -15,6 +15,6 @@ export const PATCH = handle(async (req) => {
   const v = await requireOwner();
   const { slug } = await readJson(req, Body);
   const r = await changeSlug(v.membership.businessId, slug, { uid: v.uid, role: v.membership.role }, requestMeta(req.headers));
-  if (!r.ok) throw new HttpError(r.reason === "TAKEN" || r.reason === "RESERVED" ? 409 : 400, `SLUG_${r.reason}`);
+  if (!r.ok) throw new HttpError(r.reason === "LIMIT" ? 429 : r.reason === "SAME" ? 400 : 409, `SLUG_${r.reason}`);
   return NextResponse.json({ ok: true, slug: r.slug });
 });

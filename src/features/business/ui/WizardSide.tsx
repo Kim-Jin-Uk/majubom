@@ -33,7 +33,7 @@ export function WizardSide({ steps, current, status }: { steps: WizardStep[]; cu
             <Link key={s.n} href={`/console/onboarding/${s.n}`} className={cls} aria-current={s.n === current ? "step" : undefined}>
               <span className="n">{s.done && s.n !== current ? <Check /> : s.n}</span>
               {s.label}
-              {!s.required && <span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 500, opacity: 0.8 }}>선택</span>}
+              {(s.comingSoon || !s.required) && <span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 500, opacity: 0.8 }}>{s.comingSoon && !s.done ? "준비 중" : "선택"}</span>}
             </Link>
           );
         })}

@@ -17,7 +17,8 @@ export const resourceInputSchema = z.object({
   type: z.enum(["STAFF", "SPACE", "SHARED"]),
   name: z.string().trim().min(1, "이름을 입력해 주세요").max(100),
   description: z.string().trim().max(1000).optional().nullable(),
-  imageUrl: z.url().max(2000).optional().nullable(),
+  /** 생략(undefined)하면 기존 값 유지, null 이면 제거. http(s) 만 */
+  imageUrl: z.url({ protocol: /^https?$/ }).max(2000).optional().nullable(),
   capacity: z.number().int().min(1, "정원은 1 이상").max(500),
   /** STAFF 만: 연결할 구성원(business_members.id). 없으면 계정 없는 담당자 */
   memberId: z.uuid().optional().nullable(),
@@ -88,10 +89,19 @@ async function assertMemberLinkable(businessId: string, memberId: string, except
 export async function createResource(businessId: string, input: ResourceInput): Promise<{ id: string }> {
   const memberId = input.type === "STAFF" ? (input.memberId ?? null) : null;
   if (memberId) await assertMemberLinkable(businessId, memberId);
-  const [{ next }] = await db.select({ next: sql<number>`coalesce(max(${resources.sortOrder}), -1) + 1` }).from(resources).where(eq(resources.businessId, businessId));
   const [r] = await db
     .insert(resources)
-    .values({ businessId, type: input.type, name: input.name, description: input.description ?? null, imageUrl: input.imageUrl ?? null, capacity: input.capacity, memberId, sortOrder: next })
+    .values({
+      businessId,
+      type: input.type,
+      name: input.name,
+      description: input.description ?? null,
+      imageUrl: input.imageUrl ?? null,
+      capacity: input.capacity,
+      memberId,
+      // 같은 문장 안에서 max+1 — 동시 등록이 같은 순번을 받지 않는다
+      sortOrder: sql`(select coalesce(max(r2.sort_order), -1) + 1 from resources r2 where r2.business_id = ${businessId})`,
+    })
     .returning({ id: resources.id });
   return { id: r.id };
 }
@@ -103,8 +113,8 @@ export async function updateResource(businessId: string, resourceId: string, inp
   if (memberId) await assertMemberLinkable(businessId, memberId, resourceId);
   await db
     .update(resources)
-    .set({ type: input.type, name: input.name, description: input.description ?? null, imageUrl: input.imageUrl ?? null, capacity: input.capacity, memberId })
-    .where(eq(resources.id, resourceId));
+    .set({ type: input.type, name: input.name, description: input.description ?? null, imageUrl: input.imageUrl, capacity: input.capacity, memberId })
+    .where(and(eq(resources.id, resourceId), eq(resources.businessId, businessId)));
 }
 
 /** 미래의 REQUESTED/CONFIRMED 예약 수 — 삭제 가능 여부의 기준 */
@@ -128,11 +138,17 @@ export async function removeResource(businessId: string, resourceId: string): Pr
   const future = await futureActiveReservations(resourceId);
   const [{ any }] = await db.select({ any: sql<number>`count(*)::int` }).from(reservations).where(eq(reservations.resourceId, resourceId));
   const [{ linked }] = await db.select({ linked: sql<number>`count(*)::int` }).from(sql`product_resources`).where(sql`resource_id = ${resourceId}`);
+  const scope = and(eq(resources.id, resourceId), eq(resources.businessId, businessId));
   if (any === 0 && linked === 0) {
-    await db.delete(resources).where(eq(resources.id, resourceId));
-    return { ok: true, mode: "DELETED" };
+    // 근무표·휴무 등 다른 참조가 남아 있거나 세는 사이 예약이 생겼으면 FK(23503) — 삭제 대신 비활성화로 떨어진다
+    try {
+      await db.delete(resources).where(scope);
+      return { ok: true, mode: "DELETED" };
+    } catch (e) {
+      if (!(typeof e === "object" && e !== null && (e as { code?: string }).code === "23503")) throw e;
+    }
   }
-  await db.update(resources).set({ isActive: false }).where(eq(resources.id, resourceId));
+  await db.update(resources).set({ isActive: false }).where(scope);
   return { ok: true, mode: "DEACTIVATED", futureReservations: future };
 }
 

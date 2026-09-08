@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { Alert, Button, Field, Input } from "@/components/ui";
 import type { MemberListItem } from "@/features/auth/members";
@@ -28,6 +29,12 @@ const EMPTY: Draft = { type: "STAFF", name: "", description: "", capacity: "1", 
 export function ResourcesPanel({ initial, members, isOwner, readOnly, mode }: { initial: ResourceItem[]; members: MemberListItem[]; isOwner: boolean; readOnly: boolean; mode: "wizard" | "page" }) {
   const router = useRouter();
   const [items, setItems] = useState(initial);
+  // 구성원 패널의 초대(STAFF 자동 생성)·비활성화가 router.refresh 로 새 initial 을 넘긴다 — 렌더 중 상태 조정 패턴
+  const [seen, setSeen] = useState(initial);
+  if (initial !== seen) {
+    setSeen(initial);
+    setItems(initial);
+  }
   const [editing, setEditing] = useState<string | "new" | null>(mode === "wizard" && initial.length === 0 ? "new" : null);
   const [draft, setDraft] = useState<Draft>(EMPTY);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -152,15 +159,17 @@ export function ResourcesPanel({ initial, members, isOwner, readOnly, mode }: { 
         ))}
       </div>
 
-      {canEdit && editing === null && (
+      {editing === null && (
         <div className="actions">
-          <Button type="button" variant="primary" onClick={startNew}>
-            + 담당자 · 공간 추가
-          </Button>
-          {mode === "wizard" && items.some((r) => r.isActive) && (
-            <Button type="button" onClick={() => router.push("/console/onboarding/3")}>
-              다음 단계
+          {canEdit && (
+            <Button type="button" variant="primary" onClick={startNew}>
+              + 담당자 · 공간 추가
             </Button>
+          )}
+          {mode === "wizard" && (canEdit ? items.some((r) => r.isActive) : true) && (
+            <Link href="/console/onboarding/3" className="btn">
+              다음 단계
+            </Link>
           )}
         </div>
       )}

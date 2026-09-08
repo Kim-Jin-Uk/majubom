@@ -39,3 +39,22 @@ describe("slugSchema", () => {
     expect(slugSchema.safeParse("a".repeat(31)).success).toBe(false);
   });
 });
+
+describe("businessInfoSchema 보강 (리뷰 반영)", () => {
+  it("임시 주소 접두어 b- 는 고를 수 없다", () => {
+    expect(slugSchema.safeParse("b-salon").success).toBe(false);
+  });
+  it("timezone 은 IANA 이름만", async () => {
+    const { businessInfoSchema } = await import("./settings");
+    const base = { name: "봄", category: "hair", openingHours: [] };
+    expect(businessInfoSchema.safeParse({ ...base, timezone: "Asia/Seoul" }).success).toBe(true);
+    expect(businessInfoSchema.safeParse({ ...base, timezone: "Mars/Olympus" }).success).toBe(false);
+    expect(businessInfoSchema.safeParse({ ...base }).data?.timezone).toBe("Asia/Seoul");
+  });
+  it("전화는 가입과 같은 규칙(숫자만 저장)", async () => {
+    const { businessInfoSchema } = await import("./settings");
+    const base = { name: "봄", category: "hair", openingHours: [] };
+    expect(businessInfoSchema.safeParse({ ...base, phone: "02-333-4444" }).data?.phone).toBe("023334444");
+    expect(businessInfoSchema.safeParse({ ...base, phone: "12345" }).success).toBe(false);
+  });
+});
