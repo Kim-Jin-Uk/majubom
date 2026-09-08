@@ -30,7 +30,9 @@ describe("secret encryption (AES-256-GCM)", () => {
     expect(enc.startsWith("v1.")).toBe(true);
     expect(decryptSecret(enc, "s".repeat(40))).toBe("JBSWY3DPEHPK3PXP");
     expect(() => decryptSecret(enc, "t".repeat(40))).toThrow();
-    const tampered = enc.slice(0, -2) + (enc.endsWith("A") ? "B" : "A") + enc.slice(-1);
+    // 마지막 글자 근처는 base64url 패딩 비트라 바꿔도 바이트가 그대로일 수 있다 — 본문 한가운데 글자를 바꾼다
+    const mid = enc.length - 10;
+    const tampered = enc.slice(0, mid) + (enc[mid] === "A" ? "B" : "A") + enc.slice(mid + 1);
     expect(() => decryptSecret(tampered, "s".repeat(40))).toThrow();
   });
 });

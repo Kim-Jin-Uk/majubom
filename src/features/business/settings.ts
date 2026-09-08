@@ -6,6 +6,7 @@ import { HttpError } from "@/features/auth/errors";
 import { writeAudit } from "@/lib/audit";
 import type { RequestMeta } from "@/lib/request-meta";
 import { phoneSchema } from "@/features/auth/validation";
+import { timeSchema, toMin } from "./hours";
 import { BUSINESS_CATEGORY_CODES } from "./policy-defaults";
 
 /**
@@ -15,9 +16,7 @@ import { BUSINESS_CATEGORY_CODES } from "./policy-defaults";
  * 영업시간 안에 있어야 하고 서로 겹치지 않는다. 요일이 배열에 없으면 그날은 휴무.
  * slug: 영소문자+숫자+하이픈 3~30자. 바꾸면 옛 slug 는 business_slug_history 에 영구 예약(다른 사업장이 못 쓴다) — 구 URL 301 의 근거.
  */
-const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
-
-export const timeSchema = z.string().regex(TIME, "HH:MM 형식이어야 합니다");
+export { timeSchema, toMin } from "./hours";
 
 export const openingHourSchema = z
   .object({
@@ -50,11 +49,6 @@ export const openingHoursSchema = z
   .array(openingHourSchema)
   .max(7)
   .refine((arr) => new Set(arr.map((h) => h.dow)).size === arr.length, "같은 요일이 두 번 들어 있습니다");
-
-export function toMin(hhmm: string): number {
-  const [h, m] = hhmm.split(":").map(Number);
-  return h * 60 + m;
-}
 
 export const slugSchema = z
   .string()

@@ -5,18 +5,18 @@
 
 ## 지금 어디
 
-에픽 #24 사업장 온보딩·설정 콘솔 — #25 위저드 · #26 기본정보·영업시간 · #27 정책 · #28 자원 · #29 공개 조건 · #30 권한 구현.
-브랜치 `feat/3-business-console`. 같은 이메일 고객·사업자 겸업(사업자 가입이 기존 계정에 붙는다) 포함.
-`npm run verify` · vitest · `next build` · Playwright 시나리오(owner/manager/겸업·반려 재신청) 통과. 스키마 변경 없음. 병렬 리뷰 2회 반영(PR #155).
+에픽 #31 예약 상품 콘솔 — #32 등록 폼(프리셋·3스위치·회차 시간표) · #33 이미지(R2 presign 업로드·정렬·대표) · #34 자원 매핑·선택 방식 · #35 수정(매니저 제한·미래 예약 확인) · #36 삭제→보관.
+브랜치 `feat/4-product-console`. 위저드 3단계가 실제 폼이 됐다. 스키마 변경 없음.
+`npm run verify` · vitest · `next build` · Playwright(상품 흐름·검증·수정 영향·삭제) 통과. 설계 기록 `src/features/product/README.md`.
 
 ## 막힌 것
 
-3단계 "첫 예약 상품" 은 상품 에픽 #31 전까지 안내 문구 — 공개 조건 셋 중 하나가 늘 미충족이라 `live` 는 아직 못 된다.
-소셜 로그인·Resend·Cloud Scheduler·App Hosting 시크릿은 여전히 운영 작업 (features/auth/README.md).
-Neon 에 남은 테스트 데이터는 클라우드/VM 에서 못 지운다 — Mac 에서 `npm run db:reset`.
+로컬(클라우드·VM)에는 R2 env 가 없어 이미지 업로드는 URL 직접 입력으로만 확인했다 — Mac 은 .env.local 에 R2 가 있으니 실제 업로드 확인은 거기서.
+`fixedIgnoreBreaks` 는 컬럼 없이 항상 true. 감사 action 세분화(BUSINESS_UPDATE 등)는 여전히 다음 마이그레이션 때.
+소셜 로그인·Resend·Cloud Scheduler·App Hosting 시크릿은 운영 작업 (features/auth/README.md).
 
 ## 다음 한 수
 
-1. PR `feat(biz): 사업장 온보딩·설정 콘솔` 리뷰 반영 → 머지
-2. 에픽 #31 상품·슬롯 (위저드 3단계를 실제 폼으로, `tests/fixtures/slot-cases.json` 이 슬롯 계산의 기준)
-3. 운영: App Hosting 시크릿(`AUTH_SECRET` `AUTH_URL` `CRON_SECRET` `RESEND_API_KEY` R2 키) · Cloud Scheduler `cleanup-unverified` · 관리자 승격 + TOTP
+1. PR `feat(prd): 예약 상품 콘솔` 리뷰 반영 → 머지
+2. 에픽 #37 휴무일·근무표 콘솔 (FR-SCH) → 그 다음 예약 엔진 ★ (`tests/fixtures/slot-cases.json` 이 슬롯 계산의 기준)
+3. 운영: App Hosting 시크릿 · Cloud Scheduler `cleanup-unverified` · 관리자 승격 + TOTP
