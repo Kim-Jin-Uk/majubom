@@ -1154,3 +1154,79 @@ button {
 .chip-btn.x:hover {
   opacity: 1;
 }
+
+/* ---- 근무표 (#37) ---- */
+.table.sched th,
+.table.sched td {
+  vertical-align: top;
+  font-size: 12.5px;
+}
+.table.sched th.today {
+  background: var(--primary-tint);
+  color: var(--primary-dark);
+}
+.table.sched th.closed {
+  color: var(--text-3);
+}
+.table.sched th.short {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+.table.sched .sun {
+  color: var(--bad);
+}
+.table.sched .sat {
+  color: #2e6fd0;
+}
+.table.sched td.cell {
+  line-height: 1.5;
+}
+.table.sched td.cell.editable {
+  cursor: pointer;
+}
+.table.sched td.cell.editable:hover,
+.table.sched td.cell.editable:focus-visible {
+  background: var(--surface-2);
+  outline: none;
+}
+.table.sched td.cell.off {
+  color: var(--text-3);
+}
+.table.sched td.cell.hol {
+  background: var(--muted-fill);
+}
+.table.sched tr.mine td {
+  background: var(--hero-soft-a);
+}
+.table.sched .badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+.table.sched .badge {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--muted-fill);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.table.sched .badge.k-OFF {
+  background: var(--bad-bg);
+  color: var(--bad);
+}
+.table.sched .badge.k-BLOCK {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+.table.sched .badge.k-EXTRA,
+.table.sched .badge.k-MODIFIED {
+  background: var(--primary-tint);
+  color: var(--primary-dark);
+}
+.table.sched .badge.rsv {
+  background: var(--ok-bg);
+  color: var(--ok);
+}

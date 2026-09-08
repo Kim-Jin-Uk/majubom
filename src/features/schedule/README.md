@@ -1,0 +1,46 @@
+# 휴무일 · 근무표 콘솔 (에픽 #37) — 설계 기록
+
+정본은 `02_기능명세서.md` §3.5 (FR-SCH-010 ~ 040). 명세가 정하지 않은 것을 여기서 어떻게 정했는지만 적는다.
+
+## 구조
+
+```
+features/schedule/resolve.ts         하루의 근무 구간 결정 — 순수 함수. 우선순위 8단계를 구현한 유일한 곳. 슬롯 엔진(FR-BOOK-010)도 이걸 쓴다
+features/schedule/holidays.ts        휴무 규칙 CRUD · 발생일 전개 · 미래 예약 충돌
+features/schedule/work-schedules.ts  주간 패턴 — 버전(effectiveFrom/To) · 일괄 적용 · EXCLUDE 제약과의 순서
+features/schedule/work-exceptions.ts 일자별 예외 — 사라지는 근무 구간의 예약 충돌 · 매니저 BLOCK 권한
+features/schedule/calendar.ts        자원 × 날짜 그리드 + 요약 지표 (화면은 계산하지 않는다)
+features/schedule/ui/                ScheduleGrid(주간 그리드·예외 등록) · PatternEditor · HolidaysPanel
+app/api/console/{holidays,work-schedules,work-exceptions,schedule}
+app/console/{schedule, schedule/pattern, holidays}
+```
+
+## 결정한 것
+
+**우선순위는 "바탕을 정하고 깎는다".** 명세의 1~8 을 그대로 if 사슬로 쓰면 OFF+EXTRA 공존 같은 조합이 어긋난다. `resolveWorkDay` 는
+바탕(MODIFIED 구간 > OFF=빈 구간 > WorkSchedule−휴게) 에 EXTRA 를 더하고, BLOCK → 자원 휴무 → 사업장 휴무 순으로 뺀다. 결과적으로 명세 표와 같다:
+휴무는 무조건 차단, EXTRA 는 OFF 를 이기고, BLOCK 은 어떤 근무든 깎는다. 테스트(`resolve.test.ts`)가 각 순위를 하나씩 고정한다.
+예약 가능(bookable) = 근무 ∩ 영업시간(휴게 제외). 영업 밖 근무는 저장되지만 예약이 열리지 않는다(명세).
+
+**패턴은 덮어쓰지 않고 버전을 만든다.** 새 패턴을 `effectiveFrom` 부터 적용하면 그 자원·요일의 열린 행은 `effectiveTo = from − 1` 로 닫고(이력),
+from 이후에 시작하는 행은 지운다(닫으면 뒤집힌 기간이 된다). 순서를 지키면 EXCLUDE 제약(`work_schedule_no_overlap`)에 걸리지 않고, 경합으로 걸리면 409.
+요일 하나의 근무는 한 구간(시작<끝, DB CHECK — 자정 넘김은 아직) + 휴게 2구간. 일괄 편집은 같은 입력을 자원 여러 개에 반복하는 것.
+
+**충돌은 "사라지는 근무 구간의 예약" 으로 정의한다.** OFF 는 그날 근무 전부, BLOCK 은 차단 구간, MODIFIED 는 (기존 근무 − 새 구간), EXTRA 는 없음.
+휴무는 발생일(반복이면 앞으로 90일)의 예약 — 부분 휴무는 시간 겹침만. 충돌이 있으면 409 로 목록을 돌려주고 OWNER 만 `confirmConflicts`/`keepReservations` 로
+강행한다(예약은 그대로 남고 새 예약만 막힌다). 명세의 "일괄 취소 + 고객 알림" 은 예약 콘솔 에픽에서 취소·알림이 생기면 붙인다 — 여기서 조용히 취소하지 않는다.
+
+**매니저는 본인 BLOCK 만.** 계정이 연결된 STAFF 자원(`resources.member_id`)에 한해 `kind=BLOCK`, 그 시간에 예약이 있으면 등록 불가(FR-SCH-040).
+그날 휴무·시간 변경은 교대 에픽(#43)의 요청 흐름으로. `reason` 은 본인과 OWNER 만 본다 — 조회 함수가 다른 사람의 사유를 null 로 가린다(FR-SCH-030).
+
+**날짜는 사업장 타임존의 오늘.** 서버 시계는 UTC 라 한국 새벽엔 하루 어긋난다 — `lib/dates.ts` `todayIn(tz)`. 예약을 날짜별로 셀 때는
+`start_at at time zone <tz>` 를 쓰고, tz 는 파라미터가 아니라 리터럴로 넣는다(같은 식이 SELECT 와 GROUP BY 에 다른 `$n` 으로 바인딩되면 PG 가 같은 식으로 보지 않는다).
+
+**요약 지표.** 근무일 수·총 근무시간(휴게·BLOCK·휴무 차감 후)·휴무일 수(영업일인데 근무 0)·예정 예약 건수 — 요청 기간(주) 기준. 월간은 기간을 넘겨 부르면 된다(최대 62일).
+
+## 아직 안 한 것 (의도적으로)
+
+- 자정 넘기는 근무 패턴 (DB CHECK `start_time < end_time`) — 심야 영업 사업장이 생기면 CHECK 완화 + resolve 는 이미 익일 해석을 지원
+- 월간 캘린더 뷰 · 모바일 리스트 뷰 (지금은 주간 표 + 가로 스크롤). "이번 달 근무일 수" 는 API 로 62일까지 조회 가능
+- 휴무 등록 시 "일괄 취소 + 고객 알림" (예약 콘솔·알림 에픽), 매니저 BLOCK 의 OWNER 알림 (알림 에픽)
+- 휴무 규칙 수정 (지금은 삭제 후 재등록), 공휴일 자동 등록
