@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { db, type Db } from "@/db/client";
+import { db, type DbLike } from "@/db/client";
 import { auditLogs, type auditActionEnum } from "@/db/schema";
 import type { RequestMeta } from "@/lib/request-meta";
 
@@ -22,7 +22,7 @@ export type AuditEntry = {
  * 감사 로그 적재 (FR-ADM-040 · FR-PRIV-010). 실패해도 본 작업을 되돌리지 않는다 — 로그 적재 실패로
  * 로그인이나 예약이 막히면 안 된다. 대신 Sentry 로 보낸다(호출자가 트랜잭션 안에서 부르면 같은 tx 를 쓴다).
  */
-export async function writeAudit(entry: AuditEntry, tx: Db = db): Promise<void> {
+export async function writeAudit(entry: AuditEntry, tx: DbLike = db): Promise<void> {
   try {
     await tx.insert(auditLogs).values({
       action: entry.action,

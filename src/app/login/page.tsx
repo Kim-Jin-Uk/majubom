@@ -17,7 +17,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   if (s?.user.id) redirect(next);
   return (
     <AuthShell>
-      <LoginForm providers={enabledSocialProviders()} next={next} error={first(sp.error)} code={first(sp.code)} reason={first(sp.reason)} verified={first(sp.verified)} />
+      <LoginForm providers={enabledSocialProviders()} next={next} error={first(sp.error)} code={first(sp.code)} reason={first(sp.reason)} verified={first(sp.verified)} notice={first(sp.reset) === "ok" ? "reset" : first(sp.invited) === "ok" ? "invited" : null} />
     </AuthShell>
   );
 }

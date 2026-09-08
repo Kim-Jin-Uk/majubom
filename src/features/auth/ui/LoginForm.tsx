@@ -26,7 +26,7 @@ const REASON_TEXT: Record<string, string> = {
   BUSINESS_BLOCKED: "사업장이 차단되어 콘솔에 접근할 수 없습니다",
 };
 
-export function LoginForm({ providers, next, error, code, reason, verified }: { providers: Array<"kakao" | "google">; next: string; error?: string; code?: string; reason?: string; verified?: string }) {
+export function LoginForm({ providers, next, error, code, reason, verified, notice }: { providers: Array<"kakao" | "google">; next: string; error?: string; code?: string; reason?: string; verified?: string; notice?: "reset" | "invited" | null }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -49,6 +49,8 @@ export function LoginForm({ providers, next, error, code, reason, verified }: { 
     <>
       <h1>로그인</h1>
       <p className="sub">예약·상담·리뷰는 로그인 후 이용할 수 있어요.</p>
+      {notice === "reset" && <Alert kind="ok">비밀번호를 바꿨습니다. 모든 기기에서 로그아웃되었으니 새 비밀번호로 로그인해 주세요.</Alert>}
+      {notice === "invited" && <Alert kind="ok">초대를 수락했습니다. 기존 비밀번호로 로그인하면 콘솔이 열립니다.</Alert>}
       {verified === "ok" && <Alert kind="ok">이메일 확인이 끝났습니다. 로그인해 주세요.</Alert>}
       {verified && verified !== "ok" && <Alert kind="warn">이메일 확인 링크가 {verified === "used" ? "이미 사용되었습니다" : verified === "expired" ? "만료되었습니다" : "올바르지 않습니다"}. 로그인 후 다시 요청할 수 있어요.</Alert>}
       {msg && <Alert kind="error">{msg}</Alert>}

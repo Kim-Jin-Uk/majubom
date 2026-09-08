@@ -21,3 +21,7 @@ if (process.env.NODE_ENV !== "production") globalForDb.pool = pool;
 
 export const db = drizzle(pool, { schema });
 export type Db = typeof db;
+/** 트랜잭션 콜백이 받는 핸들 */
+export type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
+/** "db 또는 트랜잭션" — 서비스 함수가 어느 쪽에서도 돌 수 있게 하는 매개변수 타입 */
+export type DbLike = Db | Tx;

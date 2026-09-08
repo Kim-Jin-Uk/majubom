@@ -1,5 +1,5 @@
 import { and, eq, gt, isNull, lt, sql } from "drizzle-orm";
-import { db } from "@/db/client";
+import { db, type DbLike } from "@/db/client";
 import { authTokens, businessMembers, businessSlugHistory, businesses, sessions, users } from "@/db/schema";
 import { DEFAULT_POLICY, temporarySlug, type BusinessCategory } from "@/features/business/policy-defaults";
 import { absoluteUrl } from "@/lib/api";
@@ -190,7 +190,7 @@ export async function verifyBusinessEmail(email: string, code: string): Promise<
  * 사업장과 그에 딸린 것(소유자 계정 포함)을 지운다 — 미검증 신청 정리·재신청 전용. FK 에 CASCADE 가 없으니 순서대로.
  * 검증된(emailVerifiedAt 있는) 사업장은 지우지 않는다 — 그건 삭제가 아니라 상태 전이(FR-ADM-020)다.
  */
-export async function purgeBusiness(businessId: string, tx: Parameters<Parameters<typeof db.transaction>[0]>[0] | typeof db = db): Promise<void> {
+export async function purgeBusiness(businessId: string, tx: DbLike = db): Promise<void> {
   const members = await tx.select({ userId: businessMembers.userId }).from(businessMembers).where(eq(businessMembers.businessId, businessId));
   const userIds = members.map((m) => m.userId);
   const [walkin] = await tx.select({ id: users.id }).from(users).where(eq(users.email, walkinEmail(businessId))).limit(1);

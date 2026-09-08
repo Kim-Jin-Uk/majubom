@@ -49,6 +49,14 @@ export async function requireOwner(opts: { businessId?: string } = {}): Promise<
   return v;
 }
 
+/**
+ * SUSPENDED 사업장은 읽기 전용 (FR-ADM-020). 프록시가 `x-majubom-readonly: 1` 로 알려준다.
+ * 예외(예약 취소·고객 상담)는 해당 라우트가 이 검사를 부르지 않는 것으로 표현한다.
+ */
+export function assertWritable(req: Request): void {
+  if (req.headers.get("x-majubom-readonly") === "1") throw new HttpError(403, "READ_ONLY", { reason: "BUSINESS_SUSPENDED" });
+}
+
 /** ADMIN + TOTP 통과. 프록시가 /admin·/api/admin 에서 이미 막지만, 다른 경로에서 쓰는 관리자 액션을 위해 여기서도 검사 */
 export async function requireAdmin(): Promise<Viewer> {
   const v = await requireUser();
