@@ -11,6 +11,14 @@ export async function apiPost<T = Record<string, unknown>>(url: string, body: un
   return apiCall<T>(url, { method: "POST", body: JSON.stringify(body) });
 }
 
+export async function apiPut<T = Record<string, unknown>>(url: string, body: unknown): Promise<ApiResult<T>> {
+  return apiCall<T>(url, { method: "PUT", body: JSON.stringify(body) });
+}
+
+export async function apiPatch<T = Record<string, unknown>>(url: string, body: unknown): Promise<ApiResult<T>> {
+  return apiCall<T>(url, { method: "PATCH", body: JSON.stringify(body) });
+}
+
 export async function apiDelete<T = Record<string, unknown>>(url: string): Promise<ApiResult<T>> {
   return apiCall<T>(url, { method: "DELETE" });
 }
@@ -62,6 +70,12 @@ export function describeError(r: { error: string; message?: string; retryAfterSe
       return `요청이 너무 많습니다. ${r.retryAfterSec ? `${r.retryAfterSec}초 후` : "잠시 후"} 다시 시도해 주세요`;
     case "UNAUTHENTICATED":
       return "로그인이 필요합니다";
+    case "READ_ONLY":
+      return "사업장이 일시정지 상태라 변경할 수 없습니다";
+    case "OWNER_ONLY":
+      return "사업자 계정만 할 수 있는 작업입니다";
+    case "NOT_FOUND":
+      return "대상을 찾을 수 없습니다. 새로 고친 뒤 다시 확인해 주세요";
     case "CSRF":
       return "요청 출처를 확인할 수 없습니다. 페이지를 새로 고친 뒤 다시 시도해 주세요";
     case "NETWORK":
