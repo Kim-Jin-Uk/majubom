@@ -52,6 +52,11 @@ jobs:
           node-version: 22
           cache: npm
 
+      # Node 22 내장 npm(10.9) 은 vitest ≥4.1 의 lockfile 을 처리하지 못한다
+      # ("Cannot read properties of null (reading 'edgesOut')" / 락파일 out-of-sync 오판). npm 11 로 올린다.
+      # package.json engines.npm 과 맞출 것 — App Hosting 빌드팩도 engines.npm 을 읽는다.
+      - run: npm install -g npm@11
+
       - run: npm ci
 
       - name: Typecheck
@@ -83,6 +88,8 @@ jobs:
         with:
           node-version: 22
           cache: npm
+
+      - run: npm install -g npm@11 # ci.yml verify 잡 주석 참고 (npm 10.9 + vitest 4.1 lockfile 비호환)
 
       - run: npm ci
 

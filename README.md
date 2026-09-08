@@ -28,6 +28,8 @@ npm run dev
 
 로컬 Postgres는 16 이상. `CREATE EXTENSION btree_gist` 권한이 있는 역할이어야 한다 (첫 마이그레이션이 확장을 만든다).
 
+**Node 22 + npm 11** (`npm install -g npm@11`). Node 22 내장 npm 10.9 는 vitest 4.1 의 lockfile 을 처리하지 못해 `npm ci` 가 `edgesOut` 오류나 "lock file out of sync" 로 실패한다. `engines.npm` 에 명시돼 있고 CI·App Hosting 빌드도 같은 버전을 쓴다.
+
 | 명령 | 하는 일 |
 |---|---|
 | `npm run verify` | typecheck + lint + test — **push 전에 한 번** |

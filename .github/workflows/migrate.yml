@@ -49,6 +49,8 @@ jobs:
           node-version: 22
           cache: npm
 
+      - run: npm install -g npm@11 # ci.yml verify 잡 주석 참고 (npm 10.9 + vitest 4.1 lockfile 비호환)
+
       - run: npm ci
 
       # lock_timeout 3s · statement_timeout 60s · 락 실패 시 최대 5회 지수 백오프 (scripts/db/migrate.ts)
