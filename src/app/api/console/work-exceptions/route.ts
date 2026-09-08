@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { isoDateSchema } from "@/lib/dates";
 import { assertSameOrigin } from "@/features/auth/csrf";
 import { assertWritable, handle, HttpError, requireConsole } from "@/features/auth/guards";
 import { createException, exceptionInputSchema, listExceptions } from "@/features/schedule/work-exceptions";
 import { readJson } from "@/lib/api";
 
-const dateQ = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const dateQ = isoDateSchema;
 
 /**
  * GET /api/console/work-exceptions?from&to — 기간의 근무 예외 (소속 멤버; 사유는 본인·OWNER 만)

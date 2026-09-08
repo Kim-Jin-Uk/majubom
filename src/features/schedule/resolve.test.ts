@@ -36,7 +36,7 @@ describe("holidayApplies (FR-SCH-010 유형)", () => {
     expect(holidayApplies(last, "2026-02-27")).toBe(false);
     const d15: Holiday = { resourceId: null, type: "MONTHLY_DAY", startDate: "2026-01-01", dayOfMonth: 15, isFullDay: true };
     expect(holidayApplies(d15, "2026-10-15")).toBe(true);
-    const yearly: Holiday = { resourceId: null, type: "YEARLY", startDate: "2020-01-01", month: 1, isFullDay: true };
+    const yearly: Holiday = { resourceId: null, type: "YEARLY", startDate: "2020-01-01", isFullDay: true };
     expect(holidayApplies(yearly, "2027-01-01")).toBe(true);
     expect(holidayApplies(yearly, "2027-01-02")).toBe(false);
   });
@@ -71,6 +71,14 @@ describe("resolveWorkDay 우선순위 (FR-SCH-020)", () => {
     const r = resolveWorkDay({ ...base, exceptions: [off, extra], date: THU });
     expect(fmt(r.work)).toEqual(["15:00-17:00"]);
     expect(r.source).toBe("EXTRA");
+  });
+  it("5 OFF 는 6 MODIFIED 보다 위 — 같은 날이면 휴무 (EXTRA 만 살아남는다)", () => {
+    const off: WorkException = { resourceId: R, date: THU, kind: "OFF" };
+    const mod: WorkException = { resourceId: R, date: THU, kind: "MODIFIED", startTime: "12:00", endTime: "18:00" };
+    expect(resolveWorkDay({ ...base, exceptions: [mod, off], date: THU }).work).toEqual([]);
+    const extra: WorkException = { resourceId: R, date: THU, kind: "EXTRA", startTime: "16:00", endTime: "17:00" };
+    const block: WorkException = { resourceId: R, date: THU, kind: "BLOCK", startTime: "16:30", endTime: "16:45" };
+    expect(fmt(resolveWorkDay({ ...base, exceptions: [mod, off, extra, block], date: THU }).work)).toEqual(["16:00-16:30", "16:45-17:00"]);
   });
   it("6 MODIFIED 는 패턴을 대체, 3 BLOCK 은 구간을 깎는다", () => {
     const mod: WorkException = { resourceId: R, date: THU, kind: "MODIFIED", startTime: "12:00", endTime: "18:00" };

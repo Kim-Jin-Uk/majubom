@@ -35,7 +35,7 @@ export function describeHoliday(h: HolidayItem): string {
 type Draft = { resourceId: string; type: keyof typeof TYPE_TEXT; startDate: string; endDate: string; dayOfWeek: string; dayOfMonth: string; isLastDayOfMonth: boolean; isFullDay: boolean; startTime: string; endTime: string; repeatUntil: string; memo: string };
 
 /** 휴무일 관리 (FR-SCH-010, #38). 목록 + 등록. 미래 예약 충돌 시 목록을 보이고 "예약은 두고 등록" 만 제공 — 일괄 취소는 예약 콘솔에서 */
-export function HolidaysPanel({ initial, resources, today, readOnly }: { initial: HolidayItem[]; resources: ResourceItem[]; today: string; readOnly: boolean }) {
+export function HolidaysPanel({ initial, resources, today, readOnly, timezone }: { initial: HolidayItem[]; resources: ResourceItem[]; today: string; readOnly: boolean; timezone: string }) {
   const router = useRouter();
   const [items, setItems] = useState(initial);
   const [seen, setSeen] = useState(initial);
@@ -140,12 +140,12 @@ export function HolidaysPanel({ initial, resources, today, readOnly }: { initial
               <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
                 {conflicts.slice(0, 10).map((c) => (
                   <li key={c.id}>
-                    {new Date(c.startAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })} · {c.resourceName} · {c.customerName ?? "고객"} · {c.code}
+                    {new Date(c.startAt).toLocaleString("ko-KR", { timeZone: timezone, month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })} · {c.resourceName} · {c.customerName ?? "고객"} · {c.code}
                   </li>
                 ))}
                 {conflicts.length > 10 && <li>… 외 {conflicts.length - 10}건</li>}
               </ul>
-              <div style={{ marginTop: 6 }}>예약을 두고 등록하면 그 예약들은 그대로 진행돼요. 일괄 취소·고객 안내는 예약 콘솔에서 하세요.</div>
+              <div style={{ marginTop: 6 }}>예약을 두고 등록하면 그 예약들은 그대로 진행돼요. 일괄 취소·고객 안내는 다음 단계(예약 콘솔)에서 할 수 있어요.</div>
             </Alert>
           )}
           <div className="radio-cards" style={{ gridTemplateColumns: "repeat(4, minmax(0, 1fr))" }}>

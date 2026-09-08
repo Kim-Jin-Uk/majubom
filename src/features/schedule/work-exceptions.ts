@@ -1,5 +1,6 @@
 import { and, asc, eq, gte, lte } from "drizzle-orm";
 import { z } from "zod";
+import { isoDateSchema as dateSchema } from "@/lib/dates";
 import { db, type DbLike } from "@/db/client";
 import { businesses, resources, workExceptions } from "@/db/schema";
 import type { WorkException } from "@/features/booking/slot-types";
@@ -18,7 +19,6 @@ import { schedulesForRange } from "./work-schedules";
  * 매니저는 본인 계정이 연결된 STAFF 자원에만, kind 는 BLOCK 만 (그날 휴무·시간 변경은 교대 에픽에서 요청 흐름으로).
  * reason 은 본인과 OWNER 만 본다 (FR-SCH-030) — 조회 함수가 가린다.
  */
-const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD");
 
 export const exceptionInputSchema = z
   .object({
@@ -55,7 +55,7 @@ export async function listExceptions(businessId: string, from: string, to: strin
     .select()
     .from(workExceptions)
     .where(and(eq(workExceptions.businessId, businessId), gte(workExceptions.date, from), lte(workExceptions.date, to)))
-    .orderBy(asc(workExceptions.date));
+    .orderBy(asc(workExceptions.date), asc(workExceptions.createdAt));
   return rows.map((r) => ({
     id: r.id,
     resourceId: r.resourceId,
@@ -70,19 +70,6 @@ export async function listExceptions(businessId: string, from: string, to: strin
   }));
 }
 
-/** 이 예외로 사라지는 근무 구간 — 그 구간의 예약이 충돌이다 */
-function removedIntervals(kind: ExceptionInput["kind"], work: Interval[], s: string | null | undefined, e: string | null | undefined): Interval[] {
-  switch (kind) {
-    case "OFF":
-      return work;
-    case "BLOCK":
-      return s && e ? [span(s, e)] : [];
-    case "MODIFIED":
-      return s && e ? subtract(work, [span(s, e)]) : work;
-    case "EXTRA":
-      return [];
-  }
-}
 
 export async function createException(businessId: string, input: ExceptionInput, actor: Actor): Promise<{ id: string; conflicts: ConflictingReservation[] }> {
   return db.transaction(async (tx) => {
@@ -96,10 +83,17 @@ export async function createException(businessId: string, input: ExceptionInput,
     const [b] = await tx.select({ openingHours: businesses.openingHours, tz: businesses.timezone }).from(businesses).where(eq(businesses.id, businessId)).limit(1);
     if (!b) throw new HttpError(404, "NOT_FOUND");
 
-    // 그날 현재 근무 구간 → 이 예외로 사라지는 구간 → 그 구간의 예약
+    // 그날 근무 구간을 "예외 전" 과 "예외 후" 로 두 번 계산해 차이(사라지는 구간)를 구한다 — 기존 EXTRA 등 살아남는 구간을 잘못 충돌로 잡지 않는다
     const [schedules, exceptions, hols] = await Promise.all([schedulesForRange(businessId, input.date, input.date, tx), listExceptions(businessId, input.date, input.date, { ...actor, role: "OWNER" }, tx), holidaysForRange(businessId, input.date, input.date, tx)]);
-    const day = resolveWorkDay({ date: input.date, resourceId: input.resourceId, openingHours: b.openingHours, schedules, exceptions, holidays: hols });
-    const removed = removedIntervals(input.kind, day.work, input.startTime, input.endTime);
+    const same = exceptions.filter((e) => e.resourceId === input.resourceId && e.date === input.date);
+    // 같은 날 OFF·MODIFIED 는 하나만 — 둘이면 어느 것이 적용되는지 정의되지 않는다. 바꾸려면 지우고 다시 등록
+    if ((input.kind === "OFF" || input.kind === "MODIFIED") && same.some((e) => e.kind === input.kind)) throw new HttpError(409, "EXCEPTION_EXISTS", { kind: input.kind });
+    const ctxBase = { date: input.date, resourceId: input.resourceId, openingHours: b.openingHours, schedules, holidays: hols };
+    const before = resolveWorkDay({ ...ctxBase, exceptions }).work;
+    const candidate: WorkException = { resourceId: input.resourceId, date: input.date, kind: input.kind, startTime: input.kind === "OFF" ? null : input.startTime, endTime: input.kind === "OFF" ? null : input.endTime };
+    const after = resolveWorkDay({ ...ctxBase, exceptions: [...exceptions, candidate] }).work;
+    // BLOCK 은 명세(FR-SCH-040) 그대로 "그 구간에 예약이 있으면" — 근무 여부와 무관하게 구간 자체를 본다. 나머지는 사라지는 근무 구간
+    const removed: Interval[] = input.kind === "BLOCK" ? [span(input.startTime!, input.endTime!)] : subtract(before, after);
     let conflicts: ConflictingReservation[] = [];
     for (const cut of removed) conflicts.push(...(await reservationsOnDates(businessId, [input.date], { resourceId: input.resourceId, cut, tz: b.tz }, tx)));
     conflicts = [...new Map(conflicts.map((c) => [c.id, c])).values()];

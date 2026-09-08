@@ -20,5 +20,6 @@ export const PUT = handle(async (req, ctx) => {
   const v = await requireOwner();
   const rid = uuidParam((await ctx.params).resourceId);
   const body = await readJson(req, patternInputSchema);
-  return NextResponse.json({ ok: true, ...(await setPattern(v.membership.businessId, [rid], body)) });
+  const { settings } = await loadConsoleBusiness(v.membership.businessId);
+  return NextResponse.json({ ok: true, ...(await setPattern(v.membership.businessId, [rid], body, todayIn(settings.timezone))) });
 });

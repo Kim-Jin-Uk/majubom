@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { isoDateSchema } from "@/lib/dates";
 import { handle, HttpError, requireConsole } from "@/features/auth/guards";
 import { getScheduleGrid } from "@/features/schedule/calendar";
 
-const dateQ = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const dateQ = isoDateSchema;
 
 /** GET /api/console/schedule?from&to[&resourceId=…] — 자원 × 날짜 근무 그리드 + 요약 (FR-SCH-030). 최대 62일 */
 export const GET = handle(async (req) => {

@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, gte, inArray, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
+import { isoDateSchema as dateSchema } from "@/lib/dates";
 import { db, type DbLike } from "@/db/client";
 import { businesses, resources, workSchedules, type BreakRange } from "@/db/schema";
 import type { WorkSchedule } from "@/features/booking/slot-types";
@@ -12,10 +13,9 @@ import { addDays, span, subtract } from "./resolve";
  *
  * 패턴은 "덮어쓰기" 가 아니라 **버전**이다: 새 패턴을 effectiveFrom 부터 적용하면 그 자원·요일의 열린 행(effectiveTo NULL 또는 ≥ from)은
  * effectiveTo = from − 1일 로 닫고(이력 보존), from 이후에 시작하는 행은 지운다(뒤집힌 기간이 생기니까). 그런 다음 새 행을 넣는다.
- * DB 의 EXCLUDE 제약(work_schedule_no_overlap)이 같은 자원·요일의 기간 겹침을 막는다 — 위 순서를 지키면 걸리지 않고, 걸리면 23P01 → 409.
+ * DB 의 EXCLUDE 제약(work_schedule_no_overlap)이 같은 자원·요일의 기간 겹침을 막는다 — 위 순서를 지키고 자원 행을 잠가 직렬화하면 걸리지 않고, 걸리면 23P01 → 409 (handle).
  * 요일 하나의 근무는 한 구간(시작<끝, 익일 불가 — DB CHECK) + 휴게 최대 2구간. 영업시간 밖 근무는 저장하되 warnings 로 알린다.
  */
-const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD");
 
 export const patternDaySchema = z
   .object({
@@ -107,13 +107,17 @@ export type PatternWarning = { resourceId: string; dow: number; reason: "OUTSIDE
  * 패턴 적용. resourceIds 여러 개면 같은 패턴을 일괄 적용(FR-SCH-020 "일괄 편집"). STAFF 자원만.
  * 이전 패턴은 effectiveTo 를 먼저 닫는다 — EXCLUDE 제약이 겹침을 막고 있어서 순서가 중요하다.
  */
-export async function setPattern(businessId: string, resourceIds: string[], input: PatternInput): Promise<{ warnings: PatternWarning[] }> {
+export async function setPattern(businessId: string, resourceIds: string[], input: PatternInput, today: string): Promise<{ warnings: PatternWarning[]; replacedUpcoming: number }> {
+  // 과거 날짜부터 적용하면 이미 지난 날을 다스린 버전이 지워진다(이력 훼손) — 오늘 이후만
+  if (input.effectiveFrom < today) throw new HttpError(400, "INVALID_BODY", { issues: [{ path: ["effectiveFrom"], message: "적용 시작일은 오늘 이후여야 합니다" }] });
   return db.transaction(async (tx) => {
     const ids = [...new Set(resourceIds)];
+    // 자원 행을 잠근다 — 같은 담당자의 동시 저장이 EXCLUDE 제약에 걸려 500 이 되지 않도록 직렬화
     const rs = await tx
       .select({ id: resources.id, type: resources.type })
       .from(resources)
-      .where(and(eq(resources.businessId, businessId), inArray(resources.id, ids)));
+      .where(and(eq(resources.businessId, businessId), inArray(resources.id, ids)))
+      .for("update");
     if (rs.length !== ids.length) throw new HttpError(404, "NOT_FOUND");
     if (rs.some((r) => r.type !== "STAFF")) throw new HttpError(400, "INVALID_BODY", { issues: [{ path: ["resourceIds"], message: "근무표는 담당자(STAFF) 자원에만 있습니다. 공간·공용 자원은 영업시간을 따릅니다" }] });
     const [b] = await tx.select({ openingHours: businesses.openingHours }).from(businesses).where(eq(businesses.id, businessId)).limit(1);
@@ -122,9 +126,11 @@ export async function setPattern(businessId: string, resourceIds: string[], inpu
     const from = input.effectiveFrom;
     const dayBefore = addDays(from, -1);
     const warnings: PatternWarning[] = [];
+    let replacedUpcoming = 0;
     for (const rid of ids) {
-      // 1) from 이후에 시작하는 행은 지운다 (닫으면 from-1 < effectiveFrom 인 뒤집힌 기간이 된다)
-      await tx.delete(workSchedules).where(and(eq(workSchedules.resourceId, rid), eq(workSchedules.businessId, businessId), gte(workSchedules.effectiveFrom, from)));
+      // 1) from 이후에 시작하는(예정) 행은 지운다 (닫으면 from-1 < effectiveFrom 인 뒤집힌 기간이 된다). 몇 개였는지 알려준다
+      const gone = await tx.delete(workSchedules).where(and(eq(workSchedules.resourceId, rid), eq(workSchedules.businessId, businessId), gte(workSchedules.effectiveFrom, from))).returning({ id: workSchedules.id });
+      replacedUpcoming += gone.length;
       // 2) 열린 행(NULL 또는 from 이후까지)은 from-1 로 닫는다 — 이력 보존
       await tx
         .update(workSchedules)
@@ -142,6 +148,6 @@ export async function setPattern(businessId: string, resourceIds: string[], inpu
         else if (subtract([span(d.startTime, d.endTime)], [span(o.open, o.close)]).length > 0) warnings.push({ resourceId: rid, dow: d.dow, reason: "OUTSIDE_OPENING" });
       }
     }
-    return { warnings };
+    return { warnings, replacedUpcoming };
   });
 }

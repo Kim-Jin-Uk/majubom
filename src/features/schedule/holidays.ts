@@ -1,5 +1,6 @@
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
+import { isoDateSchema as dateSchema } from "@/lib/dates";
 import { db, type DbLike } from "@/db/client";
 import { businesses, holidays, reservations, resources, users } from "@/db/schema";
 import type { Holiday } from "@/features/booking/slot-types";
@@ -13,9 +14,8 @@ import { addDays, holidayApplies, span, type Interval } from "./resolve";
  * 미래 확정·대기 예약이 있는 날에 등록하면 그 예약 목록을 돌려주고(409 HOLIDAY_CONFLICT) 확인을 받는다.
  * 명세의 두 선택지 중 "예약 유지(휴무일이지만 예약은 진행)" 는 keepReservations 로 지금 된다. "일괄 취소 + 고객 알림" 은 예약 콘솔 에픽에서
  * 예약 취소·알림이 생기면 붙인다(HOLIDAY_BULK_CANCEL 감사 action 은 이미 있다) — 여기서 조용히 취소하지 않는다.
- * 반복 휴무의 충돌 검사는 앞으로 90일치 발생일만 본다 (그 너머 예약은 maxAdvanceDays 상 있을 수 없다).
+ * 반복 휴무의 충돌 검사는 앞으로 365일치 발생일을 본다 (maxAdvanceDays 상한이 365 이고, 콘솔 대리 예약은 그 제한도 받지 않는다).
  */
-const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD");
 
 export const holidayInputSchema = z
   .object({
@@ -77,11 +77,10 @@ export async function listHolidays(businessId: string, q: DbLike = db): Promise<
 }
 
 /** 오늘부터 앞으로 days 일 안에서 이 휴무가 적용되는 날짜들 */
-export function upcomingOccurrences(h: Holiday, today: string, days = 90): string[] {
+export function upcomingOccurrences(h: Holiday, today: string, days = 365): string[] {
   const from = h.type === "ONCE" ? (h.startDate > today ? h.startDate : today) : today;
   const to = h.type === "ONCE" ? (h.endDate ?? h.startDate) : addDays(today, days);
   if (to < from) return [];
-  // dateRange 는 62일 상한 — 두 번에 나눠 본다
   const out: string[] = [];
   for (let d = from; d <= to && out.length < 400; d = addDays(d, 1)) if (holidayApplies(h, d)) out.push(d);
   return out;
@@ -93,6 +92,7 @@ export type ConflictingReservation = { id: string; code: string; startAt: Date; 
 export async function reservationsOnDates(businessId: string, dates: string[], opts: { resourceId: string | null; cut: Interval | null; tz: string }, q: DbLike = db): Promise<ConflictingReservation[]> {
   if (dates.length === 0) return [];
   const localDate = sql<string>`(${reservations.startAt} at time zone ${opts.tz})::date::text`;
+  const localEndDate = sql<string>`(${reservations.endAt} at time zone ${opts.tz})::date::text`;
   const localMin = sql<number>`(extract(hour from (${reservations.startAt} at time zone ${opts.tz})) * 60 + extract(minute from (${reservations.startAt} at time zone ${opts.tz})))::int`;
   const localEndMin = sql<number>`(extract(hour from (${reservations.endAt} at time zone ${opts.tz})) * 60 + extract(minute from (${reservations.endAt} at time zone ${opts.tz})))::int`;
   const rows = await q
@@ -104,7 +104,8 @@ export async function reservationsOnDates(businessId: string, dates: string[], o
       and(
         eq(reservations.businessId, businessId),
         inArray(reservations.status, ["REQUESTED", "CONFIRMED"]),
-        inArray(localDate, dates),
+        // 전날 저녁에 시작해 자정을 넘겨 그 날짜에 끝나는 예약도 그 날짜의 충돌이다
+        or(inArray(localDate, dates), inArray(localEndDate, dates)),
         opts.resourceId ? eq(reservations.resourceId, opts.resourceId) : undefined,
       ),
     )

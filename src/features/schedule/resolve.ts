@@ -126,9 +126,9 @@ export function holidayApplies(h: Holiday, date: ISODate): boolean {
     case "MONTHLY_DAY":
       return h.isLastDayOfMonth ? d.getUTCDate() === lastDayOfMonth(date) : d.getUTCDate() === h.dayOfMonth;
     case "YEARLY": {
+      // 월·일은 startDate 에서 — `month` 컬럼은 저장만 하고 판정엔 쓰지 않는다 (1/31 + month=2 처럼 없는 날짜가 생긴다). 2/29 는 윤년에만
       const s = parseDate(h.startDate);
-      const month = h.month ?? s.getUTCMonth() + 1;
-      return d.getUTCMonth() + 1 === month && d.getUTCDate() === s.getUTCDate();
+      return d.getUTCMonth() === s.getUTCMonth() && d.getUTCDate() === s.getUTCDate();
     }
   }
 }
@@ -166,12 +166,13 @@ export function resolveWorkDay(input: ResolveInput): ResolvedDay {
   let source: DaySource;
   const modified = exs.find((e) => e.kind === "MODIFIED");
   const off = exs.some((e) => e.kind === "OFF");
-  if (modified && modified.startTime && modified.endTime) {
-    base = [span(modified.startTime, modified.endTime)];
-    source = "MODIFIED";
-  } else if (off) {
+  // 5 OFF 가 6 MODIFIED 보다 위 — 둘이 같은 날이면 그날은 휴무다
+  if (off) {
     base = [];
     source = "OFF";
+  } else if (modified && modified.startTime && modified.endTime) {
+    base = [span(modified.startTime, modified.endTime)];
+    source = "MODIFIED";
   } else {
     const s = scheduleFor(resourceId, date, dow, input.schedules);
     base = s ? subtract([span(s.startTime, s.endTime)], (s.breaks ?? []).map((b: TimeRange) => span(b.start, b.end))) : [];
@@ -201,6 +202,13 @@ export function resolveWorkDay(input: ResolveInput): ResolvedDay {
     exceptions: exs,
     closed: !opening || bizFullHoliday,
   };
+}
+
+/** "2026-02-30" 같은 형식만 맞는 날짜를 거른다 — 그대로 두면 Invalid Date → 500 */
+export function isValidISODate(d: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
+  const x = parseDate(d);
+  return !Number.isNaN(x.getTime()) && fmtDate(x) === d;
 }
 
 /** 날짜 범위 [from, to] 의 ISODate 목록 (양끝 포함, 최대 62일) */

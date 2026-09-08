@@ -18,7 +18,7 @@ export default async function HolidaysPage() {
     <ConsoleShell current="schedule" viewer={{ name: v.name, role: v.membership.role }}>
       <h1>휴무일</h1>
       <p className="sub" style={{ margin: 0 }}>휴무일은 근무표보다 항상 우선해요 — 근무로 편성돼 있어도 휴무면 예약이 막힙니다. 사업장 전체 또는 특정 담당자·공간에만 둘 수 있어요.</p>
-      <HolidaysPanel initial={items} resources={resources} today={todayIn(settings.timezone)} readOnly={v.readOnly} />
+      <HolidaysPanel initial={items} resources={resources} today={todayIn(settings.timezone)} readOnly={v.readOnly} timezone={settings.timezone} />
     </ConsoleShell>
   );
 }

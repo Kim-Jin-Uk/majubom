@@ -32,20 +32,25 @@ type Draft = { kind: keyof typeof KIND_TEXT; startTime: string; endTime: string;
  * 근무표 그리드 (FR-SCH-030, #41). 자원 × 날짜. 셀을 누르면 예외 등록 (OWNER: 전 종류 · MANAGER: 본인 BLOCK).
  * 계산은 서버(getScheduleGrid)가 끝냈다 — 여기서는 그리기와 편집만.
  */
-export function ScheduleGrid({ grid, role, weekStart, today }: { grid: Grid; role: "OWNER" | "MANAGER"; weekStart: string; today: string }) {
+export function ScheduleGrid({ grid, role, weekStart, today, timezone, readOnly }: { grid: Grid; role: "OWNER" | "MANAGER"; weekStart: string; today: string; timezone: string; readOnly: boolean }) {
   const router = useRouter();
   const [editing, setEditing] = useState<{ resourceId: string; name: string; date: string; cell: DayCell } | null>(null);
-  const [draft, setDraft] = useState<Draft>({ kind: "BLOCK", startTime: "13:00", endTime: "14:00", reason: "" });
+  const [draft, setDraftRaw] = useState<Draft>({ kind: "BLOCK", startTime: "13:00", endTime: "14:00", reason: "" });
+  const [conflicts, setConflicts] = useState<ConflictingReservation[] | null>(null);
+  // 초안이 바뀌면 이전 충돌 확인은 무효 — 새 구간은 다시 검사받아야 한다
+  const setDraft = (u: Draft | ((d: Draft) => Draft)) => {
+    setDraftRaw(u);
+    setConflicts(null);
+  };
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState<{ kind: "ok" | "error" | "warn"; text: string } | null>(null);
-  const [conflicts, setConflicts] = useState<ConflictingReservation[] | null>(null);
   const [busy, setBusy] = useState(false);
   const isOwner = role === "OWNER";
 
   const rows = isOwner ? grid.rows : [...grid.rows].sort((a, b) => Number(b.mine) - Number(a.mine));
 
   function open(resourceId: string, name: string, cell: DayCell, mine: boolean) {
-    if (!isOwner && !mine) return;
+    if (readOnly || (!isOwner && !mine)) return;
     setEditing({ resourceId, name, date: cell.date, cell });
     const start = cell.work[0]?.start ?? "10:00";
     setDraft({ kind: "BLOCK", startTime: start, endTime: addHour(start), reason: "" });
@@ -53,6 +58,7 @@ export function ScheduleGrid({ grid, role, weekStart, today }: { grid: Grid; rol
     setConflicts(null);
     setMsg(null);
   }
+  const fmtWhen = (d: Date | string) => new Date(d).toLocaleString("ko-KR", { timeZone: timezone, month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
   function addHour(t: string) {
     const [h, m] = t.split(":").map(Number);
     return `${String(Math.min(23, h + 1)).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
@@ -174,11 +180,22 @@ export function ScheduleGrid({ grid, role, weekStart, today }: { grid: Grid; rol
                   </div>
                 </td>
                 {r.days.map((c) => {
-                  const canEdit = isOwner || r.mine;
+                  const canEdit = !readOnly && (isOwner || r.mine);
                   const cls = ["cell", c.source === "HOLIDAY_BUSINESS" || c.source === "HOLIDAY_RESOURCE" ? "hol" : "", c.workMinutes === 0 ? "off" : "", canEdit ? "editable" : ""].join(" ");
-                  return (
-                    <td key={c.date} className={cls} onClick={canEdit ? () => open(r.resourceId, r.name, c, r.mine) : undefined} role={canEdit ? "button" : undefined} tabIndex={canEdit ? 0 : undefined} onKeyDown={canEdit ? (e) => (e.key === "Enter" || e.key === " ") && open(r.resourceId, r.name, c, r.mine) : undefined} aria-label={`${r.name} ${fmtDate(c.date)}`}>
+                  const body = (
+                    <>
                       {c.work.length ? c.work.map((w) => <div key={w.start}>{w.start}–{w.end}</div>) : <span className="muted">{c.source === "HOLIDAY_BUSINESS" ? "휴무" : c.source === "HOLIDAY_RESOURCE" ? "개인 휴무" : c.source === "OFF" ? "OFF" : "—"}</span>}
+                    </>
+                  );
+                  return (
+                    <td key={c.date} className={cls}>
+                      {canEdit ? (
+                        <button type="button" className="cell-btn" onClick={() => open(r.resourceId, r.name, c, r.mine)} aria-label={`${r.name} ${fmtDate(c.date)} 예외 등록`}>
+                          {body}
+                        </button>
+                      ) : (
+                        body
+                      )}
                       <div className="badges">
                         {c.exceptions.map((e) => (
                           <span key={e.id} className={`badge k-${e.kind}`} title={e.reason ?? undefined}>
@@ -228,11 +245,11 @@ export function ScheduleGrid({ grid, role, weekStart, today }: { grid: Grid; rol
               <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
                 {conflicts.map((c) => (
                   <li key={c.id}>
-                    {new Date(c.startAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })} · {c.customerName ?? "고객"} · {c.code}
+                    {fmtWhen(c.startAt)} · {c.customerName ?? "고객"} · {c.code}
                   </li>
                 ))}
               </ul>
-              {isOwner && <div style={{ marginTop: 6 }}>그대로 등록하면 예약은 남아 있고, 그 시간엔 새 예약만 막혀요. 예약 이관·취소는 예약 콘솔에서 하세요.</div>}
+              {isOwner && <div style={{ marginTop: 6 }}>그대로 등록하면 예약은 남아 있고, 그 시간엔 새 예약만 막혀요. 예약 이관·취소는 다음 단계(예약 콘솔)에서 할 수 있어요.</div>}
             </Alert>
           )}
           <div className="radio-cards">

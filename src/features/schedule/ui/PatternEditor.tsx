@@ -49,7 +49,8 @@ export function PatternEditor({ staff, selected, view, today, readOnly }: { staf
     setMsg(null);
     const days = rows.flatMap((r, dow) => (r.enabled ? [{ dow, startTime: r.startTime, endTime: r.endTime, breaks: r.breaks.filter((b) => b.start && b.end) }] : []));
     const ids = [selected, ...also];
-    const r = ids.length > 1 ? await apiPut<{ warnings: Array<{ resourceId: string; dow: number; reason: string }> }>("/api/console/work-schedules/bulk", { resourceIds: ids, effectiveFrom: from, days }) : await apiPut<{ warnings: Array<{ resourceId: string; dow: number; reason: string }> }>(`/api/console/work-schedules/${selected}`, { effectiveFrom: from, days });
+    type Res = { warnings: Array<{ resourceId: string; dow: number; reason: string }>; replacedUpcoming: number };
+    const r = ids.length > 1 ? await apiPut<Res>("/api/console/work-schedules/bulk", { resourceIds: ids, effectiveFrom: from, days }) : await apiPut<Res>(`/api/console/work-schedules/${selected}`, { effectiveFrom: from, days });
     setBusy(false);
     if (!r.ok) {
       if (r.issues) {
@@ -61,9 +62,16 @@ export function PatternEditor({ staff, selected, view, today, readOnly }: { staf
       return;
     }
     const w = r.data.warnings ?? [];
+    const closedDays = [...new Set(w.filter((x) => x.reason === "CLOSED_DAY").map((x) => `${DOW[x.dow]}요일`))];
+    const outside = [...new Set(w.filter((x) => x.reason === "OUTSIDE_OPENING").map((x) => `${DOW[x.dow]}요일`))];
+    const notes = [
+      closedDays.length ? `영업하지 않는 요일에 근무: ${closedDays.join(", ")}` : "",
+      outside.length ? `영업시간 밖 근무: ${outside.join(", ")}` : "",
+      r.data.replacedUpcoming ? `예정돼 있던 패턴 ${r.data.replacedUpcoming}건은 이 패턴으로 대체됐어요` : "",
+    ].filter(Boolean);
     setMsg({
       kind: w.length ? "warn" : "ok",
-      text: `${from} 부터 적용되는 패턴을 저장했어요${ids.length > 1 ? ` (담당자 ${ids.length}명)` : ""}.${w.length ? ` 영업시간 밖 근무: ${[...new Set(w.map((x) => `${DOW[x.dow]}요일`))].join(", ")} — 저장은 됐지만 그 시간엔 예약이 열리지 않아요.` : ""}`,
+      text: `${from} 부터 적용되는 패턴을 저장했어요${ids.length > 1 ? ` (담당자 ${ids.length}명)` : ""}.${notes.length ? ` ${notes.join(". ")} — 저장은 됐지만 영업시간 밖에는 예약이 열리지 않아요.` : ""}`,
     });
     setAlso([]);
     router.refresh();
@@ -88,7 +96,7 @@ export function PatternEditor({ staff, selected, view, today, readOnly }: { staf
           {msg && <Alert kind={msg.kind}>{msg.text}</Alert>}
           <div className="grid-2">
             <Field label="적용 시작일" htmlFor="p-from" hint="이 날부터 새 패턴. 이전 패턴은 그 전날로 끝나고 이력에 남아요" error={errors.effectiveFrom}>
-              <Input id="p-from" type="date" required value={from} onChange={(e) => setFrom(e.target.value)} disabled={readOnly} />
+              <Input id="p-from" type="date" required min={today} value={from} onChange={(e) => setFrom(e.target.value)} disabled={readOnly} />
             </Field>
             {view && view.upcoming.length > 0 && (
               <Alert kind="warn">
