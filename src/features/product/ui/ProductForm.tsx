@@ -302,7 +302,7 @@ export function ProductForm({ businessId, resources, initial, mode, limited, rea
           <textarea id="p-desc" className="textarea" maxLength={1000} value={d.description} onChange={(e) => set("description", e.target.value)} disabled={readOnly} />
         </Field>
         <div className="field">
-          <label>사진 (최대 {MAX_IMAGES}장 · 장당 5MB · 첫 장이 대표)</label>
+          <span className="field-label">사진 (최대 {MAX_IMAGES}장 · 장당 5MB · 첫 장이 대표)</span>
           <div className="img-grid">
             {d.images.map((u, i) => (
               <div key={u + i} className="img">
@@ -389,27 +389,28 @@ export function ProductForm({ businessId, resources, initial, mode, limited, rea
               )}
             </Field>
             <div className="field" style={{ gridColumn: "1 / -1" }}>
-              <label>이용 시간 선택지 (선택) — 고객이 고릅니다</label>
-              <div className="chips">
+              <span className="field-label" id="lbl-options">이용 시간 선택지 (선택) — 고객이 고릅니다</span>
+              <div className="chips" role="group" aria-labelledby="lbl-options">
                 {d.durationOptions.map((n) => (
-                  <button key={n} type="button" className={Number(d.durationMin) === n ? "chip on default" : "chip on"} onClick={() => set("durationMin", String(n))} disabled={lockShape} title="클릭하면 기본값으로">
-                    {n >= 60 && n % 60 === 0 ? `${n / 60}시간` : `${n}분`}
+                  <span key={n} className={Number(d.durationMin) === n ? "chip on default" : "chip on"} style={{ paddingRight: lockShape ? undefined : 6 }}>
+                    <button type="button" className="chip-btn" onClick={() => set("durationMin", String(n))} disabled={lockShape} aria-pressed={Number(d.durationMin) === n} title="기본값으로">
+                      {n >= 60 && n % 60 === 0 ? `${n / 60}시간` : `${n}분`}
+                    </button>
                     {!lockShape && (
-                      <span
-                        className="x"
-                        role="button"
+                      <button
+                        type="button"
+                        className="chip-btn x"
                         aria-label={`${n}분 옵션 삭제`}
-                        onClick={(e) => {
-                          e.stopPropagation();
+                        onClick={() => {
                           const opts = d.durationOptions.filter((x) => x !== n);
                           set("durationOptions", opts);
                           if (opts.length && !opts.includes(Number(d.durationMin))) set("durationMin", String(opts[0]));
                         }}
                       >
                         ✕
-                      </span>
+                      </button>
                     )}
-                  </button>
+                  </span>
                 ))}
                 {!lockShape && d.durationOptions.length < 6 && (
                   <>
@@ -432,7 +433,7 @@ export function ProductForm({ businessId, resources, initial, mode, limited, rea
               </Field>
             </div>
             <div className="field">
-              <label>회차 시간표 — 요일별 시작 시각 (요일당 최대 {MAX_FIXED_TIMES_PER_DAY}개)</label>
+              <span className="field-label" id="lbl-fixed">회차 시간표 — 요일별 시작 시각 (요일당 최대 {MAX_FIXED_TIMES_PER_DAY}개)</span>
               <div className="hours">
                 {DOW.map((name, dow) => (
                   <div key={dow} className="hours-row">
@@ -442,7 +443,7 @@ export function ProductForm({ businessId, resources, initial, mode, limited, rea
                         <span key={t} className="chip on">
                           {t}
                           {!lockShape && (
-                            <button type="button" className="x" aria-label={`${name}요일 ${t} 회차 삭제`} style={{ background: "none", border: 0, cursor: "pointer", color: "inherit" }} onClick={() => set("fixed", { ...d.fixed, [dow]: (d.fixed[dow] ?? []).filter((x) => x !== t) })}>
+                            <button type="button" className="chip-btn x" aria-label={`${name}요일 ${t} 회차 삭제`} onClick={() => set("fixed", { ...d.fixed, [dow]: (d.fixed[dow] ?? []).filter((x) => x !== t) })}>
                               ✕
                             </button>
                           )}
@@ -501,14 +502,14 @@ export function ProductForm({ businessId, resources, initial, mode, limited, rea
         ) : (
           <div className="chips" role="group" aria-label="담당 자원">
             {active.map((r) => (
-              <label key={r.id} className={d.resourceIds.includes(r.id) ? "chip on" : "chip"} style={{ cursor: lockShape ? "default" : "pointer" }}>
-                <input type="checkbox" hidden checked={d.resourceIds.includes(r.id)} onChange={() => toggleResource(r.id)} disabled={lockShape} />
+              <label key={r.id} className={d.resourceIds.includes(r.id) ? "chip on" : "chip"} style={{ cursor: lockShape ? "default" : "pointer", opacity: r.isActive ? 1 : 0.6 }}>
+                <input type="checkbox" className="sr-only" checked={d.resourceIds.includes(r.id)} onChange={() => toggleResource(r.id)} disabled={lockShape} />
                 <span className="muted" style={{ fontSize: 11 }}>
                   {TYPE_TEXT[r.type]}
                 </span>
                 {r.name}
                 <span className="muted" style={{ fontSize: 11 }}>
-                  {r.capacity}명
+                  {r.capacity}명{r.isActive ? "" : " · 비활성"}
                 </span>
               </label>
             ))}
@@ -516,8 +517,8 @@ export function ProductForm({ businessId, resources, initial, mode, limited, rea
         )}
         {errors.resourceIds && <span className="err">{errors.resourceIds}</span>}
         <div className="field">
-          <label>고객이 자원을 고르는 방식</label>
-          <div className="radio-cards">
+          <span className="field-label" id="lbl-rsm">고객이 자원을 고르는 방식</span>
+          <div className="radio-cards" role="radiogroup" aria-labelledby="lbl-rsm">
             {SELECT_MODES.map(([k, label, hint]) => (
               <label key={k} className={d.resourceSelectMode === k ? "radio-card on" : "radio-card"}>
                 <input type="radio" name="rsm" checked={d.resourceSelectMode === k} onChange={() => set("resourceSelectMode", k)} disabled={lockShape} />

@@ -4,6 +4,7 @@ import { Alert } from "@/components/ui";
 import { listResources } from "@/features/business/resources";
 import { ConsoleShell } from "@/features/business/ui/ConsoleShell";
 import { consoleViewer } from "@/features/business/ui/console-viewer";
+import { HttpError } from "@/features/auth/errors";
 import { getProduct, isAssignedManager } from "@/features/product/products";
 import { ProductForm } from "@/features/product/ui/ProductForm";
 
@@ -18,7 +19,13 @@ export default async function EditProductPage({ params, searchParams }: { params
   if (!z.uuid().safeParse(id).success) notFound();
   const v = await consoleViewer(`/console/products/${id}`);
   const sp = await searchParams;
-  const [product, resources] = await Promise.all([getProduct(v.membership.businessId, id).catch(() => null), listResources(v.membership.businessId)]);
+  const [product, resources] = await Promise.all([
+    getProduct(v.membership.businessId, id).catch((e) => {
+      if (e instanceof HttpError && e.status === 404) return null;
+      throw e; // DB 장애 등은 404 로 가리지 않는다 — error.tsx 가 받는다
+    }),
+    listResources(v.membership.businessId),
+  ]);
   if (!product) notFound();
   const limited = !v.isOwner && Boolean(v.membership.permissions.editProduct) && (await isAssignedManager(id, v.membership.memberId));
   const readOnly = v.readOnly || (!v.isOwner && !limited) || product.status === "ARCHIVED";

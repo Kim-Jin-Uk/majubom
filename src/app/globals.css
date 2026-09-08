@@ -1126,3 +1126,31 @@ button {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
+
+.field .field-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-4);
+}
+.chip:focus-within {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.chip-btn {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.chip-btn:disabled {
+  cursor: default;
+}
+.chip-btn.x {
+  opacity: 0.6;
+  padding: 0 2px;
+}
+.chip-btn.x:hover {
+  opacity: 1;
+}

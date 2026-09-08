@@ -174,7 +174,8 @@ export function fixedTimeWarnings(days: FixedStartTime[], hours: OpeningHour[], 
 type Checked = { resourceRows: Array<{ id: string; type: "STAFF" | "SPACE" | "SHARED"; capacity: number; isActive: boolean }>; warnings: ProductWarning[]; fixed: FixedStartTime[] | null };
 
 /** 자원·영업시간에 기대는 검증. 실패는 400 INVALID_BODY + issues (폼이 필드에 붙인다) */
-async function checkAgainstBusiness(businessId: string, input: ProductInput, q: DbLike = db): Promise<Checked> {
+/** @param keepIds 이미 연결돼 있던 자원 — 비활성이어도 유지는 허용한다(해제만 막힘). 아니면 예약이 남은 비활성 자원 때문에 상품이 영영 수정 불가가 된다 */
+async function checkAgainstBusiness(businessId: string, input: ProductInput, q: DbLike = db, keepIds: string[] = []): Promise<Checked> {
   const issues: Array<{ path: (string | number)[]; message: string }> = [];
   const ids = [...new Set(input.resourceIds)];
   const resourceRows = await q
@@ -182,7 +183,7 @@ async function checkAgainstBusiness(businessId: string, input: ProductInput, q: 
     .from(resources)
     .where(and(eq(resources.businessId, businessId), inArray(resources.id, ids)));
   if (resourceRows.length !== ids.length) issues.push({ path: ["resourceIds"], message: "찾을 수 없는 자원이 있습니다. 새로 고친 뒤 다시 골라 주세요" });
-  if (resourceRows.some((r) => !r.isActive)) issues.push({ path: ["resourceIds"], message: "비활성 자원은 상품에 연결할 수 없습니다" });
+  if (resourceRows.some((r) => !r.isActive && !keepIds.includes(r.id))) issues.push({ path: ["resourceIds"], message: "비활성 자원은 새로 연결할 수 없습니다" });
   const types = new Set(resourceRows.map((r) => r.type));
   if (types.has("STAFF") && types.has("SHARED")) issues.push({ path: ["resourceIds"], message: "담당자(STAFF)와 공용(SHARED) 자원은 한 상품에 섞을 수 없습니다" });
   const minCap = resourceRows.length ? Math.min(...resourceRows.map((r) => r.capacity)) : null;
@@ -248,7 +249,6 @@ export type UpdateResult = { ok: true; warnings: ProductWarning[]; affected: num
  */
 export async function updateProduct(businessId: string, productId: string, input: ProductInput): Promise<UpdateResult> {
   return db.transaction(async (tx) => {
-    const { warnings, fixed } = await checkAgainstBusiness(businessId, input, tx);
     const [cur] = await tx
       .select()
       .from(products)
@@ -257,8 +257,9 @@ export async function updateProduct(businessId: string, productId: string, input
       .for("update");
     if (!cur) throw new HttpError(404, "NOT_FOUND");
     if (cur.status === "ARCHIVED") throw new HttpError(409, "ARCHIVED");
-    const next = columnsOf(input, fixed);
     const curRes = (await tx.select({ id: productResources.resourceId }).from(productResources).where(eq(productResources.productId, productId))).map((r) => r.id);
+    const { warnings, fixed } = await checkAgainstBusiness(businessId, input, tx, curRes);
+    const next = columnsOf(input, fixed);
     const nextRes = [...new Set(input.resourceIds)];
     const removed = curRes.filter((id) => !nextRes.includes(id));
     const added = nextRes.filter((id) => !curRes.includes(id));
@@ -268,12 +269,13 @@ export async function updateProduct(businessId: string, productId: string, input
     if (shapeChanged) {
       affected = await futureReservationCount(productId, tx);
       if (affected > 0) {
-        // 정원을 미래 회차 중 최대 점유 인원보다 낮게 내리는 것은 거부 — 이미 받은 손님을 앉힐 자리가 없어진다
+        // 정원을 미래 회차(자원·시작 시각별 party_size 합) 중 최대보다 낮게 내리는 것은 거부 — 이미 받은 손님을 앉힐 자리가 없어진다.
+        // 같은 start_at 만 묶으므로 FREE+이용시간 옵션 상품의 부분 겹침 동시 인원은 덜 셀 수 있다 — 정확한 순간 최대는 예약 엔진(FR-BOOK-010)의 몫
         if (next.capacityPerSlot < cur.capacityPerSlot) {
           const [{ maxBooked }] = await tx
             .select({ maxBooked: sql<number>`coalesce(max(s), 0)::int` })
             .from(
-              sql`(select sum(${reservations.partySize}) as s from ${reservations} where ${reservations.productId} = ${productId} and ${reservations.status} in ('REQUESTED','CONFIRMED') and ${reservations.startAt} > now() group by ${reservations.startAt}) t`,
+              sql`(select sum(${reservations.partySize}) as s from ${reservations} where ${reservations.productId} = ${productId} and ${reservations.status} in ('REQUESTED','CONFIRMED') and ${reservations.startAt} > now() group by ${reservations.resourceId}, ${reservations.startAt}) t`,
             );
           if (next.capacityPerSlot < maxBooked) {
             throw new HttpError(400, "INVALID_BODY", { issues: [{ path: ["capacityPerSlot"], message: `미래 회차에 이미 ${maxBooked}명이 예약돼 있어 그보다 낮출 수 없습니다` }], fields: ["capacityPerSlot"], maxBooked });
@@ -316,11 +318,15 @@ export async function updateProductLimited(businessId: string, productId: string
   const [cur] = await db.select({ id: products.id, status: products.status }).from(products).where(and(eq(products.id, productId), eq(products.businessId, businessId))).limit(1);
   if (!cur) throw new HttpError(404, "NOT_FOUND");
   if (!(await isAssignedManager(productId, memberId))) throw new HttpError(403, "NOT_ASSIGNED");
-  if (input.status && cur.status !== "ACTIVE" && cur.status !== "HIDDEN") throw new HttpError(409, "STATUS_NOT_TOGGLEABLE"); // DRAFT 공개·ARCHIVED 복구는 OWNER 만
-  await db
+  if (cur.status === "ARCHIVED") throw new HttpError(409, "ARCHIVED"); // 보관은 매니저에게도 얼어 있다
+  if (input.status && cur.status === "DRAFT") throw new HttpError(409, "STATUS_NOT_TOGGLEABLE"); // 초안 공개는 OWNER 만
+  // 상태를 바꿀 때는 ACTIVE↔HIDDEN 사이에서만 — 읽은 뒤 사장님이 보관했으면(경합) 0행 → 409. 조건부 UPDATE 하나로 판정한다
+  const rows = await db
     .update(products)
     .set({ ...(input.description !== undefined ? { description: input.description ?? null } : {}), ...(input.images !== undefined ? { images: input.images } : {}), ...(input.status ? { status: input.status } : {}) })
-    .where(eq(products.id, productId));
+    .where(and(eq(products.id, productId), eq(products.businessId, businessId), input.status ? inArray(products.status, ["ACTIVE", "HIDDEN"]) : ne(products.status, "ARCHIVED")))
+    .returning({ id: products.id });
+  if (rows.length !== 1) throw new HttpError(409, "STATUS_NOT_TOGGLEABLE");
 }
 
 export async function setProductStatus(businessId: string, productId: string, status: "DRAFT" | "ACTIVE" | "HIDDEN"): Promise<void> {
