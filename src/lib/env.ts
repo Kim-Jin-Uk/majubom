@@ -43,6 +43,39 @@ export const serverEnvSchema = z.object({
   // 기능 플래그 (08 §2.3) — 하드캡 2개
   FEATURE_BUILDER: z.stringbool().default(false),
   FEATURE_CHAT: z.stringbool().default(false),
+
+  // 인증 (FR-AUTH-030). AUTH_SECRET 은 Auth.js 가 직접 읽지만 여기서도 요구한다 — 없으면 시작 시점에 알아야 한다.
+  /** JWT 서명·TOTP 시크릿 암호화 키 파생. `openssl rand -base64 32`. 회전하면 전 사용자 세션이 끊긴다 (08 §8) */
+  AUTH_SECRET: z.string().min(32, "AUTH_SECRET 은 32자 이상 (openssl rand -base64 32)"),
+  /** 절대 URL. 메일 링크·OAuth 콜백의 기준. 로컬은 http://localhost:3000 */
+  AUTH_URL: z.url(),
+  AUTH_KAKAO_ID: z.string().min(1).optional(),
+  AUTH_KAKAO_SECRET: z.string().min(1).optional(),
+  AUTH_GOOGLE_ID: z.string().min(1).optional(),
+  AUTH_GOOGLE_SECRET: z.string().min(1).optional(),
+
+  // 메일 (Resend). 키가 없으면 콘솔 폴백 — production 에서는 필수
+  RESEND_API_KEY: z.string().min(1).optional(),
+  MAIL_FROM: z.string().min(3).default("마주,봄 <onboarding@resend.dev>"),
+
+  // 배치 인증 (Cloud Scheduler → /api/cron/*)
+  CRON_SECRET: z.string().min(16).optional(),
+
+  // Firebase Admin (커스텀 토큰 발급). App Hosting 에서는 ADC 로 대신할 수 있어 셋 다 선택
+  FIREBASE_ADMIN_PROJECT_ID: z.string().min(1).optional(),
+  FIREBASE_ADMIN_CLIENT_EMAIL: z.string().min(1).optional(),
+  FIREBASE_ADMIN_PRIVATE_KEY: z.string().min(1).optional(),
+}).superRefine((env, ctx) => {
+  const pair = (a: keyof typeof env, b: keyof typeof env) => {
+    if (Boolean(env[a]) !== Boolean(env[b])) {
+      ctx.addIssue({ code: "custom", path: [a], message: `${a} 와 ${b} 는 함께 설정한다` });
+    }
+  };
+  pair("AUTH_KAKAO_ID", "AUTH_KAKAO_SECRET");
+  pair("AUTH_GOOGLE_ID", "AUTH_GOOGLE_SECRET");
+  if (env.NODE_ENV === "production" && !env.RESEND_API_KEY) {
+    ctx.addIssue({ code: "custom", path: ["RESEND_API_KEY"], message: "production 에서는 RESEND_API_KEY 가 필수다 (OTP·초대·재설정 메일)" });
+  }
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;
