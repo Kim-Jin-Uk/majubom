@@ -25,7 +25,7 @@ export default async function SessionsPage() {
         </Link>
         <span style={{ color: "var(--text-3)" }}>/</span>
         <span style={{ fontWeight: 600 }}>기기 관리</span>
-        <span style={{ marginLeft: "auto" }}>
+        <span className="actions actions--end">
           <Link href={s.principal?.membership ? "/console" : "/"}>
             <Button size="sm">{s.principal?.membership ? "콘솔" : "홈"}</Button>
           </Link>

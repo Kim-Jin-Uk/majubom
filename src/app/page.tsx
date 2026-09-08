@@ -24,7 +24,7 @@ export default async function Home() {
     >
       <Logo size={40} />
       <p style={{ margin: 0, color: "var(--text-2)" }}>마주,봄 — 준비 중입니다</p>
-      <div className="row" style={{ justifyContent: "center", flexWrap: "wrap" }}>
+      <div className="actions actions--center">
         {!signedIn && (
           <>
             <Link href="/login">

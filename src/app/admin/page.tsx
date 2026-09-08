@@ -18,7 +18,7 @@ export default async function AdminHome() {
           <Logo size={24} />
         </Link>
         <span style={{ fontWeight: 600 }}>관리자</span>
-        <span style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+        <span className="actions actions--end">
           <Link href="/me/sessions">
             <Button size="sm">기기 관리</Button>
           </Link>

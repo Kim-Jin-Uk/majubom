@@ -9,17 +9,18 @@ import { apiPost, describeError, fieldErrors } from "@/lib/client-api";
 import { SocialButtons } from "./SocialButtons";
 
 export function SignupForm({ providers, next }: { providers: Array<"kakao" | "google">; next: string }) {
-  const [form, setForm] = useState({ name: "", email: "", password: "" });
+  const [form, setForm] = useState({ name: "", email: "", password: "", confirm: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
-    setBusy(true);
     setMsg(null);
     setErrors({});
-    const r = await apiPost("/api/auth/signup", form);
+    if (form.password !== form.confirm) return setErrors({ confirm: "비밀번호가 서로 다릅니다" });
+    setBusy(true);
+    const r = await apiPost("/api/auth/signup", { name: form.name, email: form.email, password: form.password });
     if (!r.ok) {
       setBusy(false);
       if (r.error === "EMAIL_TAKEN") setErrors({ email: "이미 사용 중인 이메일입니다" });
@@ -36,7 +37,11 @@ export function SignupForm({ providers, next }: { providers: Array<"kakao" | "go
     hardNavigate(next);
   }
 
-  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  // 입력을 고치면 그 필드의 오류 문구는 바로 지운다 (재제출 전까지 남아 있으면 "고쳤는데 왜 그대로지" 가 된다)
+  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    setForm((f) => ({ ...f, [k]: e.target.value }));
+    setErrors((x) => (x[k] ? { ...x, [k]: "" } : x));
+  };
 
   return (
     <>
@@ -52,6 +57,9 @@ export function SignupForm({ providers, next }: { providers: Array<"kakao" | "go
         </Field>
         <Field label="비밀번호" htmlFor="password" hint="8자 이상, 영문과 숫자 포함" error={errors.password}>
           <Input id="password" type="password" autoComplete="new-password" required minLength={8} value={form.password} onChange={set("password")} aria-invalid={!!errors.password} />
+        </Field>
+        <Field label="비밀번호 확인" htmlFor="confirm" error={errors.confirm}>
+          <Input id="confirm" type="password" autoComplete="new-password" required value={form.confirm} onChange={set("confirm")} aria-invalid={!!errors.confirm} />
         </Field>
         <Button type="submit" variant="primary" block loading={busy}>
           가입하기

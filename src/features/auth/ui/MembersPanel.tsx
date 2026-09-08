@@ -61,7 +61,10 @@ export function MembersPanel({ initial, isOwner }: { initial: MemberListItem[]; 
     setMsg(r.ok ? { kind: "ok", text: "초대 메일을 다시 보냈습니다. 이전 링크는 무효화됩니다." } : { kind: "error", text: ERR_TEXT[r.error] ?? describeError(r) });
   }
 
-  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    setForm((f) => ({ ...f, [k]: e.target.value }));
+    setErrors((x) => (x[k] ? { ...x, [k]: "" } : x));
+  };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>

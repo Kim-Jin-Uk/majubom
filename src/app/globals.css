@@ -320,6 +320,8 @@ button {
 .btn {
   height: 42px;
   padding: 0 16px;
+  white-space: nowrap; /* 버튼 문구는 한 줄 — 좁아지면 줄이 아니라 줄바꿈(actions) 으로 대응 */
+  flex-shrink: 0;
   border-radius: 9px;
   border: 1px solid var(--border);
   background: var(--surface);
@@ -424,12 +426,36 @@ button {
   text-decoration: underline;
 }
 
+/* 폼 필드 두 개를 나란히 (필드가 폭을 나눈다) */
 .row {
   display: flex;
   gap: 10px;
 }
 .row > * {
   flex: 1;
+  min-width: 0;
+}
+@media (max-width: 480px) {
+  .row {
+    flex-direction: column;
+  }
+}
+
+/* 버튼·링크 묶음 — 폭을 나누지 않고 내용 크기대로, 좁으면 다음 줄로 */
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.actions > a {
+  display: inline-flex;
+}
+.actions--center {
+  justify-content: center;
+}
+.actions--end {
+  margin-left: auto;
 }
 
 .banner {

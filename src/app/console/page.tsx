@@ -22,7 +22,7 @@ export default async function ConsoleHome() {
         <Link href="/console" aria-label="콘솔 홈">
           <Logo size={24} />
         </Link>
-        <div className="row" style={{ alignItems: "center" }}>
+        <div className="actions">
           <span style={{ fontSize: 13, color: "var(--text-2)", whiteSpace: "nowrap" }}>
             {s.user.name} · {m.role === "OWNER" ? "사업자" : "매니저"}
           </span>
@@ -33,7 +33,7 @@ export default async function ConsoleHome() {
       <section style={{ padding: 24, maxWidth: 720, width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: 16 }}>
         <h1 style={{ margin: 0, fontSize: 22 }}>{m.businessSlug.startsWith("b-") ? "새 사업장" : m.businessSlug}</h1>
         <Alert kind="info">콘솔은 준비 중입니다. 온보딩 위저드(매장 정보 → 담당자 → 첫 상품 → 로고 → 정책 → 채팅)가 다음 순서로 붙습니다.</Alert>
-        <div className="row" style={{ flexWrap: "wrap" }}>
+        <div className="actions">
           {m.role === "OWNER" && (
             <Link href="/console/members">
               <Button size="sm">매니저 초대</Button>
