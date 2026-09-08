@@ -221,8 +221,9 @@ function columnsOf(input: ProductInput, fixed: FixedStartTime[] | null) {
 }
 
 export async function createProduct(businessId: string, input: ProductInput): Promise<{ id: string; warnings: ProductWarning[] }> {
-  const { warnings, fixed } = await checkAgainstBusiness(businessId, input);
-  const id = await db.transaction(async (tx) => {
+  return db.transaction(async (tx) => {
+    // 자원 검사와 INSERT 를 같은 트랜잭션에 — 검사 직후 자원이 비활성화·삭제되는 틈을 줄인다 (FK 는 어차피 제약이 지킨다)
+    const { warnings, fixed } = await checkAgainstBusiness(businessId, input, tx);
     const [p] = await tx
       .insert(products)
       .values({
@@ -232,9 +233,8 @@ export async function createProduct(businessId: string, input: ProductInput): Pr
       })
       .returning({ id: products.id });
     await tx.insert(productResources).values([...new Set(input.resourceIds)].map((rid) => ({ productId: p.id, resourceId: rid })));
-    return p.id;
+    return { id: p.id, warnings };
   });
-  return { id, warnings };
 }
 
 /** 예약 형태에 영향을 주는 필드 (FR-PRD-020) */
@@ -247,8 +247,8 @@ export type UpdateResult = { ok: true; warnings: ProductWarning[]; affected: num
  * 화면이 "기존 예약 N건은 예약 당시 설정을 유지합니다" 로 확인을 받는다. 거부(400): 정원을 미래 회차의 최대 점유보다 낮게 / 미래 예약이 있는 자원 해제.
  */
 export async function updateProduct(businessId: string, productId: string, input: ProductInput): Promise<UpdateResult> {
-  const { warnings, fixed } = await checkAgainstBusiness(businessId, input);
   return db.transaction(async (tx) => {
+    const { warnings, fixed } = await checkAgainstBusiness(businessId, input, tx);
     const [cur] = await tx
       .select()
       .from(products)
