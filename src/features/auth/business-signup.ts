@@ -7,7 +7,7 @@ import { sendMail } from "@/lib/mail";
 import { businessAppliedMail, businessOtpMail } from "@/lib/mail/templates";
 import type { RequestMeta } from "@/lib/request-meta";
 import { BUSINESS_SIGNUP_PER_IP_PER_HOUR, OTP_TTL_MIN, UNVERIFIED_BUSINESS_TTL_DAYS } from "./constants";
-import { hashPassword } from "./crypto";
+import { hashPassword, verifyPassword } from "./crypto";
 import { HttpError } from "./errors";
 import { issueOtp, verifyOtp } from "./tokens";
 
@@ -17,10 +17,17 @@ import { issueOtp, verifyOtp } from "./tokens";
  * 순서는 04 를 따른다: 신청 → User + Business(PENDING, emailVerifiedAt=null) + BusinessMember(OWNER) + 워크인 계정 생성
  * → OTP 메일 → 검증되면 emailVerifiedAt 기록 → 콘솔 열림. 미검증 7일은 배치가 지운다 (타인 이메일·사업자번호 선점 방지).
  * 콘솔 게이트는 principal.consoleAccess 가 emailVerified 로 건다.
+ *
+ * 같은 이메일로 고객·사업자 둘 다 되어야 한다(사용자 결정). 계정은 하나(users.email unique) 이고 "사업자" 는 그 계정에
+ * Business + OWNER 멤버십이 붙는 것이다: 기존 고객 계정으로 신청하면 비밀번호(또는 로그인 세션)로 본인을 확인하고 그 계정에 사업장을
+ * 붙인다. 소셜 전용 계정(비밀번호 없음)은 로그인한 뒤 신청하면 된다. 1계정 1사업장(다중 소속은 P3)은 그대로다.
  */
 export type BusinessSignupInput = {
   email: string;
-  password: string;
+  /** 새 계정이면 필수. 기존 고객 계정으로 신청하면 그 계정의 비밀번호(본인 확인) — 로그인 상태(existingUserId)면 생략 */
+  password?: string;
+  /** 로그인한 고객이 자기 계정으로 신청할 때 — 이메일·비밀번호 확인을 건너뛴다 */
+  existingUserId?: string;
   ownerName: string;
   phone: string;
   businessName: string;
@@ -67,9 +74,12 @@ export async function applyBusiness(input: BusinessSignupInput, meta: RequestMet
       .where(and(eq(businessMembers.businessId, dup.id), eq(businessMembers.role, "OWNER")))
       .limit(1);
     if (!owner || !emailOwner || owner.userId !== emailOwner.id) throw new HttpError(409, emailOwner ? "EMAIL_TAKEN" : "BIZ_REG_NO_TAKEN");
-    const passwordHash = await hashPassword(input.password);
+    if (input.existingUserId !== owner.userId) {
+      const [acct] = await db.select({ passwordHash: users.passwordHash }).from(users).where(eq(users.id, owner.userId)).limit(1);
+      if (!input.password || !(await verifyPassword(input.password, acct?.passwordHash))) throw new HttpError(401, "EMAIL_TAKEN_PASSWORD_MISMATCH");
+    }
     await db.transaction(async (tx) => {
-      await tx.update(users).set({ name: input.ownerName, phone: input.phone, passwordHash }).where(eq(users.id, owner.userId));
+      await tx.update(users).set({ name: input.ownerName, phone: input.phone }).where(eq(users.id, owner.userId));
       await tx
         .update(businesses)
         .set({
@@ -91,28 +101,52 @@ export async function applyBusiness(input: BusinessSignupInput, meta: RequestMet
   // 미검증(삭제 대기) 신청이 같은 사업자번호·이메일을 점유 중이면 치우고 새로 시작한다. 그 외 중복은 거절
   if (dup && dup.emailVerifiedAt !== null) throw new HttpError(409, "BIZ_REG_NO_TAKEN");
   const stalePurge: string[] = [];
+  /** 기존 계정에 사업장을 붙이는 경우 그 사용자 id */
+  let attachTo: string | null = null;
   if (emailOwner) {
     const [m] = await db
       .select({ businessId: businessMembers.businessId, verified: businesses.emailVerifiedAt })
       .from(businessMembers)
       .innerJoin(businesses, eq(businesses.id, businessMembers.businessId))
-      .where(and(eq(businessMembers.userId, emailOwner.id), eq(businessMembers.role, "OWNER")))
+      .where(eq(businessMembers.userId, emailOwner.id))
       .limit(1);
-    if (!m || m.verified !== null) throw new HttpError(409, "EMAIL_TAKEN");
-    // 이메일이 다른 미검증 신청의 것이면 그 신청도 같은 트랜잭션에서 치운다
-    if (!dup || dup.id !== m.businessId) stalePurge.push(m.businessId);
+    if (m && m.verified !== null) throw new HttpError(409, "ALREADY_MEMBER"); // 이미 어느 사업장의 구성원 (1계정 1사업장)
+    if (m && (!dup || dup.id !== m.businessId)) stalePurge.push(m.businessId); // 미검증 옛 신청은 치운다
+    if (!m) {
+      // 기존 고객 계정 → 본인 확인: 로그인 세션이거나, 그 계정의 비밀번호
+      const [acct] = await db.select({ passwordHash: users.passwordHash, status: users.status }).from(users).where(eq(users.id, emailOwner.id)).limit(1);
+      if (!acct || acct.status !== "ACTIVE") throw new HttpError(409, "EMAIL_TAKEN");
+      if (input.existingUserId === emailOwner.id) {
+        attachTo = emailOwner.id;
+      } else {
+        if (!acct.passwordHash) throw new HttpError(409, "EMAIL_TAKEN_LOGIN_REQUIRED"); // 소셜 전용 — 로그인 후 신청
+        if (!input.password || !(await verifyPassword(input.password, acct.passwordHash))) throw new HttpError(401, "EMAIL_TAKEN_PASSWORD_MISMATCH");
+        attachTo = emailOwner.id;
+      }
+    }
+  } else if (input.existingUserId) {
+    throw new HttpError(409, "EMAIL_MISMATCH"); // 로그인한 계정의 이메일과 다르다
   }
+  if (!attachTo && !input.password) throw new HttpError(400, "INVALID_BODY", { issues: [{ path: ["password"], message: "비밀번호를 입력해 주세요" }] });
 
-  const passwordHash = await hashPassword(input.password);
+  const passwordHash = attachTo ? null : await hashPassword(input.password!);
 
   const result = await db.transaction(async (tx) => {
     for (const id of stalePurge) await purgeBusiness(id, tx);
     if (dup) await purgeBusiness(dup.id, tx);
 
-    const [u] = await tx
-      .insert(users)
-      .values({ email: input.email, name: input.ownerName, phone: input.phone, passwordHash, provider: "LOCAL" })
-      .returning({ id: users.id });
+    let ownerId = attachTo;
+    if (!ownerId) {
+      const [u] = await tx
+        .insert(users)
+        .values({ email: input.email, name: input.ownerName, phone: input.phone, passwordHash: passwordHash!, provider: "LOCAL" })
+        .returning({ id: users.id });
+      ownerId = u.id;
+    } else {
+      // 기존 계정: 이름·연락처는 비어 있을 때만 채운다 (고객이 쓰던 이름을 덮어쓰지 않는다)
+      await tx.update(users).set({ phone: sql`coalesce(${users.phone}, ${input.phone})` }).where(eq(users.id, ownerId));
+    }
+    const u = { id: ownerId };
 
     let slug = temporarySlug();
     for (let i = 0; i < 3; i++) {
@@ -201,6 +235,8 @@ export async function purgeBusiness(businessId: string, tx: DbLike = db): Promis
   const userIds = members.map((m) => m.userId);
   const [walkin] = await tx.select({ id: users.id }).from(users).where(eq(users.email, walkinEmail(businessId))).limit(1);
   if (walkin) userIds.push(walkin.id);
+  const [biz] = await tx.select({ createdAt: businesses.createdAt }).from(businesses).where(eq(businesses.id, businessId)).limit(1);
+  const bizCreatedAt = biz?.createdAt ?? null;
 
   await tx.delete(resources).where(eq(resources.businessId, businessId));
   await tx.delete(businessMembers).where(eq(businessMembers.businessId, businessId));
@@ -210,6 +246,10 @@ export async function purgeBusiness(businessId: string, tx: DbLike = db): Promis
     // 다른 사업장에도 속한 사용자는 남긴다 (이 흐름에서는 생기지 않지만 방어)
     const [other] = await tx.select({ id: businessMembers.id }).from(businessMembers).where(eq(businessMembers.userId, uid)).limit(1);
     if (other) continue;
+    // 신청 이전부터 있던 계정(기존 고객이 사업장을 붙인 경우)은 지우지 않는다 — 신청과 함께 만들어진 계정만 정리 대상.
+    // 판정: 사용자 생성 시각이 사업장 생성 시각보다 60초 넘게 앞서면 기존 계정 (같은 트랜잭션에서 만들면 밀리초 차이)
+    const [u] = await tx.select({ createdAt: users.createdAt }).from(users).where(eq(users.id, uid)).limit(1);
+    if (u && bizCreatedAt && u.createdAt.getTime() < bizCreatedAt.getTime() - 60_000) continue;
     await tx.update(authTokens).set({ userId: null, usedAt: sql`coalesce(${authTokens.usedAt}, now())` }).where(eq(authTokens.userId, uid));
     await tx.delete(sessions).where(eq(sessions.userId, uid));
     const [ref] = await tx.select({ id: auditLogs.id }).from(auditLogs).where(eq(auditLogs.actorId, uid)).limit(1);
