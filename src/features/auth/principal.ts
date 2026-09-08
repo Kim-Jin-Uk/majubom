@@ -14,6 +14,8 @@ export type Membership = {
   role: "OWNER" | "MANAGER";
   memberStatus: "INVITED" | "ACTIVE" | "INACTIVE";
   permissions: MemberPermissions;
+  /** Business.emailVerifiedAt 유무 — 사업자 가입 OTP 검증 전에는 콘솔이 열리지 않는다 (FR-AUTH-010) */
+  emailVerified: boolean;
 };
 
 export type Principal = {
@@ -49,6 +51,7 @@ export async function loadPrincipal(userId: string): Promise<Principal | null> {
       businessId: businesses.id,
       businessSlug: businesses.slug,
       businessStatus: businesses.status,
+      businessEmailVerifiedAt: businesses.emailVerifiedAt,
     })
     .from(businessMembers)
     .innerJoin(businesses, eq(businesses.id, businessMembers.businessId))
@@ -71,12 +74,13 @@ export async function loadPrincipal(userId: string): Promise<Principal | null> {
           role: m.role,
           memberStatus: m.memberStatus,
           permissions: m.permissions ?? {},
+          emailVerified: m.businessEmailVerifiedAt !== null,
         }
       : null,
   };
 }
 
-export type AccessDenial = "USER_INACTIVE" | "MEMBER_INACTIVE" | "BUSINESS_BLOCKED" | "NO_MEMBERSHIP";
+export type AccessDenial = "USER_INACTIVE" | "MEMBER_INACTIVE" | "BUSINESS_BLOCKED" | "NO_MEMBERSHIP" | "EMAIL_UNVERIFIED";
 
 /**
  * 로그인 자체를 막아야 하는 상태. WITHDRAWN 은 탈퇴, SUSPENDED 는 관리자 정지 (FR-ADM · FR-AUTH-030 무효화 표).
@@ -91,6 +95,7 @@ export function userLoginDenial(p: Pick<Principal, "userStatus">): AccessDenial 
  * - SUSPENDED: 읽기 전용 + 예약 취소·상담 허용 — 여기서는 통과시키고 `readOnly` 로 표시한다. 쓰기 API 가 각자 거부한다
  * - PENDING / REJECTED: 콘솔은 열린다 (FR-AUTH-010 — 승인은 공개 URL 게이트일 뿐)
  * - 멤버 INVITED(수락 전)·INACTIVE: 차단
+ * - 사업자 가입 이메일 미검증: 차단 → /signup/business/verify 로 (프록시)
  */
 export function consoleAccess(p: Principal): { denial: AccessDenial | null; readOnly: boolean } {
   const userDenial = userLoginDenial(p);
@@ -99,6 +104,7 @@ export function consoleAccess(p: Principal): { denial: AccessDenial | null; read
   if (!m) return { denial: "NO_MEMBERSHIP", readOnly: false };
   if (m.memberStatus !== "ACTIVE") return { denial: "MEMBER_INACTIVE", readOnly: false };
   if (m.businessStatus === "BLOCKED") return { denial: "BUSINESS_BLOCKED", readOnly: false };
+  if (!m.emailVerified) return { denial: "EMAIL_UNVERIFIED", readOnly: false };
   return { denial: null, readOnly: m.businessStatus === "SUSPENDED" };
 }
 

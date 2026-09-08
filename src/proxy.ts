@@ -156,6 +156,13 @@ async function handleSession(request: NextRequest): Promise<{ block: NextRespons
 
   if (outcome.console?.denial) {
     const d = outcome.console.denial;
+    if (d === "EMAIL_UNVERIFIED") {
+      if (isApi) return { block: applyCookies(json(403, "EMAIL_UNVERIFIED"), outcome), outcome };
+      const url = request.nextUrl.clone();
+      url.pathname = "/signup/business/verify";
+      url.search = "";
+      return { block: applyCookies(NextResponse.redirect(url), outcome), outcome };
+    }
     if (d === "NO_MEMBERSHIP") {
       // 소속 사업장이 없는 고객이 콘솔 URL 을 친 경우 — 사업자 가입으로 안내
       if (isApi) return { block: applyCookies(json(403, "NO_MEMBERSHIP"), outcome), outcome };
