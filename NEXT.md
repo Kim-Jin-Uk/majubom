@@ -5,16 +5,20 @@
 
 ## 지금 어디
 
-문서 단계 완료. 기획서 v1.6 / 명세서 v1.6 / 스택 v1.1 / 코드 관리 v2.0.
-아직 코드는 한 줄도 없다.
+메인 이슈 #1 기반 구축 — 코드 쪽 9건 완료 (#2 #3 #4 #5 #6 #8 #10 #11 #13).
+브랜치 `feat/1-foundation`. `npm run verify` · `db:check` 9/9 · `build` 통과.
 
 ## 막힌 것
 
-없음. D4~D6 결정 완료 (`majubom-docs/09` 9장).
+콘솔 잔여 3건 (각 1분): ① R2 CORS — Cloudflare 콘솔 → majubom-media → Settings → CORS policy 에 `infra/r2-cors.json` 붙여넣기 (#9) ② GitHub → Settings → Environments → staging → secret `DATABASE_URL_MIGRATE` = Neon 직결 URL (#14) ③ R2 토큰 Roll — 키가 채팅에 노출됐다.
+#12 도메인·카카오는 보류 — W12 전 착수.
+Firestore 규칙 테스트는 로컬 에뮬레이터 JAR 다운로드가 막혀 CI 첫 실행에서 확인해야 한다.
+슬롯 픽스처 가정 A1·A7은 명세 모순 — 이슈 #13 코멘트 참조. 구현(#48) 전에 결정.
+**Node 22 로 올릴 것** — 지금 v20.20 (EOL 지남). `nvm install 22 && nvm use` (.nvmrc 있음).
 
 ## 다음 한 수
 
-1. 이 저장소 public 전환 — 첫 커밋 amend(docs 제거) → force push → visibility 변경 (`08` 8.1 순서대로)
-2. majubom-docs 첫 커밋·push (private)
-3. ~~이슈 생성~~ 완료 — 148개 (메인 21 · 세부 127), 마일스톤 12, 라벨 20. https://github.com/Kim-Jin-Uk/majubom/issues?q=label%3Aepic
-4. `git switch -c feat/1-foundation` — 메인 이슈 #1 부터. 세부 이슈 #2~#14
+1. `nvm use` (Node 22) → `.env.local` 의 DATABASE_URL 을 로컬 Postgres 로 → `npm run db:reset && npm run verify`
+   (R2 는 `npm run r2:verify` 5/5 통과 확인함)
+2. PR 열기: `feat(infra): 기반 구축` — 본문에 `Closes #1` + `Closes #2, #3, #4, #5, #6, #8, #10, #11, #13`
+3. 콘솔 작업 #7 #9 #12 #14 (README·`majubom-docs/07` 7장 순서대로)
