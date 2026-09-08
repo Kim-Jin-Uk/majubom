@@ -2,7 +2,7 @@ import { decode, encode, type JWT } from "@auth/core/jwt";
 import type { NextRequest } from "next/server";
 import { requestMeta } from "@/lib/request-meta";
 import { ACCESS_TTL_SEC, ADMIN_PREFIXES, CONSOLE_PREFIXES, COOKIE_REFRESH, COOKIE_SESSION, REFRESH_TTL_SEC } from "./constants";
-import { clearedRefreshCookie, refreshCookie } from "./cookies";
+import { clearedRefreshCookie, clearedSessionCookie, refreshCookie } from "./cookies";
 import { consoleAccess, loadPrincipal, principalEquals, userLoginDenial, type AccessDenial, type Principal } from "./principal";
 import { parseRefresh, rotateSession } from "./session-store";
 import "./types";
@@ -40,22 +40,24 @@ export function isConsolePath(path: string): boolean {
   return startsWithAny(path, CONSOLE_PREFIXES) || startsWithAny(path, ADMIN_PREFIXES);
 }
 
+function op(c: { name: string; value: string; options: object }): CookieOp {
+  return { name: c.name, value: c.value, options: c.options as Record<string, unknown> };
+}
+
 function logout(reason: string, extra: CookieOp[] = []): RefreshOutcome {
-  const rc = clearedRefreshCookie();
-  return {
-    state: "logout",
-    reason,
-    cookies: [
-      { name: COOKIE_SESSION, value: "", options: { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 0 } },
-      { name: rc.name, value: rc.value, options: rc.options as Record<string, unknown> },
-      ...extra,
-    ],
-  };
+  return { state: "logout", reason, cookies: [op(clearedSessionCookie()), op(clearedRefreshCookie()), ...extra] };
 }
 
 export async function refreshSession(req: NextRequest): Promise<RefreshOutcome> {
   const raw = req.cookies.get(COOKIE_SESSION)?.value;
-  if (!raw) return { state: "anon", cookies: [] };
+  if (!raw) {
+    // 로그아웃 직후의 잔재 정리: Auth.js 가 지운 세션 쿠키는 Next 의 재직렬화(Max-Age=0 탈락)로 빈 값 쿠키로 남을 수 있고,
+    // 리프레시 쿠키는 세션 없이는 쓸모가 없다. 둘 다 있으면 지운다.
+    const cookies: CookieOp[] = [];
+    if (req.cookies.has(COOKIE_SESSION)) cookies.push(op(clearedSessionCookie()));
+    if (req.cookies.has(COOKIE_REFRESH)) cookies.push(op(clearedRefreshCookie()));
+    return { state: "anon", cookies };
+  }
 
   let token: JWT | null = null;
   try {
@@ -80,10 +82,7 @@ export async function refreshSession(req: NextRequest): Promise<RefreshOutcome> 
     const r = await rotateSession(rt, requestMeta(req.headers));
     if (!r.ok) return logout(`REFRESH_${r.reason}`);
     if (r.userId !== token.uid) return logout("UID_MISMATCH");
-    if (r.rotated) {
-      const c = refreshCookie(r.token);
-      cookies.push({ name: c.name, value: c.value, options: c.options as Record<string, unknown> });
-    }
+    if (r.rotated) cookies.push(op(refreshCookie(r.token)));
     token.accessExp = now + ACCESS_TTL_SEC;
     changed = true;
   }

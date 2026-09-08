@@ -9,7 +9,7 @@ import { db } from "@/db/client";
 import { users } from "@/db/schema";
 import { requestMeta, type RequestMeta } from "@/lib/request-meta";
 import { ACCESS_TTL_SEC, COOKIE_SESSION, REFRESH_TTL_SEC } from "./constants";
-import { clearedRefreshCookie, refreshCookie } from "./cookies";
+import { refreshCookie } from "./cookies";
 import { hashPassword, passwordNeedsRehash, verifyPassword, verifyServerProof } from "./crypto";
 import { loginBackoff, recordLoginFail } from "./login-backoff";
 import { readIdentity, resolveOAuthUser } from "./oauth-account";
@@ -207,11 +207,12 @@ export const authConfig: NextAuthConfig = {
   },
   events: {
     async signOut(message) {
-      // jwt 전략에서는 { token } 이 온다. 리프레시 행을 폐기하고 쿠키를 지운다.
+      // jwt 전략에서는 { token } 이 온다. 리프레시 행을 폐기한다.
+      // 리프레시 쿠키는 여기서 지우지 않는다: 이 핸들러 안에서 cookies().set 을 부르면 Next 가 Auth.js 의 Set-Cookie 를
+      // 다시 파싱하면서 `Max-Age=0` 을 떨어뜨려(falsy 압축) 세션 쿠키 삭제가 무효가 된다. 세션 쿠키 없이 남은 리프레시
+      // 쿠키는 프록시(refresh.ts)가 다음 요청에서 지운다.
       const token = "token" in message ? message.token : null;
       if (token?.sid) await revokeSession(token.sid);
-      const c = clearedRefreshCookie();
-      (await cookies()).set(c.name, c.value, c.options);
     },
   },
 };

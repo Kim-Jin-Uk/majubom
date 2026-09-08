@@ -84,13 +84,13 @@ function startsWithAny(path: string, prefixes: string[]): boolean {
   return prefixes.some((p) => path === p || path.startsWith(p + "/"));
 }
 
-/** Cookie 요청 헤더에서 name 의 값을 바꾼다 (없으면 덧붙인다) */
+/** Cookie 요청 헤더에서 name 의 값을 바꾼다 (없으면 덧붙이고, value 가 비면 뺀다) */
 function replaceCookie(header: string | null, name: string, value: string): string {
   const parts = (header ?? "")
     .split(";")
     .map((p) => p.trim())
     .filter((p) => p && !p.startsWith(name + "="));
-  parts.push(`${name}=${value}`);
+  if (value) parts.push(`${name}=${value}`);
   return parts.join("; ");
 }
 
@@ -193,7 +193,9 @@ export async function proxy(request: NextRequest) {
   // 이 요청에서 JWT 를 새로 썼으면 다운스트림(auth())도 새 값을 보게 요청 쿠키를 바꿔 넘긴다 —
   // 그렇지 않으면 이 한 요청은 옛 스냅샷으로 처리된다.
   for (const c of outcome.cookies) {
-    if (c.value) requestHeaders.set("cookie", replaceCookie(requestHeaders.get("cookie"), c.name, c.value));
+    // 값이 비면 삭제 — 다운스트림에도 없는 것으로 보여야 한다. 안 그러면 Auth.js 세션 엔드포인트가 옛 JWT 를 읽어
+    // 로그아웃시킨 쿠키를 도로 심는다.
+    requestHeaders.set("cookie", replaceCookie(requestHeaders.get("cookie"), c.name, c.value));
   }
   const res = applyCookies(NextResponse.next({ request: { headers: requestHeaders } }), outcome);
   if (gate) res.headers.set("X-Robots-Tag", ROBOTS_HEADER);
