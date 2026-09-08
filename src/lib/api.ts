@@ -1,4 +1,5 @@
 import { z } from "zod";
+import "@/lib/zod-locale";
 import { HttpError } from "@/features/auth/errors";
 
 /** JSON 본문을 zod 로 검증한다. 실패 → 400 INVALID_BODY + issues (클라이언트가 필드별 문구로 바꾼다) */

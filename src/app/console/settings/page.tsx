@@ -1,8 +1,7 @@
 import { notFound } from "next/navigation";
-import { getPolicy } from "@/features/business/policy";
-import { getBusinessSettings } from "@/features/business/settings";
 import { BusinessInfoForm } from "@/features/business/ui/BusinessInfoForm";
 import { ConsoleShell } from "@/features/business/ui/ConsoleShell";
+import { loadConsoleBusiness } from "@/features/business/publish-gate";
 import { PolicyForm } from "@/features/business/ui/PolicyForm";
 import { consoleViewer, publicBase } from "@/features/business/ui/console-viewer";
 
@@ -12,7 +11,7 @@ export const metadata = { title: "설정 — 마주,봄 콘솔" };
 export default async function SettingsPage() {
   const v = await consoleViewer("/console/settings");
   if (!v.isOwner) notFound();
-  const [b, policy] = await Promise.all([getBusinessSettings(v.membership.businessId), getPolicy(v.membership.businessId)]);
+  const { settings: b, policy } = await loadConsoleBusiness(v.membership.businessId);
   return (
     <ConsoleShell current="settings" viewer={{ name: v.name, role: v.membership.role }}>
       <h1>설정</h1>

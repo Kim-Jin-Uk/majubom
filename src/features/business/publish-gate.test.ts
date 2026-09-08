@@ -15,3 +15,13 @@ describe("wizardSteps (기획서 6.1)", () => {
     expect(s.filter((x) => x.done).map((x) => x.n)).toEqual([1, 2, 5]);
   });
 });
+
+describe("nextWizardStep", () => {
+  it("끝나지 않은 필수 단계 중 지금 할 수 있는 것 — 준비 중(상품)은 건너뛴다", async () => {
+    const { nextWizardStep } = await import("./publish-gate");
+    const s = wizardSteps(base, { chatEnabled: false, policyTouched: false, brandTouched: false });
+    expect(nextWizardStep(s)?.n).toBe(1);
+    const s2 = wizardSteps({ ...base, infoComplete: true, activeResources: 1 }, { chatEnabled: false, policyTouched: false, brandTouched: false });
+    expect(nextWizardStep(s2)).toBeNull(); // 남은 필수가 3단계(준비 중)뿐
+  });
+});

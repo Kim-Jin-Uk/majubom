@@ -58,3 +58,24 @@ describe("businessInfoSchema 보강 (리뷰 반영)", () => {
     expect(businessInfoSchema.safeParse({ ...base, phone: "12345" }).success).toBe(false);
   });
 });
+
+describe("isInfoComplete (1단계 완료 판정)", () => {
+  it("상호·전화·주소·영업시간 1일·임시 아닌 slug 가 모두 있어야 한다", async () => {
+    const { isInfoComplete } = await import("./settings");
+    const ok = { name: "봄", phone: "0233334444", address: "서울", openingHours: [{ dow: 1, open: "10:00", close: "20:00" }], slug: "bom" };
+    expect(isInfoComplete(ok)).toBe(true);
+    expect(isInfoComplete({ ...ok, phone: null })).toBe(false);
+    expect(isInfoComplete({ ...ok, address: null })).toBe(false);
+    expect(isInfoComplete({ ...ok, openingHours: [] })).toBe(false);
+    expect(isInfoComplete({ ...ok, slug: "b-abc12345" })).toBe(false);
+  });
+});
+
+describe("openingHourSchema 자정 넘김", () => {
+  it("영업 20:00~04:00 에서 01:00~02:00 휴게는 안, 05:00~06:00 은 밖", () => {
+    expect(openingHourSchema.safeParse({ dow: 6, open: "20:00", close: "04:00", breaks: [{ start: "01:00", end: "02:00" }] }).success).toBe(true);
+    expect(openingHourSchema.safeParse({ dow: 6, open: "20:00", close: "04:00", breaks: [{ start: "05:00", end: "06:00" }] }).success).toBe(false);
+    // 마감에 딱 붙는 휴게는 허용
+    expect(openingHourSchema.safeParse({ dow: 1, open: "10:00", close: "20:00", breaks: [{ start: "19:00", end: "20:00" }] }).success).toBe(true);
+  });
+});

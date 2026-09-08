@@ -108,7 +108,9 @@ export function ResourcesPanel({ initial, members, isOwner, readOnly, mode }: { 
     const next = items.slice();
     [next[i], next[j]] = [next[j], next[i]];
     setItems(next);
+    setBusy(true);
     const x = await apiPut("/api/console/resources/reorder", { ids: next.map((r) => r.id) });
+    setBusy(false);
     if (!x.ok) {
       setMsg({ kind: "error", text: describeError(x) });
       await reload();
@@ -138,10 +140,10 @@ export function ResourcesPanel({ initial, members, isOwner, readOnly, mode }: { 
             </div>
             {canEdit && (
               <div className="actions">
-                <Button size="sm" type="button" onClick={() => move(i, -1)} disabled={busy || i === 0} aria-label="위로">
+                <Button size="sm" type="button" onClick={() => move(i, -1)} disabled={busy || i === 0} aria-label={`${r.name} 위로`}>
                   ↑
                 </Button>
-                <Button size="sm" type="button" onClick={() => move(i, 1)} disabled={busy || i === items.length - 1} aria-label="아래로">
+                <Button size="sm" type="button" onClick={() => move(i, 1)} disabled={busy || i === items.length - 1} aria-label={`${r.name} 아래로`}>
                   ↓
                 </Button>
                 <Button size="sm" type="button" onClick={() => startEdit(r)} disabled={busy}>
@@ -166,9 +168,9 @@ export function ResourcesPanel({ initial, members, isOwner, readOnly, mode }: { 
               + 담당자 · 공간 추가
             </Button>
           )}
-          {mode === "wizard" && (canEdit ? items.some((r) => r.isActive) : true) && (
+          {mode === "wizard" && (
             <Link href="/console/onboarding/3" className="btn">
-              다음 단계
+              {items.some((r) => r.isActive) ? "다음 단계" : "건너뛰기"}
             </Link>
           )}
         </div>

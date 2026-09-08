@@ -50,7 +50,9 @@ export async function setMemberActive(businessId: string, memberId: string, acti
   if (active) {
     if (m.status !== "INACTIVE") throw new HttpError(409, "NOT_INACTIVE");
     await db.transaction(async (tx) => {
-      await tx.update(businessMembers).set({ status: "ACTIVE" }).where(scope);
+      // 조건부 UPDATE 의 영향 행 수로 판정 — 읽고 나서 바뀌었으면(동시 요청) 0행
+      const rows = await tx.update(businessMembers).set({ status: "ACTIVE" }).where(and(scope, eq(businessMembers.status, "INACTIVE"))).returning({ id: businessMembers.id });
+      if (rows.length !== 1) throw new HttpError(409, "NOT_INACTIVE");
       await writeAudit({ action: "MEMBER_PERMISSION_UPDATE", actorId: actor.uid, actorRole: "OWNER", businessId, targetType: "BUSINESS_MEMBER", targetId: memberId, diff: { status: { from: "INACTIVE", to: "ACTIVE" } }, meta }, tx);
     });
     return;
@@ -59,7 +61,8 @@ export async function setMemberActive(businessId: string, memberId: string, acti
   // INVITED 는 비활성화 대상이 아니다 — 비활성→재활성 경로로 초대 수락(비밀번호·동의) 없이 ACTIVE 가 되는 걸 막는다
   if (m.status !== "ACTIVE") throw new HttpError(409, "NOT_ACTIVE");
   await db.transaction(async (tx) => {
-    await tx.update(businessMembers).set({ status: "INACTIVE" }).where(scope);
+    const rows = await tx.update(businessMembers).set({ status: "INACTIVE" }).where(and(scope, eq(businessMembers.status, "ACTIVE"))).returning({ id: businessMembers.id });
+    if (rows.length !== 1) throw new HttpError(409, "NOT_ACTIVE");
     await tx.update(resources).set({ isActive: false }).where(eq(resources.memberId, memberId));
     await revokeAllSessions(m.userId, undefined, tx);
     await writeAudit({ action: "MEMBER_DEACTIVATE", actorId: actor.uid, actorRole: "OWNER", businessId, targetType: "BUSINESS_MEMBER", targetId: memberId, diff: { status: { from: m.status, to: "INACTIVE" } }, meta }, tx);

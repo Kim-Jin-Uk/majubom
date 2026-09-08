@@ -158,7 +158,8 @@ export type SlugChangeResult = { ok: true; slug: string } | { ok: false; reason:
 export async function changeSlug(businessId: string, slug: string, actor: { uid: string; role: "OWNER" | "MANAGER" }, meta: RequestMeta): Promise<SlugChangeResult> {
   if (RESERVED_SLUGS.has(slug)) return { ok: false, reason: "RESERVED" };
   return db.transaction(async (tx) => {
-    const [cur] = await tx.select({ slug: businesses.slug }).from(businesses).where(eq(businesses.id, businessId)).limit(1);
+    // 사업장 행을 잠근다 — 같은 사업장의 동시 변경이 30일 제한을 넘거나 history 를 두 번 쓰지 않도록
+    const [cur] = await tx.select({ slug: businesses.slug }).from(businesses).where(eq(businesses.id, businessId)).limit(1).for("update");
     if (!cur) throw new HttpError(404, "NOT_FOUND");
     if (cur.slug === slug) return { ok: false, reason: "SAME" } as const;
     // 다른 사업장이 쓰(었)던 slug 는 거절. 우리 사업장의 옛 slug 로 되돌리는 건 허용

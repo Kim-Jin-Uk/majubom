@@ -66,6 +66,17 @@ export function BusinessInfoForm({ initial, mode, readOnly, publicBase }: { init
     setBusy(true);
     setErrors({});
     setMsg(null);
+    // 공개 주소 칸에 새 값이 있으면 같이 저장한다 — Enter 나 "저장하고 다음" 이 입력을 조용히 버리지 않도록
+    let slugNow = savedSlug;
+    if (!readOnly && slug && slug !== savedSlug) {
+      const ok = await saveSlug();
+      if (!ok) {
+        setBusy(false);
+        return;
+      }
+      slugNow = slug;
+    }
+    const completeNow = missing.length === 0 && !slugNow.startsWith("b-");
     const r = await apiPatch("/api/console/business", {
       ...f,
       phone: f.phone || null,
@@ -89,27 +100,29 @@ export function BusinessInfoForm({ initial, mode, readOnly, publicBase }: { init
       } else setMsg({ kind: "error", text: describeError(r) });
       return;
     }
-    if (mode === "wizard" && complete) {
+    if (mode === "wizard" && completeNow) {
       router.push("/console/onboarding/2");
       router.refresh();
       return;
     }
-    setMsg({ kind: "ok", text: mode === "wizard" && !complete ? `저장했습니다. 1단계를 마치려면 ${missing.join(" · ")} 이(가) 더 필요해요.` : "저장했습니다" });
+    const still = slugNow.startsWith("b-") && !missing.includes("공개 주소") ? [...missing, "공개 주소"] : missing;
+    setMsg({ kind: "ok", text: mode === "wizard" && !completeNow ? `저장했어요. 1단계를 마치려면 ${still.join(" · ")} 항목이 아직 비어 있어요.` : "저장했어요" });
     router.refresh();
   }
 
-  async function saveSlug() {
+  async function saveSlug(): Promise<boolean> {
     setSlugBusy(true);
     setSlugMsg(null);
     const r = await apiPatch<{ slug: string }>("/api/console/business/slug", { slug });
     setSlugBusy(false);
     if (!r.ok) {
       setSlugMsg({ kind: "error", text: r.issues ? fieldErrors(r.issues).slug ?? "주소 형식을 확인해 주세요" : SLUG_ERR[r.error] ?? describeError(r) });
-      return;
+      return false;
     }
     setSavedSlug(r.data.slug);
-    setSlugMsg({ kind: "ok", text: `공개 주소가 ${publicBase}/@${r.data.slug} 로 정해졌습니다` });
+    setSlugMsg({ kind: "ok", text: `공개 주소가 ${publicBase}/@${r.data.slug} 로 정해졌어요` });
     router.refresh();
+    return true;
   }
 
   const dis = readOnly || busy;
@@ -119,7 +132,7 @@ export function BusinessInfoForm({ initial, mode, readOnly, publicBase }: { init
     !f.phone.trim() && "매장 전화",
     !f.address.trim() && "주소",
     !rows.some((r) => r.enabled) && "영업시간 1일 이상",
-    savedSlug.startsWith("b-") && "공개 주소",
+    savedSlug.startsWith("b-") && !slug.trim() && "공개 주소", // 칸에 적어 두면 저장 시 함께 저장된다
   ].filter((x): x is string => Boolean(x));
   const complete = missing.length === 0;
 
@@ -174,11 +187,11 @@ export function BusinessInfoForm({ initial, mode, readOnly, publicBase }: { init
                   <Input type="time" aria-label={`${DOW[i]}요일 마감`} value={r.close} onChange={(e) => setRow(i, { close: e.target.value })} disabled={dis} required />
                   {r.breaks.map((b, bi) => (
                     <span key={bi} className="times" style={{ gap: 6 }}>
-                      <span className="muted">휴게</span>
-                      <Input type="time" aria-label="휴게 시작" value={b.start} onChange={(e) => setRow(i, { breaks: r.breaks.map((x, k) => (k === bi ? { ...x, start: e.target.value } : x)) })} disabled={dis} />
+                      <span className="muted">휴게 {bi + 1}</span>
+                      <Input type="time" aria-label={`${DOW[i]}요일 휴게 ${bi + 1} 시작`} value={b.start} onChange={(e) => setRow(i, { breaks: r.breaks.map((x, k) => (k === bi ? { ...x, start: e.target.value } : x)) })} disabled={dis} />
                       <span>~</span>
-                      <Input type="time" aria-label="휴게 끝" value={b.end} onChange={(e) => setRow(i, { breaks: r.breaks.map((x, k) => (k === bi ? { ...x, end: e.target.value } : x)) })} disabled={dis} />
-                      <Button type="button" size="sm" onClick={() => setRow(i, { breaks: r.breaks.filter((_, k) => k !== bi) })} disabled={dis} aria-label="휴게시간 삭제">
+                      <Input type="time" aria-label={`${DOW[i]}요일 휴게 ${bi + 1} 끝`} value={b.end} onChange={(e) => setRow(i, { breaks: r.breaks.map((x, k) => (k === bi ? { ...x, end: e.target.value } : x)) })} disabled={dis} />
+                      <Button type="button" size="sm" onClick={() => setRow(i, { breaks: r.breaks.filter((_, k) => k !== bi) })} disabled={dis} aria-label={`${DOW[i]}요일 휴게 ${bi + 1} 삭제`}>
                         ✕
                       </Button>
                     </span>
@@ -203,7 +216,7 @@ export function BusinessInfoForm({ initial, mode, readOnly, publicBase }: { init
         <Field label="주소" htmlFor="b-slug" hint={savedSlug.startsWith("b-") ? (mode === "wizard" ? "아직 임시 주소입니다 — 주소까지 정해야 1단계가 완료돼요" : "아직 임시 주소입니다 — 정해 주세요") : `현재: ${publicBase}/@${savedSlug}`}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <span className="muted" style={{ whiteSpace: "nowrap", fontSize: 13 }}>{publicBase.replace(/^https?:\/\//, "")}/@</span>
-            <Input id="b-slug" style={{ flex: 1, minWidth: 160 }} value={slug} onChange={(e) => setSlug(e.target.value.toLowerCase())} disabled={readOnly || slugBusy} placeholder="my-salon" pattern="[a-z0-9\-]{3,30}" />
+            <Input id="b-slug" style={{ flex: 1, minWidth: 160 }} value={slug} onChange={(e) => setSlug(e.target.value.toLowerCase())} disabled={readOnly || slugBusy} placeholder="my-salon" />
             {!readOnly && (
               <Button type="button" onClick={saveSlug} loading={slugBusy} disabled={!slug || slug === savedSlug}>
                 주소 저장

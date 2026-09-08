@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { Alert } from "@/components/ui";
-import { getPolicy, isPolicyTouched } from "@/features/business/policy";
-import { getPublishStatus, nextWizardStep, wizardSteps } from "@/features/business/publish-gate";
-import { getBusinessSettings } from "@/features/business/settings";
+import { isPolicyTouched } from "@/features/business/policy";
+import { loadConsoleBusiness, nextWizardStep, wizardSteps } from "@/features/business/publish-gate";
 import { ConsoleShell } from "@/features/business/ui/ConsoleShell";
 import { consoleViewer } from "@/features/business/ui/console-viewer";
 import { flags } from "@/lib/flags";
@@ -16,14 +15,25 @@ export const metadata = { title: "콘솔 — 마주,봄" };
 export default async function ConsoleHome() {
   const v = await consoleViewer("/console");
   const bid = v.membership.businessId;
-  const [b, status, policy] = await Promise.all([getBusinessSettings(bid), getPublishStatus(bid), getPolicy(bid)]);
+  const { settings: b, status, policy } = await loadConsoleBusiness(bid);
   const steps = wizardSteps(status, { chatEnabled: flags.chat, policyTouched: isPolicyTouched(policy), brandTouched: false });
   const nextStep = nextWizardStep(steps);
   const waitingProduct = !nextStep && steps.some((s) => s.required && !s.done && s.comingSoon);
   return (
     <ConsoleShell current="home" viewer={{ name: v.name, role: v.membership.role }}>
       <h1>{b.name}</h1>
-      {status.live ? (
+      {b.status === "REJECTED" ? (
+        <Alert kind="error">
+          가입 신청이 반려되었어요{b.rejectedReason ? ` — 사유: ${b.rejectedReason}` : ""}.{" "}
+          {v.isOwner && (
+            <Link href="/signup/business" style={{ fontWeight: 700 }}>
+              내용을 고쳐 다시 신청하기
+            </Link>
+          )}
+        </Alert>
+      ) : b.status === "SUSPENDED" ? (
+        <Alert kind="warn">사업장이 일시정지되어 홈페이지 공개가 멈춰 있어요. 예약 취소와 고객 상담만 할 수 있습니다.</Alert>
+      ) : status.live ? (
         <Alert kind="ok">
           홈페이지가 공개 중입니다 —{" "}
           <a href={status.publicUrl} target="_blank" rel="noreferrer">
@@ -31,7 +41,7 @@ export default async function ConsoleHome() {
           </a>
         </Alert>
       ) : status.readyToPublish ? (
-        <Alert kind="info">{status.approved ? "공개 조건을 모두 갖췄어요. 홈페이지 빌더에서 공개 스위치를 켜면 예약을 받기 시작합니다." : "공개 조건을 모두 갖췄어요. 심사가 끝나면 바로 공개할 수 있습니다."}</Alert>
+        <Alert kind="info">{status.approved ? "공개 조건을 모두 갖췄어요. 곧 열리는 홈페이지 빌더에서 공개할 수 있어요." : "공개 조건을 모두 갖췄어요. 심사가 끝나면 바로 공개할 수 있어요."}</Alert>
       ) : (
         <Alert kind="warn">
           예약을 받으려면 매장 정보 · 담당자(공간) · 상품이 필요해요.{nextStep ? ` 다음: ${nextStep.label}` : waitingProduct ? " 상품 등록은 다음 배포에서 열려요 — 그때까지 로고·정책을 다듬어 두세요." : ""}

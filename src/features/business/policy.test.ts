@@ -27,3 +27,15 @@ describe("isPolicyTouched", () => {
     expect(isPolicyTouched({ ...DEFAULT_POLICY, autoConfirm: false })).toBe(true);
   });
 });
+
+describe("mergePolicy", () => {
+  it("옛 키·타입이 틀린 값·null 은 버리고 기본값으로 채운다", async () => {
+    const { mergePolicy } = await import("./policy");
+    const m = mergePolicy({ autoConfirm: false, minLeadTimeMin: null, maxAdvanceDays: "30", legacyKey: 1 } as Record<string, unknown>);
+    expect(m.autoConfirm).toBe(false);
+    expect(m.minLeadTimeMin).toBe(DEFAULT_POLICY.minLeadTimeMin);
+    expect(m.maxAdvanceDays).toBe(DEFAULT_POLICY.maxAdvanceDays);
+    expect("legacyKey" in m).toBe(false);
+    expect(mergePolicy(null)).toEqual(DEFAULT_POLICY);
+  });
+});

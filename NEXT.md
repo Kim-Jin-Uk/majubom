@@ -7,7 +7,7 @@
 
 에픽 #24 사업장 온보딩·설정 콘솔 — #25 위저드 · #26 기본정보·영업시간 · #27 정책 · #28 자원 · #29 공개 조건 · #30 권한 구현.
 브랜치 `feat/3-business-console`. 같은 이메일 고객·사업자 겸업(사업자 가입이 기존 계정에 붙는다) 포함.
-`npm run verify` · vitest · `next build` · Playwright 시나리오(owner/manager) 통과. 스키마 변경 없음.
+`npm run verify` · vitest · `next build` · Playwright 시나리오(owner/manager/겸업·반려 재신청) 통과. 스키마 변경 없음. 병렬 리뷰 2회 반영(PR #155).
 
 ## 막힌 것
 

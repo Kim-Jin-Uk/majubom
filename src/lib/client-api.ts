@@ -70,6 +70,14 @@ export function describeError(r: { error: string; message?: string; retryAfterSe
       return `요청이 너무 많습니다. ${r.retryAfterSec ? `${r.retryAfterSec}초 후` : "잠시 후"} 다시 시도해 주세요`;
     case "UNAUTHENTICATED":
       return "로그인이 필요합니다";
+    case "IN_USE":
+      return "다른 데이터가 참조하고 있어 삭제할 수 없습니다. 대신 비활성화해 주세요";
+    case "SESSION_STALE":
+      return "로그인이 만료됐어요. 다시 로그인해 주세요";
+    case "SLUG_TAKEN":
+      return "다른 사업장이 쓰고 있거나 썼던 주소입니다";
+    case "SLUG_LIMIT":
+      return "주소는 30일에 3번까지만 바꿀 수 있어요";
     case "READ_ONLY":
       return "사업장이 일시정지 상태라 변경할 수 없습니다";
     case "OWNER_ONLY":

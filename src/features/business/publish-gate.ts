@@ -1,7 +1,9 @@
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/db/client";
-import { businesses, products, resources, sitePages } from "@/db/schema";
-import { getBusinessSettings, isInfoComplete } from "./settings";
+import { businesses, products, resources, sitePages, type BusinessPolicy } from "@/db/schema";
+import { HttpError } from "@/features/auth/errors";
+import { mergePolicy } from "./policy";
+import { isInfoComplete, type BusinessSettings } from "./settings";
 
 /**
  * 홈페이지 공개 조건 (FR-BIZ-030, #29) 와 온보딩 진행 상태.
@@ -26,35 +28,58 @@ export type PublishStatus = {
   publicUrl: string;
 };
 
-export async function getPublishStatus(businessId: string): Promise<PublishStatus> {
-  const b = await getBusinessSettings(businessId);
-  const [{ n: activeResources }] = await db
-    .select({ n: sql<number>`count(*)::int` })
-    .from(resources)
-    .where(and(eq(resources.businessId, businessId), eq(resources.isActive, true)));
-  const [{ n: activeProducts }] = await db
-    .select({ n: sql<number>`count(*)::int` })
-    .from(products)
-    .where(and(eq(products.businessId, businessId), eq(products.status, "ACTIVE")));
-  const [page] = await db.select({ isPublished: sitePages.isPublished }).from(sitePages).where(eq(sitePages.businessId, businessId)).limit(1);
-  const [biz] = await db.select({ status: businesses.status }).from(businesses).where(eq(businesses.id, businessId)).limit(1);
+/** 콘솔 화면이 한 번에 필요로 하는 것 — 설정·정책·공개 조건을 businesses 한 행 + 스칼라 서브쿼리로 읽는다 (왕복 1회) */
+export type ConsoleBusiness = { settings: BusinessSettings; policy: BusinessPolicy; status: PublishStatus };
 
-  const infoComplete = isInfoComplete(b);
-  const sitePublished = page?.isPublished ?? false;
-  const approved = biz?.status === "APPROVED";
+export async function loadConsoleBusiness(businessId: string): Promise<ConsoleBusiness> {
+  const [row] = await db
+    .select({
+      id: businesses.id,
+      slug: businesses.slug,
+      name: businesses.name,
+      bizRegNo: businesses.bizRegNo,
+      category: businesses.category,
+      phone: businesses.phone,
+      address: businesses.address,
+      addressDetail: businesses.addressDetail,
+      description: businesses.description,
+      timezone: businesses.timezone,
+      openingHours: businesses.openingHours,
+      status: businesses.status,
+      rejectedReason: businesses.rejectedReason,
+      policy: businesses.policy,
+      activeResources: sql<number>`(select count(*)::int from ${resources} r where r.business_id = ${businesses.id} and r.is_active)`,
+      activeProducts: sql<number>`(select count(*)::int from ${products} p where p.business_id = ${businesses.id} and p.status = 'ACTIVE')`,
+      sitePublished: sql<boolean>`coalesce((select sp.is_published from ${sitePages} sp where sp.business_id = ${businesses.id} limit 1), false)`,
+    })
+    .from(businesses)
+    .where(eq(businesses.id, businessId))
+    .limit(1);
+  if (!row) throw new HttpError(404, "NOT_FOUND");
+  const { policy, activeResources, activeProducts, sitePublished, ...settings } = row;
+  const infoComplete = isInfoComplete(settings);
+  const approved = settings.status === "APPROVED";
   const readyToPublish = infoComplete && activeResources > 0 && activeProducts > 0;
-  const base = process.env.AUTH_URL ?? "http://localhost:3000";
+  const base = (process.env.AUTH_URL ?? "http://localhost:3000").replace(/\/$/, "");
   return {
-    approved,
-    businessStatus: b.status,
-    infoComplete,
-    activeResources,
-    activeProducts,
-    sitePublished,
-    readyToPublish,
-    live: approved && readyToPublish && sitePublished,
-    publicUrl: `${base.replace(/\/$/, "")}/@${b.slug}`,
+    settings,
+    policy: mergePolicy(policy),
+    status: {
+      approved,
+      businessStatus: settings.status,
+      infoComplete,
+      activeResources,
+      activeProducts,
+      sitePublished,
+      readyToPublish,
+      live: approved && readyToPublish && sitePublished,
+      publicUrl: `${base}/@${settings.slug}`,
+    },
   };
+}
+
+export async function getPublishStatus(businessId: string): Promise<PublishStatus> {
+  return (await loadConsoleBusiness(businessId)).status;
 }
 
 /** 위저드 단계 상태 — 사이드바·진행률. 단계 번호는 기획서 6.1 순서 */

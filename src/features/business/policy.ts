@@ -33,20 +33,33 @@ export function isPolicyTouched(p: BusinessPolicy): boolean {
 export async function getPolicy(businessId: string): Promise<BusinessPolicy> {
   const [b] = await db.select({ policy: businesses.policy }).from(businesses).where(eq(businesses.id, businessId)).limit(1);
   if (!b) throw new HttpError(404, "NOT_FOUND");
-  return { ...DEFAULT_POLICY, ...b.policy };
+  return mergePolicy(b.policy);
+}
+
+/** jsonb 에 남은 옛 키·빈 값은 버리고 알려진 9개 키만, 타입이 맞을 때만 취한다 (기본값과 병합) */
+export function mergePolicy(stored: Partial<Record<string, unknown>> | null | undefined): BusinessPolicy {
+  const out = { ...DEFAULT_POLICY } as Record<string, unknown>;
+  for (const k of Object.keys(DEFAULT_POLICY) as (keyof BusinessPolicy)[]) {
+    const v = stored?.[k];
+    if (typeof v === typeof DEFAULT_POLICY[k] && v !== null) out[k] = v;
+  }
+  return out as BusinessPolicy;
 }
 
 /** 변경된 키만 감사 로그 diff 에 남긴다 (FR-ADM-040 "diff 는 변경 필드만") */
 export async function updatePolicy(businessId: string, input: BusinessPolicy, actor: { uid: string; role: "OWNER" | "MANAGER" }, meta: RequestMeta): Promise<BusinessPolicy> {
-  const before = await getPolicy(businessId);
-  const diff: Record<string, { from: unknown; to: unknown }> = {};
-  for (const k of Object.keys(input) as (keyof BusinessPolicy)[]) {
-    if (before[k] !== input[k]) diff[k] = { from: before[k], to: input[k] };
-  }
-  if (Object.keys(diff).length === 0) return before;
-  await db.transaction(async (tx) => {
+  return db.transaction(async (tx) => {
+    // diff 의 기준(before)을 같은 트랜잭션에서 잠그고 읽는다 — 동시 저장이 서로의 변경을 감사 로그에서 지우지 않도록
+    const [b] = await tx.select({ policy: businesses.policy }).from(businesses).where(eq(businesses.id, businessId)).limit(1).for("update");
+    if (!b) throw new HttpError(404, "NOT_FOUND");
+    const before = mergePolicy(b.policy);
+    const diff: Record<string, { from: unknown; to: unknown }> = {};
+    for (const k of Object.keys(DEFAULT_POLICY) as (keyof BusinessPolicy)[]) {
+      if (before[k] !== input[k]) diff[k] = { from: before[k], to: input[k] };
+    }
+    if (Object.keys(diff).length === 0) return before;
     await tx.update(businesses).set({ policy: input }).where(eq(businesses.id, businessId));
     await writeAudit({ action: "POLICY_UPDATE", actorId: actor.uid, actorRole: actor.role, businessId, targetType: "BUSINESS", targetId: businessId, diff, meta }, tx);
+    return input;
   });
-  return input;
 }

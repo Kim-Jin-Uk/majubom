@@ -1,8 +1,8 @@
 import { and, asc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db/client";
-import { businessMembers, reservations, resources, users } from "@/db/schema";
-import { HttpError } from "@/features/auth/errors";
+import { businessMembers, productResources, reservations, resources, users } from "@/db/schema";
+import { HttpError, pgCode } from "@/features/auth/errors";
 
 /**
  * 자원 관리 (FR-RES-010, #28). 자원 타입(STAFF/SPACE/SHARED)과 상품 유형(담당자형/공간형/수업형)은 다른 말이다 —
@@ -99,7 +99,7 @@ export async function createResource(businessId: string, input: ResourceInput): 
       imageUrl: input.imageUrl ?? null,
       capacity: input.capacity,
       memberId,
-      // 같은 문장 안에서 max+1 — 동시 등록이 같은 순번을 받지 않는다
+      // max+1 을 같은 문장에서 — READ COMMITTED 에서 동시 등록은 같은 순번을 받을 수 있지만 정렬은 created_at 이 2차 키라 무해하다
       sortOrder: sql`(select coalesce(max(r2.sort_order), -1) + 1 from resources r2 where r2.business_id = ${businessId})`,
     })
     .returning({ id: resources.id });
@@ -137,7 +137,7 @@ export async function removeResource(businessId: string, resourceId: string): Pr
   if (!cur) throw new HttpError(404, "NOT_FOUND");
   const future = await futureActiveReservations(resourceId);
   const [{ any }] = await db.select({ any: sql<number>`count(*)::int` }).from(reservations).where(eq(reservations.resourceId, resourceId));
-  const [{ linked }] = await db.select({ linked: sql<number>`count(*)::int` }).from(sql`product_resources`).where(sql`resource_id = ${resourceId}`);
+  const [{ linked }] = await db.select({ linked: sql<number>`count(*)::int` }).from(productResources).where(eq(productResources.resourceId, resourceId));
   const scope = and(eq(resources.id, resourceId), eq(resources.businessId, businessId));
   if (any === 0 && linked === 0) {
     // 근무표·휴무 등 다른 참조가 남아 있거나 세는 사이 예약이 생겼으면 FK(23503) — 삭제 대신 비활성화로 떨어진다
@@ -145,7 +145,7 @@ export async function removeResource(businessId: string, resourceId: string): Pr
       await db.delete(resources).where(scope);
       return { ok: true, mode: "DELETED" };
     } catch (e) {
-      if (!(typeof e === "object" && e !== null && (e as { code?: string }).code === "23503")) throw e;
+      if (pgCode(e) !== "23503") throw e;
     }
   }
   await db.update(resources).set({ isActive: false }).where(scope);

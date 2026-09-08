@@ -14,7 +14,8 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const next = safeNext(first(sp.next));
   const s = await auth();
   if (s?.pending) redirect("/signup/complete");
-  if (s?.user.id) redirect(next);
+  // next 가 기본값(/)인 사업자·매니저는 콘솔로 — 고객 홈은 그들의 "다음" 이 아니다
+  if (s?.user.id) redirect(next === "/" && s.principal?.membership?.memberStatus === "ACTIVE" ? "/console" : next);
   return (
     <AuthShell>
       <LoginForm providers={enabledSocialProviders()} next={next} error={first(sp.error)} code={first(sp.code)} reason={first(sp.reason)} verified={first(sp.verified)} notice={first(sp.reset) === "ok" ? "reset" : first(sp.invited) === "ok" ? "invited" : null} />

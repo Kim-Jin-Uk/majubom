@@ -2,10 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Alert } from "@/components/ui";
 import { listMembers } from "@/features/auth/members";
-import { getPolicy, isPolicyTouched } from "@/features/business/policy";
-import { getPublishStatus, wizardSteps } from "@/features/business/publish-gate";
+import { isPolicyTouched } from "@/features/business/policy";
+import { loadConsoleBusiness, wizardSteps } from "@/features/business/publish-gate";
 import { listResources } from "@/features/business/resources";
-import { getBusinessSettings } from "@/features/business/settings";
 import { BusinessInfoForm } from "@/features/business/ui/BusinessInfoForm";
 import { ConsoleShell } from "@/features/business/ui/ConsoleShell";
 import { PolicyForm } from "@/features/business/ui/PolicyForm";
@@ -36,7 +35,7 @@ export default async function OnboardingStep({ params }: { params: Promise<{ ste
   if (!Number.isInteger(n) || n < 1 || n > 6) notFound();
   const v = await consoleViewer(`/console/onboarding/${n}`);
   const bid = v.membership.businessId;
-  const [status, policy] = await Promise.all([getPublishStatus(bid), getPolicy(bid)]);
+  const { settings: b, policy, status } = await loadConsoleBusiness(bid);
   const steps = wizardSteps(status, { chatEnabled: flags.chat, policyTouched: isPolicyTouched(policy), brandTouched: false });
   if (!steps[n - 1].available) notFound();
   const done = steps.filter((s) => s.done && s.available).length;
@@ -45,7 +44,6 @@ export default async function OnboardingStep({ params }: { params: Promise<{ ste
 
   let body: React.ReactNode;
   if (n === 1) {
-    const b = await getBusinessSettings(bid);
     body = <BusinessInfoForm initial={b} mode="wizard" readOnly={!v.isOwner || v.readOnly} publicBase={publicBase()} />;
   } else if (n === 2) {
     const [resources, members] = await Promise.all([listResources(bid), listMembers(bid)]);
@@ -88,7 +86,7 @@ export default async function OnboardingStep({ params }: { params: Promise<{ ste
               <span className="muted" style={{ fontSize: 12.5, whiteSpace: "nowrap" }}>
                 {n}/{total} 단계 · {done}개 완료
               </span>
-              <div className="progress" style={{ flex: 1, maxWidth: 240 }} role="progressbar" aria-valuenow={done} aria-valuemin={0} aria-valuemax={total}>
+              <div className="progress" style={{ flex: 1, maxWidth: 240 }} role="progressbar" aria-label="매장 준비 진행률" aria-valuenow={done} aria-valuemin={0} aria-valuemax={total}>
                 <span style={{ width: `${Math.round((done / total) * 100)}%` }} />
               </div>
               <Link href="/console" className="muted" style={{ marginLeft: "auto", fontSize: 13, whiteSpace: "nowrap" }}>
