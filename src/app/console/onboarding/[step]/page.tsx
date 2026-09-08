@@ -10,6 +10,9 @@ import { ConsoleShell } from "@/features/business/ui/ConsoleShell";
 import { PolicyForm } from "@/features/business/ui/PolicyForm";
 import { ResourcesPanel } from "@/features/business/ui/ResourcesPanel";
 import { WizardSide } from "@/features/business/ui/WizardSide";
+import { listProducts } from "@/features/product/products";
+import { ProductForm } from "@/features/product/ui/ProductForm";
+import { ProductsPanel } from "@/features/product/ui/ProductsPanel";
 import { consoleViewer, publicBase } from "@/features/business/ui/console-viewer";
 import { flags } from "@/lib/flags";
 
@@ -55,10 +58,25 @@ export default async function OnboardingStep({ params }: { params: Promise<{ ste
         </p>
       </>
     );
+  } else if (n === 3) {
+    const [resources, list] = await Promise.all([listResources(bid), listProducts(bid)]);
+    body =
+      list.length > 0 ? (
+        <>
+          <ProductsPanel initial={list} isOwner={v.isOwner} readOnly={v.readOnly} canEdit={(v.isOwner || Boolean(v.membership.permissions.editProduct)) && !v.readOnly} />
+          <div className="actions">
+            <Link href="/console/onboarding/4" className="btn">
+              다음 단계
+            </Link>
+          </div>
+        </>
+      ) : (
+        <ProductForm businessId={bid} resources={resources} initial={null} mode="wizard" limited={false} readOnly={!v.isOwner || v.readOnly} />
+      );
   } else if (n === 5) {
     body = <PolicyForm initial={policy} mode="wizard" readOnly={!v.isOwner || v.readOnly} />;
   } else {
-    const text = n === 3 ? "상품 등록은 다음 배포(상품 · 슬롯 에픽)에서 열립니다. 담당자·공간을 먼저 준비해 두시면 바로 만들 수 있어요." : n === 4 ? "로고 · 색상은 홈페이지 빌더와 함께 열립니다. 그때까지는 기본 디자인으로 공개됩니다." : "고객 상담(채팅)은 곧 열립니다.";
+    const text = n === 4 ? "로고 · 색상은 홈페이지 빌더와 함께 열립니다. 그때까지는 기본 디자인으로 공개됩니다." : "고객 상담(채팅)은 곧 열립니다.";
     body = (
       <>
         <Alert kind="info">{text}</Alert>

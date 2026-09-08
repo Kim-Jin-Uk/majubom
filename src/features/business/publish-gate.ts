@@ -1,6 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/db/client";
-import { businesses, products, resources, sitePages, type BusinessPolicy } from "@/db/schema";
+import { businesses, type BusinessPolicy } from "@/db/schema";
 import { HttpError } from "@/features/auth/errors";
 import { mergePolicy } from "./policy";
 import { isInfoComplete, type BusinessSettings } from "./settings";
@@ -48,9 +48,10 @@ export async function loadConsoleBusiness(businessId: string): Promise<ConsoleBu
       status: businesses.status,
       rejectedReason: businesses.rejectedReason,
       policy: businesses.policy,
-      activeResources: sql<number>`(select count(*)::int from ${resources} r where r.business_id = ${businesses.id} and r.is_active)`,
-      activeProducts: sql<number>`(select count(*)::int from ${products} p where p.business_id = ${businesses.id} and p.status = 'ACTIVE')`,
-      sitePublished: sql<boolean>`coalesce((select sp.is_published from ${sitePages} sp where sp.business_id = ${businesses.id} limit 1), false)`,
+      // 주의: 단일 테이블 select 에서 drizzle 은 ${businesses.id} 를 "id" 로만 렌더링해 서브쿼리 안에서 r.id 로 잡힌다 — 테이블명을 글자로 쓴다
+      activeResources: sql<number>`(select count(*)::int from resources r where r.business_id = businesses.id and r.is_active)`,
+      activeProducts: sql<number>`(select count(*)::int from products p where p.business_id = businesses.id and p.status = 'ACTIVE')`,
+      sitePublished: sql<boolean>`coalesce((select sp.is_published from site_pages sp where sp.business_id = businesses.id limit 1), false)`,
     })
     .from(businesses)
     .where(eq(businesses.id, businessId))
@@ -90,7 +91,7 @@ export function wizardSteps(p: PublishStatus, opts: { chatEnabled: boolean; poli
   return [
     { n: 1, key: "info", label: "매장 정보 · 영업시간", done: p.infoComplete, required: true, available: true },
     { n: 2, key: "resources", label: "담당자 · 공간 등록", done: p.activeResources > 0, required: true, available: true },
-    { n: 3, key: "product", label: "첫 예약 상품", done: p.activeProducts > 0, required: true, available: true, comingSoon: true },
+    { n: 3, key: "product", label: "첫 예약 상품", done: p.activeProducts > 0, required: true, available: true },
     { n: 4, key: "brand", label: "홈페이지 로고 · 색상", done: opts.brandTouched, required: false, available: true, comingSoon: true },
     { n: 5, key: "policy", label: "예약 정책", done: opts.policyTouched, required: false, available: true },
     { n: 6, key: "chat", label: "고객 상담 설정", done: false, required: false, available: opts.chatEnabled, comingSoon: true },

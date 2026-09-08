@@ -892,3 +892,237 @@ button {
     margin-top: 0;
   }
 }
+
+/* ---- 상품 콘솔 (#31) ---- */
+.pre {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  background: var(--surface);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+.pre:hover {
+  border-color: var(--primary-border);
+}
+.pre.sel {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary) inset;
+  background: var(--surface-2);
+}
+.pre .ic {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--primary-tint);
+  color: var(--primary-dark);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pre ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.pre b {
+  font-size: 15px;
+}
+.pre .faint {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.preset-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  align-items: center;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+}
+.chip.on {
+  background: var(--primary-tint);
+  border-color: var(--primary-border);
+  color: var(--primary-dark);
+}
+.chip.default {
+  box-shadow: 0 0 0 2px var(--primary) inset;
+}
+.chip .x {
+  opacity: 0.6;
+}
+.img-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+.img-grid .img {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--muted-fill);
+}
+.img-grid .img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.img-grid .img .badge {
+  position: absolute;
+  left: 6px;
+  top: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: var(--on-primary);
+}
+.img-grid .img .rm {
+  position: absolute;
+  right: 4px;
+  top: 4px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 0;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  cursor: pointer;
+  font-size: 12px;
+}
+.img-grid .add {
+  aspect-ratio: 1;
+  border: 1.5px dashed var(--line);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--text-3);
+  cursor: pointer;
+  background: transparent;
+  font-family: inherit;
+}
+.radio-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.radio-card {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 13.5px;
+}
+.radio-card.on {
+  border-color: var(--primary);
+  background: var(--surface-2);
+}
+.radio-card input {
+  margin-top: 3px;
+  accent-color: var(--primary);
+}
+.radio-card .hint {
+  display: block;
+  font-size: 12px;
+  color: var(--text-3);
+  margin-top: 2px;
+}
+.info-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--primary-tint);
+  color: var(--primary-dark);
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.prod-card {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.prod-card .thumb {
+  width: 56px;
+  height: 56px;
+  border-radius: 10px;
+  background: var(--muted-fill);
+  overflow: hidden;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-3);
+  font-size: 11px;
+}
+.prod-card .thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.prod-card .body {
+  flex: 1;
+  min-width: 0;
+}
+.prod-card .body b {
+  font-size: 15px;
+}
+.prod-card .meta {
+  font-size: 12.5px;
+  color: var(--text-3);
+  margin-top: 3px;
+}
+.prod-card.dim {
+  opacity: 0.6;
+}
+@media (max-width: 860px) {
+  .preset-grid,
+  .radio-cards {
+    grid-template-columns: 1fr;
+  }
+  .img-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
