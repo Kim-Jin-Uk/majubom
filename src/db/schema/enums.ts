@@ -10,6 +10,9 @@ export const userProviderEnum = pgEnum("user_provider", ["LOCAL", "KAKAO", "GOOG
 export const globalRoleEnum = pgEnum("global_role", ["ADMIN", "USER"]);
 export const userStatusEnum = pgEnum("user_status", ["ACTIVE", "SUSPENDED", "WITHDRAWN"]);
 
+/** auth_tokens.kind — 단일사용 토큰 용도 (FR-AUTH-010/020/040 · 고객 이메일 검증) */
+export const authTokenKindEnum = pgEnum("auth_token_kind", ["EMAIL_OTP", "EMAIL_VERIFY", "INVITE", "PASSWORD_RESET"]);
+
 // ── BusinessMember ───────────────────────────────────────────────────
 export const memberRoleEnum = pgEnum("member_role", ["OWNER", "MANAGER"]);
 export const memberStatusEnum = pgEnum("member_status", ["INVITED", "ACTIVE", "INACTIVE"]);

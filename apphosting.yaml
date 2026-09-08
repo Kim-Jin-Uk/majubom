@@ -24,24 +24,49 @@ env:
     secret: DATABASE_URL
     availability: [RUNTIME]
 
+  # ── 인증 (features/auth/README.md) ──
+  # AUTH_URL 은 시크릿이 아니라 값이다. 커스텀 도메인(#12)이 붙으면 https://majubom.kr 로 바꾼다.
+  - variable: AUTH_URL
+    value: https://majubom--majubom-bb43e.asia-east1.hosted.app
+    availability: [RUNTIME]
+
   - variable: AUTH_SECRET
     secret: AUTH_SECRET
     availability: [RUNTIME]
 
-  - variable: AUTH_KAKAO_SECRET
-    secret: AUTH_KAKAO_SECRET
-    availability: [RUNTIME]
+  # 소셜 키는 ID·SECRET 쌍으로만 넣는다 (env 검증이 짝을 요구한다). 카카오 앱 등록(#12) 후 두 줄씩 추가:
+  #   - variable: AUTH_KAKAO_ID     value: <REST API 키>
+  #   - variable: AUTH_KAKAO_SECRET secret: AUTH_KAKAO_SECRET
+  #   - variable: AUTH_GOOGLE_ID    value: <클라이언트 ID>
+  #   - variable: AUTH_GOOGLE_SECRET secret: AUTH_GOOGLE_SECRET
 
   - variable: FIREBASE_ADMIN_PRIVATE_KEY
     secret: FIREBASE_ADMIN_PRIVATE_KEY
     availability: [RUNTIME]
 
+  # ── R2 (다섯 개는 세트 — 일부만 있으면 env 검증이 거부한다) ──
+  - variable: R2_ACCOUNT_ID
+    value: 4eed3b7245890b9f4b0aa2009ced3bbb
+    availability: [RUNTIME]
+  - variable: R2_BUCKET
+    value: majubom-media
+    availability: [RUNTIME]
+  - variable: R2_PUBLIC_BASE_URL
+    value: https://pub-d21aeed42229451a96f808615433a48b.r2.dev
+    availability: [BUILD, RUNTIME]   # next.config 의 images.remotePatterns 가 빌드 시점에 읽는다
+  - variable: R2_ACCESS_KEY_ID
+    secret: R2_ACCESS_KEY_ID
+    availability: [RUNTIME]
   - variable: R2_SECRET_ACCESS_KEY
     secret: R2_SECRET_ACCESS_KEY
     availability: [RUNTIME]
 
+  # ── 메일 (Resend) — production 에서는 필수 ──
   - variable: RESEND_API_KEY
     secret: RESEND_API_KEY
+    availability: [RUNTIME]
+  - variable: MAIL_FROM
+    value: "마주,봄 <onboarding@resend.dev>"   # 도메인 검증(#12) 후 no-reply@majubom.kr
     availability: [RUNTIME]
 
   - variable: CRON_SECRET

@@ -229,3 +229,270 @@ button {
     display: block;
   }
 }
+
+/* ---- 공통 UI (폼 · 카드 · 버튼 · 알림) — src/components/ui ---- */
+
+.auth-shell {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  gap: 20px;
+}
+
+.card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 28px 24px;
+  box-shadow: 0 8px 28px rgba(var(--shadow-rgb), 0.06);
+}
+.card--wide {
+  max-width: 640px;
+}
+
+.card h1 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  letter-spacing: -0.01em;
+}
+.card .sub {
+  margin: 0 0 18px;
+  color: var(--text-2);
+  font-size: 14px;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.field label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-4);
+}
+.field .hint {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.field .err {
+  font-size: 12px;
+  color: var(--bad);
+}
+
+.input {
+  width: 100%;
+  height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  outline: none;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.18);
+}
+.input[aria-invalid="true"] {
+  border-color: var(--bad-strong);
+}
+.input--otp {
+  text-align: center;
+  font-size: 22px;
+  letter-spacing: 0.4em;
+  font-variant-numeric: tabular-nums;
+}
+
+.btn {
+  height: 42px;
+  padding: 0 16px;
+  white-space: nowrap; /* 버튼 문구는 한 줄 — 좁아지면 줄이 아니라 줄바꿈(actions) 으로 대응 */
+  flex-shrink: 0;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  cursor: pointer;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: background 0.12s, border-color 0.12s, opacity 0.12s;
+}
+.btn:hover {
+  background: var(--surface-2);
+}
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.btn--primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--on-primary);
+}
+.btn--primary:hover {
+  background: var(--primary-dark);
+  border-color: var(--primary-dark);
+}
+.btn--danger {
+  color: var(--bad);
+  border-color: var(--bad-border);
+}
+.btn--block {
+  width: 100%;
+}
+.btn--sm {
+  height: 34px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+.btn--kakao {
+  background: #fee500;
+  border-color: #fee500;
+  color: #191919;
+}
+.btn--kakao:hover {
+  background: #f5dc00;
+  border-color: #f5dc00;
+}
+
+.alert {
+  padding: 10px 12px;
+  border-radius: 9px;
+  font-size: 13px;
+  line-height: 1.5;
+  border: 1px solid transparent;
+}
+.alert--error {
+  background: var(--bad-bg);
+  color: var(--bad);
+  border-color: var(--bad-border);
+}
+.alert--ok {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+.alert--warn {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+.alert--info {
+  background: var(--primary-tint);
+  color: var(--primary-dark);
+  border-color: var(--primary-border);
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-3);
+  font-size: 12px;
+  margin: 6px 0;
+}
+.divider::before,
+.divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.links {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  font-size: 13px;
+  color: var(--text-2);
+  margin-top: 16px;
+}
+.links a:hover {
+  color: var(--primary-dark);
+  text-decoration: underline;
+}
+
+/* 폼 필드 두 개를 나란히 (필드가 폭을 나눈다) */
+.row {
+  display: flex;
+  gap: 10px;
+}
+.row > * {
+  flex: 1;
+  min-width: 0;
+}
+@media (max-width: 480px) {
+  .row {
+    flex-direction: column;
+  }
+}
+
+/* 버튼·링크 묶음 — 폭을 나누지 않고 내용 크기대로, 좁으면 다음 줄로 */
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.actions > a {
+  display: inline-flex;
+}
+.actions--center {
+  justify-content: center;
+}
+.actions--end {
+  margin-left: auto;
+}
+
+.banner {
+  width: 100%;
+  padding: 10px 16px;
+  background: var(--warn-bg);
+  color: var(--warn);
+  font-size: 13px;
+  text-align: center;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.table th,
+.table td {
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--border-2);
+  text-align: left;
+}
+.table th {
+  background: var(--table-head);
+  color: var(--text-2);
+  font-weight: 600;
+  font-size: 12px;
+}
+.tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--primary-tint);
+  color: var(--primary-dark);
+}
+.muted {
+  color: var(--text-3);
+}

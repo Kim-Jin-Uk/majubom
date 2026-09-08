@@ -1,13 +1,16 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { assertSameOrigin } from "@/features/auth/csrf";
+import { handle, HttpError, requireConsole, requireUser } from "@/features/auth/guards";
 import { presignUpload, IMAGE_MIME, MAX_IMAGE_BYTES } from "@/lib/storage/r2";
 
 /**
  * POST /api/uploads/presign
  * body: { kind, businessId, mime, bytes }  →  { key, url, publicUrl, expiresIn }
  *
- * TODO(#16 인증): 로그인 + 사업장 스코프 검사(businessId 소속 OWNER/MANAGER, 고객은 review·chat 만).
- *   인증 없이는 절대 배포하지 않는다 — 지금은 GATE 뒤에서 개발용으로만 동작한다.
+ * 인가 (08 §2 보안):
+ * - product · gallery · logo · cover: 그 사업장의 OWNER/MANAGER (editProduct 권한). 타 사업장은 404
+ * - review · chat: 로그인한 고객 누구나 (해당 사업장의 존재 여부는 노출하지 않는다 — 실제 사용 시점에 예약·방 소속을 검사)
  */
 const Body = z.object({
   kind: z.enum(["product", "gallery", "review", "chat", "logo", "cover"]),
@@ -16,12 +19,16 @@ const Body = z.object({
   bytes: z.number().int().positive().max(MAX_IMAGE_BYTES),
 });
 
-export async function POST(req: Request) {
+export const POST = handle(async (req) => {
+  assertSameOrigin(req);
   const parsed = Body.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "INVALID_BODY", issues: parsed.error.issues }, { status: 400 });
+  if (!parsed.success) throw new HttpError(400, "INVALID_BODY", { issues: parsed.error.issues });
+  const { kind, businessId } = parsed.data;
+  if (kind === "review" || kind === "chat") await requireUser();
+  else await requireConsole({ businessId, permission: "editProduct" });
   try {
     return NextResponse.json(await presignUpload(parsed.data));
   } catch (e) {
-    return NextResponse.json({ error: "STORAGE_NOT_CONFIGURED", message: (e as Error).message }, { status: 503 });
+    throw new HttpError(503, "STORAGE_NOT_CONFIGURED", { message: (e as Error).message });
   }
-}
+});
