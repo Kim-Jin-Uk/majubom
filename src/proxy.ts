@@ -206,6 +206,7 @@ export async function proxy(request: NextRequest) {
 
   // 콘솔 읽기 전용(SUSPENDED)은 헤더로 라우트에 알린다 — 쓰기 API 가 각자 거부한다
   const requestHeaders = new Headers(request.headers);
+  requestHeaders.delete("x-majubom-readonly"); // 클라이언트가 보낸 값은 버린다 — 프록시만 정한다
   if (outcome.state === "auth" && outcome.console?.readOnly) requestHeaders.set("x-majubom-readonly", "1");
   // 이 요청에서 JWT 를 새로 썼으면 다운스트림(auth())도 새 값을 보게 요청 쿠키를 바꿔 넘긴다 —
   // 그렇지 않으면 이 한 요청은 옛 스냅샷으로 처리된다.

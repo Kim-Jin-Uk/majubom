@@ -1,49 +1,79 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { Logo } from "@/components/Logo";
-import { ThemeToggle } from "@/components/ThemeToggle";
-import { Alert, Button } from "@/components/ui";
-import { auth } from "@/features/auth/auth";
-import { LogoutButton } from "@/features/auth/ui/LogoutButton";
+import { Alert } from "@/components/ui";
+import { isPolicyTouched } from "@/features/business/policy";
+import { loadConsoleBusiness, nextWizardStep, wizardSteps } from "@/features/business/publish-gate";
+import { ConsoleShell } from "@/features/business/ui/ConsoleShell";
+import { consoleViewer } from "@/features/business/ui/console-viewer";
+import { flags } from "@/lib/flags";
 
 export const metadata = { title: "콘솔 — 마주,봄" };
 
 /**
- * 콘솔 자리표시자. 접근 제어(로그인·소속·상태·이메일 검증)는 프록시가, 상태 배너는 layout.tsx 가 맡는다.
- * 실제 대시보드는 #59(8-1), 온보딩 위저드는 #25(3-1). 지금은 다음 단계만 보여준다.
+ * 콘솔 홈. 대시보드(예약 현황)는 #59(8-1). 지금은 공개 조건과 다음 할 일을 보여준다.
+ * 접근 제어(로그인·소속·상태·이메일 검증)는 프록시가, 상태 배너는 layout.tsx 가 맡는다.
  */
 export default async function ConsoleHome() {
-  const s = await auth();
-  const m = s?.principal?.membership;
-  if (!s?.user.id || !m) redirect("/login?next=%2Fconsole");
+  const v = await consoleViewer("/console");
+  const bid = v.membership.businessId;
+  const { settings: b, status, policy } = await loadConsoleBusiness(bid);
+  const steps = wizardSteps(status, { chatEnabled: flags.chat, policyTouched: isPolicyTouched(policy), brandTouched: false });
+  const nextStep = nextWizardStep(steps);
+  const waitingProduct = !nextStep && steps.some((s) => s.required && !s.done && s.comingSoon);
   return (
-    <main style={{ minHeight: "100dvh", display: "flex", flexDirection: "column" }}>
-      <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderBottom: "1px solid var(--border)" }}>
-        <Link href="/console" aria-label="콘솔 홈">
-          <Logo size={24} />
-        </Link>
-        <div className="actions">
-          <span style={{ fontSize: 13, color: "var(--text-2)", whiteSpace: "nowrap" }}>
-            {s.user.name} · {m.role === "OWNER" ? "사업자" : "매니저"}
-          </span>
-          <ThemeToggle size={32} />
-          <LogoutButton />
-        </div>
-      </header>
-      <section style={{ padding: 24, maxWidth: 720, width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: 16 }}>
-        <h1 style={{ margin: 0, fontSize: 22 }}>{m.businessSlug.startsWith("b-") ? "새 사업장" : m.businessSlug}</h1>
-        <Alert kind="info">콘솔은 준비 중입니다. 온보딩 위저드(매장 정보 → 담당자 → 첫 상품 → 로고 → 정책 → 채팅)가 다음 순서로 붙습니다.</Alert>
-        <div className="actions">
-          {m.role === "OWNER" && (
-            <Link href="/console/members">
-              <Button size="sm">매니저 초대</Button>
+    <ConsoleShell current="home" viewer={{ name: v.name, role: v.membership.role }}>
+      <h1>{b.name}</h1>
+      {b.status === "REJECTED" ? (
+        <Alert kind="error">
+          가입 신청이 반려되었어요{b.rejectedReason ? ` — 사유: ${b.rejectedReason}` : ""}.{" "}
+          {v.isOwner && (
+            <Link href="/signup/business" style={{ fontWeight: 700 }}>
+              내용을 고쳐 다시 신청하기
             </Link>
           )}
-          <Link href="/me/sessions">
-            <Button size="sm">기기 관리</Button>
+        </Alert>
+      ) : b.status === "SUSPENDED" ? (
+        <Alert kind="warn">사업장이 일시정지되어 홈페이지 공개가 멈춰 있어요. 예약 취소와 고객 상담만 할 수 있습니다.</Alert>
+      ) : status.live ? (
+        <Alert kind="ok">
+          홈페이지가 공개 중입니다 —{" "}
+          <a href={status.publicUrl} target="_blank" rel="noreferrer">
+            {status.publicUrl}
+          </a>
+        </Alert>
+      ) : status.readyToPublish ? (
+        <Alert kind="info">{status.approved ? "공개 조건을 모두 갖췄어요. 곧 열리는 홈페이지 빌더에서 공개할 수 있어요." : "공개 조건을 모두 갖췄어요. 심사가 끝나면 바로 공개할 수 있어요."}</Alert>
+      ) : (
+        <Alert kind="warn">
+          예약을 받으려면 매장 정보 · 담당자(공간) · 상품이 필요해요.{nextStep ? ` 다음: ${nextStep.label}` : waitingProduct ? " 상품 등록은 다음 배포에서 열려요 — 그때까지 로고·정책을 다듬어 두세요." : ""}
+        </Alert>
+      )}
+      <section className="panel">
+        <h2>매장 준비</h2>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10 }}>
+          {steps
+            .filter((s) => s.available)
+            .map((s) => (
+              <Link key={s.n} href={`/console/onboarding/${s.n}`} className={s.done ? "wstep done" : "wstep"} style={{ border: "1px solid var(--border)" }}>
+                <span className="n">{s.n}</span>
+                {s.label}
+                <span style={{ marginLeft: "auto", fontSize: 11 }}>{s.done ? "완료" : s.comingSoon ? "준비 중" : s.required ? "필수" : "선택"}</span>
+              </Link>
+            ))}
+        </div>
+        <div className="actions">
+          <Link href={nextStep ? `/console/onboarding/${nextStep.n}` : "/console/onboarding/1"} className="btn btn--primary">
+            {nextStep ? "이어서 준비하기" : "준비 내용 보기"}
           </Link>
+          <Link href="/console/resources" className="btn">
+            담당자 · 공간
+          </Link>
+          {v.isOwner && (
+            <Link href="/console/settings" className="btn">
+              설정
+            </Link>
+          )}
         </div>
       </section>
-    </main>
+    </ConsoleShell>
   );
 }

@@ -23,7 +23,7 @@ export function SignupForm({ providers, next }: { providers: Array<"kakao" | "go
     const r = await apiPost("/api/auth/signup", { name: form.name, email: form.email, password: form.password });
     if (!r.ok) {
       setBusy(false);
-      if (r.error === "EMAIL_TAKEN") setErrors({ email: "이미 사용 중인 이메일입니다" });
+      if (r.error === "EMAIL_TAKEN") setErrors({ email: "이미 가입된 이메일입니다. 로그인해 주세요 — 사업자 계정도 같은 계정으로 예약할 수 있어요" });
       else if (r.issues) setErrors(fieldErrors(r.issues));
       else setMsg(describeError(r));
       return;

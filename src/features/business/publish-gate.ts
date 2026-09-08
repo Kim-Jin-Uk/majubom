@@ -1,0 +1,103 @@
+import { eq, sql } from "drizzle-orm";
+import { db } from "@/db/client";
+import { businesses, products, resources, sitePages, type BusinessPolicy } from "@/db/schema";
+import { HttpError } from "@/features/auth/errors";
+import { mergePolicy } from "./policy";
+import { isInfoComplete, type BusinessSettings } from "./settings";
+
+/**
+ * 홈페이지 공개 조건 (FR-BIZ-030, #29) 와 온보딩 진행 상태.
+ *
+ * 공개 URL(/@slug) 이 살아 있으려면 셋이 모두 참이어야 한다:
+ *   활성 상품 ≥ 1 · 활성 자원 ≥ 1 · SitePage.isPublished — 그리고 사업장 status = APPROVED (관리자 승인은 공개 URL 게이트).
+ * 미충족이면 공개 URL 은 "준비 중" 페이지를 낸다 (공개 홈 에픽 #71 에서 렌더링). 여기서는 판정만.
+ *
+ * 위저드 단계(기획서 6.1)와의 대응: 1 매장 정보 · 2 자원 · 3 상품 이 공개 조건, 4 로고·색상 · 5 정책 · 6 상담은 선택.
+ */
+export type PublishStatus = {
+  approved: boolean;
+  businessStatus: "PENDING" | "APPROVED" | "REJECTED" | "SUSPENDED" | "BLOCKED";
+  infoComplete: boolean;
+  activeResources: number;
+  activeProducts: number;
+  sitePublished: boolean;
+  /** 셋(정보·자원·상품) 충족 — 승인만 남은 상태 */
+  readyToPublish: boolean;
+  /** 실제 공개 중 (조건 + 승인 + isPublished) */
+  live: boolean;
+  publicUrl: string;
+};
+
+/** 콘솔 화면이 한 번에 필요로 하는 것 — 설정·정책·공개 조건을 businesses 한 행 + 스칼라 서브쿼리로 읽는다 (왕복 1회) */
+export type ConsoleBusiness = { settings: BusinessSettings; policy: BusinessPolicy; status: PublishStatus };
+
+export async function loadConsoleBusiness(businessId: string): Promise<ConsoleBusiness> {
+  const [row] = await db
+    .select({
+      id: businesses.id,
+      slug: businesses.slug,
+      name: businesses.name,
+      bizRegNo: businesses.bizRegNo,
+      category: businesses.category,
+      phone: businesses.phone,
+      address: businesses.address,
+      addressDetail: businesses.addressDetail,
+      description: businesses.description,
+      timezone: businesses.timezone,
+      openingHours: businesses.openingHours,
+      status: businesses.status,
+      rejectedReason: businesses.rejectedReason,
+      policy: businesses.policy,
+      activeResources: sql<number>`(select count(*)::int from ${resources} r where r.business_id = ${businesses.id} and r.is_active)`,
+      activeProducts: sql<number>`(select count(*)::int from ${products} p where p.business_id = ${businesses.id} and p.status = 'ACTIVE')`,
+      sitePublished: sql<boolean>`coalesce((select sp.is_published from ${sitePages} sp where sp.business_id = ${businesses.id} limit 1), false)`,
+    })
+    .from(businesses)
+    .where(eq(businesses.id, businessId))
+    .limit(1);
+  if (!row) throw new HttpError(404, "NOT_FOUND");
+  const { policy, activeResources, activeProducts, sitePublished, ...settings } = row;
+  const infoComplete = isInfoComplete(settings);
+  const approved = settings.status === "APPROVED";
+  const readyToPublish = infoComplete && activeResources > 0 && activeProducts > 0;
+  const base = (process.env.AUTH_URL ?? "http://localhost:3000").replace(/\/$/, "");
+  return {
+    settings,
+    policy: mergePolicy(policy),
+    status: {
+      approved,
+      businessStatus: settings.status,
+      infoComplete,
+      activeResources,
+      activeProducts,
+      sitePublished,
+      readyToPublish,
+      live: approved && readyToPublish && sitePublished,
+      publicUrl: `${base}/@${settings.slug}`,
+    },
+  };
+}
+
+export async function getPublishStatus(businessId: string): Promise<PublishStatus> {
+  return (await loadConsoleBusiness(businessId)).status;
+}
+
+/** 위저드 단계 상태 — 사이드바·진행률. 단계 번호는 기획서 6.1 순서 */
+/** comingSoon: 화면은 있지만 실제 입력은 다음 에픽 — "다음 할 일" 추천에서 건너뛴다 */
+export type WizardStep = { n: 1 | 2 | 3 | 4 | 5 | 6; key: "info" | "resources" | "product" | "brand" | "policy" | "chat"; label: string; done: boolean; required: boolean; available: boolean; comingSoon?: boolean };
+
+export function wizardSteps(p: PublishStatus, opts: { chatEnabled: boolean; policyTouched: boolean; brandTouched: boolean }): WizardStep[] {
+  return [
+    { n: 1, key: "info", label: "매장 정보 · 영업시간", done: p.infoComplete, required: true, available: true },
+    { n: 2, key: "resources", label: "담당자 · 공간 등록", done: p.activeResources > 0, required: true, available: true },
+    { n: 3, key: "product", label: "첫 예약 상품", done: p.activeProducts > 0, required: true, available: true, comingSoon: true },
+    { n: 4, key: "brand", label: "홈페이지 로고 · 색상", done: opts.brandTouched, required: false, available: true, comingSoon: true },
+    { n: 5, key: "policy", label: "예약 정책", done: opts.policyTouched, required: false, available: true },
+    { n: 6, key: "chat", label: "고객 상담 설정", done: false, required: false, available: opts.chatEnabled, comingSoon: true },
+  ];
+}
+
+/** 다음에 할 단계 — 아직 안 끝난 필수 단계 중 실제로 할 수 있는 것. 없으면 null (남은 필수가 전부 "준비 중" 이거나 다 끝났다) */
+export function nextWizardStep(steps: WizardStep[]): WizardStep | null {
+  return steps.find((s) => s.required && !s.done && s.available && !s.comingSoon) ?? null;
+}

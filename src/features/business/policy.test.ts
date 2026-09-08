@@ -1,0 +1,41 @@
+import { describe, expect, it } from "vitest";
+import { isPolicyTouched, policySchema } from "./policy";
+import { DEFAULT_POLICY } from "./policy-defaults";
+
+describe("policySchema (FR-BIZ-020)", () => {
+  it("기본값은 통과한다", () => {
+    expect(policySchema.safeParse(DEFAULT_POLICY).success).toBe(true);
+  });
+  it("범위를 벗어나면 필드별 한국어 메시지", () => {
+    const r = policySchema.safeParse({ ...DEFAULT_POLICY, cancelDeadlineHours: 999, maxActivePerCustomer: 0 });
+    expect(r.success).toBe(false);
+    const msgs = Object.fromEntries(r.error!.issues.map((i) => [i.path[0], i.message]));
+    expect(msgs.cancelDeadlineHours).toBe("168시간 이하");
+    expect(msgs.maxActivePerCustomer).toBe("1건 이상");
+  });
+  it("소수·누락 키는 거절 (전체 교체 API 라 부분 입력을 받지 않는다)", () => {
+    expect(policySchema.safeParse({ ...DEFAULT_POLICY, minLeadTimeMin: 1.5 }).success).toBe(false);
+    const rest: Partial<typeof DEFAULT_POLICY> = { ...DEFAULT_POLICY };
+    delete rest.autoConfirm;
+    expect(policySchema.safeParse(rest).success).toBe(false);
+  });
+});
+
+describe("isPolicyTouched", () => {
+  it("기본값과 같으면 false, 하나라도 다르면 true", () => {
+    expect(isPolicyTouched({ ...DEFAULT_POLICY })).toBe(false);
+    expect(isPolicyTouched({ ...DEFAULT_POLICY, autoConfirm: false })).toBe(true);
+  });
+});
+
+describe("mergePolicy", () => {
+  it("옛 키·타입이 틀린 값·null 은 버리고 기본값으로 채운다", async () => {
+    const { mergePolicy } = await import("./policy");
+    const m = mergePolicy({ autoConfirm: false, minLeadTimeMin: null, maxAdvanceDays: "30", legacyKey: 1 } as Record<string, unknown>);
+    expect(m.autoConfirm).toBe(false);
+    expect(m.minLeadTimeMin).toBe(DEFAULT_POLICY.minLeadTimeMin);
+    expect(m.maxAdvanceDays).toBe(DEFAULT_POLICY.maxAdvanceDays);
+    expect("legacyKey" in m).toBe(false);
+    expect(mergePolicy(null)).toEqual(DEFAULT_POLICY);
+  });
+});

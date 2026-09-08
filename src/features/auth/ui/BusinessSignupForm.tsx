@@ -9,9 +9,22 @@ import { hardNavigate } from "./safe-next";
 
 const EMPTY = { businessName: "", bizRegNo: "", category: "", address: "", addressDetail: "", ownerName: "", phone: "", email: "", password: "", confirm: "" };
 
-/** FR-AUTH-010 사업자 가입 신청. 제출 → OTP 메일 → /signup/business/verify */
-export function BusinessSignupForm() {
-  const [form, setForm] = useState(EMPTY);
+/**
+ * FR-AUTH-010 사업자 가입 신청. 제출 → OTP 메일 → /signup/business/verify.
+ * account 가 있으면(로그인한 고객) 그 계정으로 신청 — 이메일·비밀번호 칸 없음. 없으면 이메일·비밀번호를 받고,
+ * 이미 가입된 이메일이면 서버가 비밀번호로 본인을 확인해 그 계정에 사업장을 붙인다.
+ */
+export type SignupPrefill = { businessName: string; bizRegNo: string; category: string; address: string; addressDetail: string; phone: string; rejectedReason: string | null };
+
+export function BusinessSignupForm({ account, prefill }: { account: { email: string; name: string } | null; prefill?: SignupPrefill | null }) {
+  const [form, setForm] = useState({
+    ...EMPTY,
+    email: account?.email ?? "",
+    ownerName: account?.name ?? "",
+    ...(prefill ? { businessName: prefill.businessName, bizRegNo: prefill.bizRegNo, category: prefill.category, address: prefill.address, addressDetail: prefill.addressDetail, phone: prefill.phone } : {}),
+  });
+  /** 서버가 "이미 가입된 이메일" 이라고 알려준 뒤 — 비밀번호 칸이 새 비밀번호가 아니라 기존 계정 확인용으로 바뀐다 */
+  const [existing, setExisting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -24,7 +37,7 @@ export function BusinessSignupForm() {
     e.preventDefault();
     setMsg(null);
     setErrors({});
-    if (form.password !== form.confirm) return setErrors({ confirm: "비밀번호가 서로 다릅니다" });
+    if (!account && !existing && form.password !== form.confirm) return setErrors({ confirm: "비밀번호가 서로 다릅니다" });
     setBusy(true);
     // confirm 은 클라이언트 검증용 — 서버 스키마에 없는 키는 보내지 않는다
     const payload = {
@@ -36,12 +49,21 @@ export function BusinessSignupForm() {
       ownerName: form.ownerName,
       phone: form.phone,
       email: form.email,
-      password: form.password,
+      ...(account ? {} : { password: form.password }),
     };
     const r = await apiPost("/api/auth/business-signup", payload);
     setBusy(false);
     if (!r.ok) {
-      if (r.error === "EMAIL_TAKEN") setErrors({ email: "이미 사용 중인 이메일입니다" });
+      if (r.error === "EMAIL_TAKEN_PASSWORD_MISMATCH") {
+        setExisting(true);
+        setForm((f) => ({ ...f, confirm: "" }));
+        setErrors({ password: existing ? "비밀번호가 맞지 않아요" : "이미 고객으로 가입된 이메일이에요. 그 계정의 비밀번호를 넣으면 같은 계정으로 사업자가 됩니다" });
+      } else if (r.error === "EMAIL_TAKEN_LOGIN_REQUIRED") setErrors({ email: "소셜 계정으로 가입된 이메일이에요. 아래 '로그인하고 신청' 으로 들어와 주세요" });
+      else if (r.error === "SESSION_STALE") setMsg("로그인이 만료됐어요. 다시 로그인한 뒤 신청해 주세요");
+      else if (r.error === "EMAIL_MISMATCH") setErrors({ email: "로그인한 계정의 이메일과 달라요" });
+      else if (r.error === "RATE_LIMITED") setMsg(describeError(r));
+      else if (r.error === "ALREADY_MEMBER") setErrors({ email: "이미 사업장에 소속된 계정입니다 (계정당 사업장 1개)" });
+      else if (r.error === "EMAIL_TAKEN") setErrors({ email: "사용할 수 없는 이메일입니다" });
       else if (r.error === "BIZ_REG_NO_TAKEN") setErrors({ bizRegNo: "이미 등록된 사업자번호입니다" });
       else if (r.issues) setErrors(fieldErrors(r.issues));
       else setMsg(describeError(r));
@@ -54,6 +76,11 @@ export function BusinessSignupForm() {
     <>
       <h1>사업자 가입 신청</h1>
       <p className="sub">심사(1영업일) 중에도 콘솔은 바로 열립니다. 매장·자원·상품을 준비해 두면 승인 즉시 예약 페이지가 공개돼요.</p>
+      {prefill && (
+        <Alert kind="warn">
+          이전 신청이 반려되었어요{prefill.rejectedReason ? ` — 사유: ${prefill.rejectedReason}` : ""}. 내용을 고쳐 다시 신청하면 심사가 다시 시작됩니다.
+        </Alert>
+      )}
       {msg && <Alert kind="error">{msg}</Alert>}
       <form className="form" onSubmit={onSubmit} style={{ marginTop: 12 }}>
         <Field label="상호" htmlFor="businessName" error={errors.businessName}>
@@ -90,25 +117,47 @@ export function BusinessSignupForm() {
             <Input id="phone" type="tel" required autoComplete="tel" placeholder="010-0000-0000" value={form.phone} onChange={set("phone")} aria-invalid={!!errors.phone} />
           </Field>
         </div>
-        <Field label="이메일" htmlFor="email" error={errors.email} hint="인증번호를 이 주소로 보내드려요. 콘솔 로그인 아이디가 됩니다.">
-          <Input id="email" type="email" required autoComplete="email" value={form.email} onChange={set("email")} aria-invalid={!!errors.email} />
-        </Field>
-        <div className="row">
-          <Field label="비밀번호" htmlFor="password" error={errors.password} hint="8자 이상, 영문과 숫자 포함">
-            <Input id="password" type="password" required autoComplete="new-password" minLength={8} value={form.password} onChange={set("password")} aria-invalid={!!errors.password} />
-          </Field>
-          <Field label="비밀번호 확인" htmlFor="confirm" error={errors.confirm}>
-            <Input id="confirm" type="password" required autoComplete="new-password" value={form.confirm} onChange={set("confirm")} aria-invalid={!!errors.confirm} />
-          </Field>
-        </div>
+        {account ? (
+          <Alert kind="info">
+            현재 로그인한 계정 <b>{account.email}</b> 으로 신청합니다. 고객 예약과 사업장 콘솔을 한 계정으로 씁니다.
+          </Alert>
+        ) : (
+          <>
+            <Field label="이메일" htmlFor="email" error={errors.email} hint="인증번호를 이 주소로 보내드려요. 이미 고객으로 가입한 이메일이면 그 비밀번호를 넣으세요 — 같은 계정으로 사업자가 됩니다.">
+              <Input id="email" type="email" required autoComplete="email" value={form.email} onChange={set("email")} aria-invalid={!!errors.email} />
+            </Field>
+            {existing ? (
+              <Field label="기존 계정 비밀번호" htmlFor="password" error={errors.password} hint="고객 계정에 로그인할 때 쓰는 비밀번호예요">
+                <Input id="password" type="password" required autoComplete="current-password" value={form.password} onChange={set("password")} aria-invalid={!!errors.password} />
+              </Field>
+            ) : (
+              <div className="row">
+                <Field label="비밀번호" htmlFor="password" error={errors.password} hint="8자 이상, 영문과 숫자 포함">
+                  <Input id="password" type="password" required autoComplete="new-password" minLength={8} value={form.password} onChange={set("password")} aria-invalid={!!errors.password} />
+                </Field>
+                <Field label="비밀번호 확인" htmlFor="confirm" error={errors.confirm}>
+                  <Input id="confirm" type="password" required autoComplete="new-password" value={form.confirm} onChange={set("confirm")} aria-invalid={!!errors.confirm} />
+                </Field>
+              </div>
+            )}
+            {(existing || errors.email) && (
+              <div className="links" style={{ marginTop: -4 }}>
+                <Link href="/login?next=%2Fsignup%2Fbusiness">로그인하고 신청</Link>
+                <Link href="/forgot-password">비밀번호를 잊었어요</Link>
+              </div>
+            )}
+          </>
+        )}
         <Button type="submit" variant="primary" block loading={busy}>
           인증번호 받기
         </Button>
       </form>
-      <div className="links">
-        <Link href="/login">이미 계정이 있어요</Link>
-        <Link href="/signup">고객으로 가입</Link>
-      </div>
+      {!account && (
+        <div className="links">
+          <Link href="/login?next=%2Fsignup%2Fbusiness">이미 계정이 있어요</Link>
+          <Link href="/signup">고객으로 가입</Link>
+        </div>
+      )}
     </>
   );
 }

@@ -193,5 +193,6 @@ export async function listMembers(businessId: string): Promise<MemberListItem[]>
     .innerJoin(users, eq(users.id, businessMembers.userId))
     .where(eq(businessMembers.businessId, businessId))
     .orderBy(businessMembers.createdAt);
-  return rows.map((r) => ({ ...r, emailMasked: maskEmail(r.email), permissions: r.permissions ?? {} }));
+  // 이메일 원문은 응답·RSC props 에 싣지 않는다 — 마스킹만 (매니저도 이 목록을 본다)
+  return rows.map(({ email, ...r }) => ({ ...r, emailMasked: maskEmail(email), permissions: r.permissions ?? {} }));
 }

@@ -43,7 +43,8 @@ export function LoginForm({ providers, next, error, code, reason, verified, noti
       setMsg(ERROR_TEXT[r?.code ?? ""] ?? ERROR_TEXT[r?.error ?? ""] ?? "로그인에 실패했습니다");
       return;
     }
-    hardNavigate(next);
+    // 기본 목적지(/)면 로그인 페이지를 한 번 더 거친다 — 서버가 소속(사업자·매니저)을 보고 /console 로 보낸다
+    hardNavigate(next === "/" ? "/login?next=%2F" : next);
   }
 
   return (

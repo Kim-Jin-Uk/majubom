@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { MemberPermissions } from "@/db/schema";
 import { auth } from "./auth";
-import { HttpError } from "./errors";
+import { HttpError, pgCode } from "./errors";
 import type { Membership, Principal } from "./principal";
 
 export { HttpError };
@@ -73,13 +73,11 @@ export function handle(fn: (req: Request, ctx: { params: Promise<Record<string, 
     } catch (e) {
       if (e instanceof HttpError) return e.toResponse();
       // unique 위반(동시 가입 등 read-then-write 경합)은 서버 오류가 아니라 충돌이다 — 정합성은 제약이 지켰다
-      if (isPgError(e, "23505")) return new HttpError(409, "CONFLICT", { constraint: (e as { constraint?: string }).constraint }).toResponse();
+      if (pgCode(e) === "23505") return new HttpError(409, "CONFLICT").toResponse();
+      // FK 위반(참조 중인 행 삭제 등)도 충돌 — 제약 이름은 내부 구조라 응답에 싣지 않는다
+      if (pgCode(e) === "23503") return new HttpError(409, "IN_USE").toResponse();
       console.error(`[api] ${req.method} ${new URL(req.url).pathname}:`, e);
       return NextResponse.json({ error: "INTERNAL" }, { status: 500 });
     }
   };
-}
-
-function isPgError(e: unknown, code: string): boolean {
-  return typeof e === "object" && e !== null && (e as { code?: unknown }).code === code;
 }
