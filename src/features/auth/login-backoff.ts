@@ -12,6 +12,7 @@ import { LOGIN_FAIL_FREE_ATTEMPTS, LOGIN_FAIL_MAX_DELAY_SEC, LOGIN_FAIL_WINDOW_M
  */
 export type BackoffState = { blocked: boolean; retryAfterSec: number; fails: number };
 
+/** `email` 자리에는 계정 키가 온다 — 이메일 또는 "totp:<uid>" 같은 용도별 키. 해시되어 저장된다 */
 export async function loginBackoff(email: string): Promise<BackoffState> {
   const since = new Date(Date.now() - LOGIN_FAIL_WINDOW_MIN * 60_000);
   const rows = await db
@@ -28,7 +29,7 @@ export async function loginBackoff(email: string): Promise<BackoffState> {
   return remainingMs > 0 ? { blocked: true, retryAfterSec: Math.ceil(remainingMs / 1000), fails } : { blocked: false, retryAfterSec: 0, fails };
 }
 
-export async function recordLoginFail(email: string, meta: RequestMeta, reason: "NO_USER" | "BAD_PASSWORD" | "INACTIVE" | "SOCIAL_ONLY" | "BACKOFF"): Promise<void> {
+export async function recordLoginFail(email: string, meta: RequestMeta, reason: "NO_USER" | "BAD_PASSWORD" | "INACTIVE" | "SOCIAL_ONLY" | "BACKOFF" | "BAD_TOTP"): Promise<void> {
   await writeAudit({
     action: "LOGIN_FAIL",
     actorRole: null,

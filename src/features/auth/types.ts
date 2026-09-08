@@ -33,6 +33,8 @@ declare module "next-auth" {
     /** 소셜 이메일 미제공 — /signup/complete 로 보낸다 */
     pending: PendingProfile | null;
     accessExp: number | null;
+    /** 현재 리프레시 세션 id (기기 목록에서 "이 기기" 표시) */
+    sid: string | null;
   }
 }
 

@@ -145,3 +145,13 @@ export async function listSessions(userId: string, currentSid?: string): Promise
     .orderBy(desc(sessions.lastUsedAt));
   return rows.map((r) => ({ ...r, current: r.id === currentSid }));
 }
+
+/** 폐기·만료되지 않은 세션인가 (콘솔 매 요청 검사용, 인덱스 1회) */
+export async function isSessionAlive(sid: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: sessions.id })
+    .from(sessions)
+    .where(and(eq(sessions.id, sid), isNull(sessions.revokedAt), gt(sessions.expiresAt, new Date())))
+    .limit(1);
+  return Boolean(row);
+}

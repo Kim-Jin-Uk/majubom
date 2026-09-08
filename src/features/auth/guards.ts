@@ -18,13 +18,13 @@ export type Viewer = { uid: string; sid: string | null; principal: Principal; mf
 export async function requireUser(): Promise<Viewer> {
   const s = await auth();
   if (!s || !s.principal || !s.user.id) throw new HttpError(401, "UNAUTHENTICATED");
-  return { uid: s.user.id, sid: null, principal: s.principal, mfa: s.mfa };
+  return { uid: s.user.id, sid: s.sid, principal: s.principal, mfa: s.mfa };
 }
 
 export async function optionalUser(): Promise<Viewer | null> {
   const s = await auth();
   if (!s || !s.principal || !s.user.id) return null;
-  return { uid: s.user.id, sid: null, principal: s.principal, mfa: s.mfa };
+  return { uid: s.user.id, sid: s.sid, principal: s.principal, mfa: s.mfa };
 }
 
 export type ConsoleViewer = Viewer & { membership: Membership };

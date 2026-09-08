@@ -22,6 +22,7 @@
     "db:reset": "tsx scripts/db/reset.ts",
     "db:studio": "drizzle-kit studio",
     "job:cleanup-unverified": "tsx scripts/jobs/cleanup-unverified.ts",
+    "admin:promote": "tsx scripts/db/promote-admin.ts",
     "r2:cors": "node scripts/dev/r2-cors.mjs",
     "r2:verify": "tsx scripts/dev/verify-r2.mts"
   },

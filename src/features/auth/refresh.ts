@@ -4,7 +4,7 @@ import { requestMeta } from "@/lib/request-meta";
 import { ACCESS_TTL_SEC, ADMIN_PREFIXES, CONSOLE_PREFIXES, COOKIE_REFRESH, COOKIE_SESSION, REFRESH_TTL_SEC } from "./constants";
 import { clearedRefreshCookie, clearedSessionCookie, refreshCookie } from "./cookies";
 import { consoleAccess, loadPrincipal, principalEquals, userLoginDenial, type AccessDenial, type Principal } from "./principal";
-import { parseRefresh, rotateSession } from "./session-store";
+import { isSessionAlive, parseRefresh, rotateSession } from "./session-store";
 import "./types";
 
 /**
@@ -86,6 +86,9 @@ export async function refreshSession(req: NextRequest): Promise<RefreshOutcome> 
     token.accessExp = now + ACCESS_TTL_SEC;
     changed = true;
   }
+
+  // 콘솔은 기기 폐기(/api/me/sessions)도 즉시 반영한다 — 회전 때만 보면 최대 15분 늦는다
+  if (onConsole && !needsRefresh && !(await isSessionAlive(token.sid))) return logout("REFRESH_REVOKED");
 
   let principal = token.p ?? null;
   if (needsRefresh || onConsole || !principal) {

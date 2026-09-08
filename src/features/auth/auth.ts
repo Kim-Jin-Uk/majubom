@@ -202,6 +202,7 @@ export const authConfig: NextAuthConfig = {
       session.mfa = token.mfa ?? "pending";
       session.pending = token.pending ?? null;
       session.accessExp = token.accessExp ?? null;
+      session.sid = token.sid ?? null;
       return session;
     },
   },
