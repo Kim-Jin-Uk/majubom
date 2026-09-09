@@ -33,7 +33,7 @@ npm run dev
 | 명령 | 하는 일 |
 |---|---|
 | `npm run verify` | typecheck + lint + test — **push 전에 한 번** |
-| `npm test` | vitest 유닛 (슬롯 계산 40건은 `todo`, 구현은 이슈 #7) |
+| `npm test` | vitest 유닛 (슬롯 계산 40건 포함 — FR-BOOK-010 구현 완료) |
 | `npm run test:rules:emu` | Firestore 보안 규칙 테스트 (에뮬레이터 기동 포함, Java 필요) |
 | `npm run db:generate` | 스키마 변경 → 마이그레이션 SQL 생성 |
 | `npm run db:migrate` | 마이그레이션 적용 (직결 연결 · `lock_timeout 3s` · 재시도) |

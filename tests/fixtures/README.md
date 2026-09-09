@@ -84,3 +84,4 @@ FR-BOOK-010 본문만으로 결정되지 않아 픽스처가 택한 해석. 명�
 | A9 | FIXED에서 `excluded`는 구간이 비어도(휴무 등) 그날 정의된 회차마다 `OUT_OF_WINDOW`로 열거한다. 판정 순서는 OUT_OF_WINDOW → LEAD_TIME → FULL | 알고리즘은 `windows is empty: continue`지만 위젯이 "운영 시간 외"를 보여줘야 함 | S16~S22 |
 | A10 | `durationOptions`가 없는 상품에 `query.durationMin`이 와도 무시하고 `product.durationMin`을 쓴다 | 명세 의사코드 `durationOptions ? assertIn : product.durationMin` 문자 그대로 | — |
 | A11 | 입력 검증 실패는 throw가 아니라 `{ error }` 반환. API 계층이 400으로 매핑 | 순수 함수 테스트 용이성 | S34 S36 S39 |
+| A12 | `partySize < 1`(0·음수·소수)은 `PARTY_SIZE_INVALID` 오류다 | 명세는 상한만 말한다. 하한이 없으면 `partySize 0`이 만석 슬롯을 "잔여 0 ≥ 0"으로 통과시킨다(구현 시 발견, `src/features/booking/slots.test.ts`) | — |
