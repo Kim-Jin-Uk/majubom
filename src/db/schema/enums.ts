@@ -112,10 +112,12 @@ export const auditActionEnum = pgEnum("audit_action", [
   "BUSINESS_SUSPEND",
   "BUSINESS_BLOCK",
   "BUSINESS_RESTORE",
+  "BUSINESS_UPDATE",
   "PLAN_LIMIT_UPDATE",
   // 구성원
   "MEMBER_CREATE",
   "MEMBER_DEACTIVATE",
+  "MEMBER_REACTIVATE",
   "MEMBER_PERMISSION_UPDATE",
   // 상품·정책
   "PRODUCT_DELETE",

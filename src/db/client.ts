@@ -13,7 +13,8 @@ export const pool =
   globalForDb.pool ??
   new Pool({
     connectionString: process.env.DATABASE_URL,
-    max: 5,
+    // 기본 5. 동시성 회귀 테스트처럼 한 프로세스가 수십 트랜잭션을 동시에 여는 경우에만 올린다 (vitest.config.ts)
+    max: Number(process.env.DB_POOL_MAX ?? 5),
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 10_000, // Neon 콜드스타트 대비
   });
