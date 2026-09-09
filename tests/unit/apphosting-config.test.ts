@@ -70,11 +70,21 @@ describe("apphosting.yaml", () => {
     expect(both.map((e) => e.variable)).toEqual([]);
   });
 
-  it("코드가 요구하는 시크릿이 전부 선언돼 있다", () => {
-    // env.ts 가 production 에서 요구하거나, 없으면 기능이 조용히 죽는 것들
-    const required = ["DATABASE_URL", "AUTH_SECRET", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "RESEND_API_KEY", "CRON_SECRET"];
+  /**
+   * 선언된 시크릿 목록을 **정확히** 고정한다. 빠지면 기능이 죽고, 늘어나면 배포가 죽는다 —
+   * 선언만 해 두고 Secret Manager 에 안 만들면 `fah/misconfigured-secret` 으로 빌드가 통째로 실패하는데,
+   * 그 실패는 Cloud Build 로그 안에만 남는다(실제로 그렇게 5일을 잃었다).
+   * 이 목록에 한 줄 더할 때는 `firebase apphosting:secrets:set <이름>` 도 같이 하는 것이 규약이다.
+   */
+  it("선언된 시크릿이 정확히 이 목록이다", () => {
+    const expected = ["DATABASE_URL", "AUTH_SECRET", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "RESEND_API_KEY", "CRON_SECRET"];
     const declared = entries.filter((e) => e.keys.secret !== undefined).map((e) => e.variable);
-    expect(required.filter((r) => !declared.includes(r)), "선언되지 않은 시크릿").toEqual([]);
+    expect(declared.slice().sort(), "Secret Manager 에 실제로 만들어 둔 것과 같아야 한다").toEqual(expected.slice().sort());
+  });
+
+  it("시크릿 이름과 변수 이름이 같다 — 다르면 어느 쪽을 만들어야 하는지 헷갈린다", () => {
+    const mismatched = entries.filter((e) => e.keys.secret !== undefined && e.keys.secret !== e.variable);
+    expect(mismatched.map((e) => `${e.variable} → ${e.keys.secret}`)).toEqual([]);
   });
 
   it("R2 다섯 값이 세트로 있다 — env 검증이 짝을 요구한다", () => {
