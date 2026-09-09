@@ -32,7 +32,9 @@ export type Utilization = { busyMin: number; openMin: number; rate: number | nul
  *
  * 재고를 시간이 아니라 좌석×시간으로 세는 이유: 정원 4인 방에 1인 예약 넷이 같은 시각에 들어오면
  * 방은 한 시간만 쓰였는데 예약 길이를 그냥 더하면 네 시간이 된다 — "운영 9시간 중 4시간 사용" 같은 거짓말이 나온다.
- * 정원 1 은 팀 단위라 인원과 무관하게 1좌석으로 센다(tests/fixtures/README.md 가정 A1).
+ * 판 좌석은 예약의 `exclusive` 스냅샷으로 센다(정원 1 = 팀 단위라 인원과 무관하게 1좌석 — 가정 A1).
+ * 가진 좌석은 **지금** 정원이다: 분자는 "그때 판 것", 분모는 "지금 가진 것" 이라 정원을 줄이면 비율이 올라간다 —
+ * 재고를 줄였으니 그게 맞다. 정원을 줄인 뒤 과거 구간이 100% 에 붙을 수 있어 `Math.min` 으로 막는다.
  *
  * 분자는 **운영시간 안으로 잘라서** 센다. 점유(버퍼 포함)가 개점 전·폐점 후로 나갈 수 있고,
  * 그대로 더하면 100% 를 넘는 값이 나오는데 그건 지표가 아니라 잡음이다. 다른 해석의 여지는 LATER.md L-33.
@@ -62,7 +64,7 @@ export async function utilization(businessId: string, from: ISODate, to: ISODate
   // 분모(운영시간)에는 들어오는데 분자에는 없어서 가동률이 매주 낮게 나온다
   const hi = new Date(localToInstant(to, 2880, ctx.tz));
   const rows = await db
-    .select({ resourceId: reservations.resourceId, startAt: reservations.startAt, endAt: reservations.endAt, partySize: reservations.partySize, before: reservations.bufferBeforeMin, after: reservations.bufferAfterMin })
+    .select({ resourceId: reservations.resourceId, startAt: reservations.startAt, endAt: reservations.endAt, partySize: reservations.partySize, exclusive: reservations.exclusive, before: reservations.bufferBeforeMin, after: reservations.bufferAfterMin })
     .from(reservations)
     .where(
       and(
@@ -76,13 +78,15 @@ export async function utilization(businessId: string, from: ISODate, to: ISODate
       ),
     );
 
-  const capacityOf = new Map(pool.map((r) => [r.id, r.capacity]));
   const busy = new Map<string, number>();
   for (const x of rows) {
     const occupy = { start: x.startAt.getTime() - x.before * 60_000, end: x.endAt.getTime() + x.after * 60_000 };
     let min = 0;
     for (const w of span.get(x.resourceId) ?? []) min += overlapMs(occupy, w);
-    const seats = (capacityOf.get(x.resourceId) ?? 1) === 1 ? 1 : x.partySize;
+    // 좌석 수는 예약이 들고 있는 **스냅샷**으로 정한다. `exclusive` 는 생성 시점의 `resourceCapacity === 1` 이라
+    // (create.ts), 지금 정원으로 다시 판정하면 정원을 N→1 로 줄인 순간 과거 예약이 전부 1좌석으로 재집계된다 —
+    // 지난주 가동률이 이번 주 설정 변경으로 바뀌는 지표는 비교할 수 없다
+    const seats = x.exclusive ? 1 : x.partySize;
     busy.set(x.resourceId, (busy.get(x.resourceId) ?? 0) + (min / 60_000) * seats);
   }
 

@@ -328,5 +328,28 @@ describe.skipIf(!enabled)("대시보드 · 캘린더 (FR-BOOK-080)", () => {
     const u = await utilization(f.businessId, day, day, ctx, room.id);
     expect(u.openMin, "20:00~02:00 = 360분").toBe(360);
     expect(u.busyMin, "조회 상한이 24:00 이면 여기서 0 이 된다").toBe(60);
+
+    // 다음 날 하루 보기 — 달력 날짜로만 가르면 여기 01:00 자리에 유령 블록이 뜬다.
+    // 그 시각은 다음 날 운영시간(20:00~) 밖이라 닫힌 구간에 떠 있고, 전날 컬럼에도 있으니 같은 예약이 두 번 보인다
+    const nextCal = await getCalendar(f.ownerActor, addDays(day, 1), addDays(day, 1));
+    expect(nextCal.columns.flatMap((c) => c.days.flatMap((d) => d.blocks)).map((b) => b.id), "전날 영업일 것이 다음 날 컬럼에 새면 안 된다").not.toContain(a.id);
+  }, 60_000);
+
+  it("좌석 수는 예약의 스냅샷(exclusive)이다 — 나중에 정원을 바꿔도 과거 집계가 흔들리지 않는다", async () => {
+    const f = await make();
+    const day = kstDay(at(0));
+    await db.update(resources).set({ capacity: 4 }).where(eq(resources.id, f.mine));
+    await db.update(products).set({ capacityPerSlot: 4, maxPartySize: 4 }).where(eq(products.id, f.productId));
+    const two = await createReservation({ productId: f.productId, startAt: at(1), partySize: 2, resourceId: f.mine, customerNote: null }, { uid: f.customerId });
+    await db.update(reservations).set({ status: "CONFIRMED" }).where(eq(reservations.id, two.id));
+
+    const before = await utilization(f.businessId, day, day, await loadOperatingContext(f.businessId, day, day), f.mine);
+    expect(before.busyMin, "2좌석 × 60분").toBe(120);
+
+    // 사업자가 정원을 4 → 1 로 줄인다. 예약은 그대로 남는다(exclusive=false 스냅샷)
+    await db.update(resources).set({ capacity: 1 }).where(eq(resources.id, f.mine));
+    const after = await utilization(f.businessId, day, day, await loadOperatingContext(f.businessId, day, day), f.mine);
+    expect(after.busyMin, "지금 정원으로 다시 판정하면 60 으로 줄어든다 — 지난 기록이 설정 변경으로 바뀌면 안 된다").toBe(120);
+    expect(after.openMin, "가진 재고는 지금 정원 기준").toBe(DAY_MIN);
   }, 60_000);
 });

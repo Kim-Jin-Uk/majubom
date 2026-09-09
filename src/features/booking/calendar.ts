@@ -3,7 +3,7 @@ import { db } from "@/db/client";
 import { products, reservations, users } from "@/db/schema";
 import { HttpError } from "@/features/auth/errors";
 import { openingWindows, operatingWindows } from "@/features/schedule/operating";
-import { dateRange, type Interval } from "@/features/schedule/resolve";
+import { addDays, dateRange, type Interval } from "@/features/schedule/resolve";
 import type { ISODate, ReservationStatus } from "./slot-types";
 import { loadOperatingContext } from "./operating-context";
 import { scope, type ConsoleActor } from "./console";
@@ -50,7 +50,9 @@ export async function getCalendar(actor: ConsoleActor, from: ISODate, to: ISODat
   if (dates.length === 0 || dates.length > 31) throw new HttpError(400, "INVALID_RANGE");
   // 스코프는 목록·상세와 **같은 함수**로 정한다 — 호출자가 넘기게 두면 언젠가 null 을 넘기는 자리가 생긴다
   const { scoped, mineId } = await scope(actor);
-  const ctx = await loadOperatingContext(actor.businessId, from, to);
+  // 전날 것도 계산해야 한다 — 자정을 넘겨 영업하는 날은 **다음 달력 날짜의 새벽까지** 자기 영업일이라,
+  // 그 전날을 안 보면 어느 컬럼 임자인지 판정할 수 없다
+  const ctx = await loadOperatingContext(actor.businessId, addDays(from, -1), to);
   const pool = ctx.resources.filter((r) => !scoped || r.id === scoped);
 
   const lo = new Date(localToInstant(from, 0, ctx.tz));
@@ -89,28 +91,35 @@ export async function getCalendar(actor: ConsoleActor, from: ISODate, to: ISODat
         .orderBy(asc(reservations.startAt))
     : [];
 
+  /** 그 자원의 그날 운영 구간 (분). 전날도 필요하다 — 아래 `ownsBlock` 참고 */
+  const winOf = (r: (typeof pool)[number], date: ISODate) =>
+    operatingWindows({ date, resource: r, opening: openingWindows(ctx.openingHours, date, true), openingHours: ctx.openingHours, schedules: ctx.schedules, exceptions: ctx.exceptions, holidays: ctx.holidays });
+  /** 그 영업일이 덮는 끝 시각 (분). 자정을 넘기면 1440 초과 */
+  const endOf = (r: (typeof pool)[number], date: ISODate) => Math.max(1440, ...winOf(r, date).map((w) => w.end));
+
   let gridStart = 24 * 60;
   let gridEnd = 0;
-  /** 한 예약은 한 컬럼에만. 앞 날짜의 영업일이 자정을 넘겨 가져가면 뒤 날짜는 건너뛴다 */
-  const claimed = new Set<string>();
   const columns: CalendarColumn[] = pool.map((r) => {
     const days: CalendarDay[] = dates.map((date) => {
-      const open = operatingWindows({ date, resource: r, opening: openingWindows(ctx.openingHours, date, true), openingHours: ctx.openingHours, schedules: ctx.schedules, exceptions: ctx.exceptions, holidays: ctx.holidays });
+      const open = winOf(r, date);
       for (const w of open) {
         gridStart = Math.min(gridStart, w.start);
         gridEnd = Math.max(gridEnd, w.end);
       }
       const dayZero = localToInstant(date, 0, ctx.tz);
+      const prev = addDays(date, -1);
+      const prevZero = localToInstant(prev, 0, ctx.tz);
       // 이 컬럼이 덮는 범위 = 00:00 부터 그날 영업이 끝나는 시각까지(자정을 넘기면 1440 초과).
-      // 심야 영업(20:00~02:00)의 01:00 예약은 **달력상 다음 날**이지만 영업일은 이 날이다 —
-      // 달력 날짜로 가르면 그 예약이 다음 컬럼 격자(20:00~) 위쪽으로 튀어나가 화면에서 사라진다
-      const dayEnd = Math.max(1440, ...open.map((w) => w.end), 1440);
+      // 심야 영업(20:00~02:00)의 01:00 예약은 **달력상 다음 날**이지만 영업일은 전날이다.
+      // 달력 날짜로만 가르면 그 예약이 이 컬럼의 닫힌 구간에 유령처럼 뜨고, 전날 컬럼에도 떠서 같은 예약이 두 번 보인다.
+      // `dates` 안에서만 중복을 막으면 기간의 첫날(전날이 범위 밖)에서 그대로 새어 나온다 — 그래서 전날 구간을 직접 본다.
+      const dayEnd = Math.max(1440, ...open.map((w) => w.end));
+      const prevEnd = endOf(r, prev);
       const blocks: CalendarBlock[] = rows
         .filter((x) => x.resourceId === r.id)
-        .map((x) => ({ x, startMin: Math.round((x.startAt.getTime() - dayZero) / 60_000), endMin: Math.round((x.endAt.getTime() - dayZero) / 60_000) }))
-        .filter((p) => p.startMin >= 0 && p.startMin < dayEnd && !claimed.has(p.x.id))
+        .map((x) => ({ x, startMin: Math.round((x.startAt.getTime() - dayZero) / 60_000), endMin: Math.round((x.endAt.getTime() - dayZero) / 60_000), prevMin: Math.round((x.startAt.getTime() - prevZero) / 60_000) }))
+        .filter((p) => p.startMin >= 0 && p.startMin < dayEnd && !(p.prevMin >= 0 && p.prevMin < prevEnd))
         .map(({ x, startMin, endMin }) => {
-          claimed.add(x.id);
           gridStart = Math.min(gridStart, startMin);
           gridEnd = Math.max(gridEnd, endMin);
           return {
