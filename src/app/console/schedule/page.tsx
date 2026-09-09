@@ -17,12 +17,12 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   const asked = isoDateSchema.safeParse(sp.week);
   const anchor = asked.success ? asked.data : today;
   const weekStart = addDays(anchor, -dowOf(anchor));
-  const grid = await getScheduleGrid(v.membership.businessId, weekStart, addDays(weekStart, 6), { uid: v.uid, role: v.membership.role, memberId: v.membership.memberId });
+  const grid = await getScheduleGrid(v.membership.businessId, weekStart, addDays(weekStart, 6), { uid: v.uid, role: v.membership.role, memberId: v.membership.memberId }, { today });
   return (
     <ConsoleShell current="schedule" viewer={{ name: v.name, role: v.membership.role }}>
       <h1>근무표</h1>
       <p className="sub" style={{ margin: 0 }}>
-        {v.isOwner ? "담당자별 근무 시간이에요. 칸을 누르면 그날만 바꾸는 예외(휴무·시간 변경·차단·추가 근무)를 둘 수 있어요. 반복되는 근무는 주간 패턴에서." : "내 근무와 동료의 근무 여부를 볼 수 있어요. 내 칸을 누르면 개인 차단 시간을 등록할 수 있습니다."}
+        {v.isOwner ? "담당자별 근무 시간이에요. 칸을 누르면 그날만 바꾸는 예외(휴무·시간 변경·차단·추가 근무)를 둘 수 있어요. 반복되는 근무는 주간 패턴에서." : "내 근무와 동료의 근무 여부를 볼 수 있어요. 내 칸을 누르면 개인 차단 시간을 바로 등록하거나, 휴가(종일·시간)를 신청할 수 있어요 — 휴가는 사장님이 승인하면 근무표에 반영돼요."}
       </p>
       <ScheduleGrid grid={grid} role={v.membership.role} weekStart={weekStart} today={today} timezone={settings.timezone} readOnly={v.readOnly} />
     </ConsoleShell>

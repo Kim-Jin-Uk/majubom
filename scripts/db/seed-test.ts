@@ -4,10 +4,11 @@
  *
  * 만드는 것 (이미 있으면 그대로 두고 계정 정보만 다시 찍는다):
  *   - 사장님  owner@example.com   / test1234   — 사업장 "봄 네일" (사업자번호 체크섬 통과, 이메일 인증 완료, 심사 PENDING)
- *   - 매니저  manager@example.com / test1234   — STAFF 자원 "이디자이너" 에 연결된 매니저 (초대 수락 상태)
+ *   - 매니저  manager@example.com / test1234   — STAFF 자원 "이디자이너" 에 연결된 매니저 (초대 수락 상태, 권한 4종 전부)
  *   - 자원: 김디자이너·이디자이너(STAFF), A룸(SPACE) · 영업시간 월~토 10–20 (휴게 13–14) · 타임존 Asia/Seoul
  *   - 근무 패턴: 두 담당자 월~금 10–19 (휴게 13–14), 오늘부터
  *   - 상품 "젤네일"(60분) + 다음 주 예약 3건 (화 15:00 · 화 23:00→수 01:00 자정 넘김 · 이디자이너 수 11:00) — 그리드 '예약 N건'·휴무 충돌 확인용
+ *   - 이디자이너의 휴가 신청 1건 (다음 주 목 종일, 승인 대기) — 사장님 근무표 상단 '승인 대기' 패널 확인용
  *
  * 가입 흐름(OTP)·초대 흐름(링크)은 건너뛰고 검증 완료 상태로 직접 놓는다. 나머지는 실제 서비스 함수를 그대로 써서 불변식을 지킨다.
  * 다시 깨끗하게 하려면 db:reset.
@@ -39,6 +40,7 @@ async function main() {
   const { applyBusiness } = await import("../../src/features/auth/business-signup");
   const { hashPassword } = await import("../../src/features/auth/crypto");
   const { inviteManager } = await import("../../src/features/auth/members");
+  const { createException } = await import("../../src/features/schedule/work-exceptions");
   const { updateBusinessInfo, businessInfoSchema } = await import("../../src/features/business/settings");
   const { createResource, resourceInputSchema } = await import("../../src/features/business/resources");
   const { createProduct } = await import("../../src/features/product/products");
@@ -86,7 +88,7 @@ async function main() {
   console.log("✓ 자원 3개 (김디자이너 · 이디자이너 · A룸)");
 
   // 4) 매니저 초대 (같은 이름의 STAFF 자원에 자동 연결) → 링크 수락은 건너뛰고 비밀번호·ACTIVE 로
-  const { memberId } = await inviteManager(businessId, { uid: ownerId, name: OWNER.name }, { name: MANAGER.name, email: MANAGER.email, permissions: {} }, meta);
+  const { memberId } = await inviteManager(businessId, { uid: ownerId, name: OWNER.name }, { name: MANAGER.name, email: MANAGER.email, permissions: { editProduct: true, replyReview: true, viewAllReservations: true, handleChat: true } }, meta);
   const [mgrUser] = await db.select({ id: users.id }).from(users).where(eq(users.email, MANAGER.email)).limit(1);
   await db.update(users).set({ passwordHash: await hashPassword(MANAGER.password), emailVerifiedAt: now }).where(eq(users.id, mgrUser.id));
   await db.update(businessMembers).set({ status: "ACTIVE" }).where(eq(businessMembers.id, memberId));
@@ -132,6 +134,11 @@ async function main() {
     });
   }
   console.log(`✓ 상품 '젤네일' + 예약 ${seed.length}건 (${tue} 화 15:00 · 화 23:00→수 01:00 · 이디자이너 수 11:00)`);
+
+  // 7) 이디자이너의 휴가 신청 (승인 대기) — 사장님 화면의 '승인 대기' 패널
+  const thu = addDays(wed, 1);
+  await createException(businessId, { resourceId: s2, date: thu, kind: "OFF", reason: "가족 행사", leave: true }, { uid: mgrUser.id, role: "MANAGER", memberId });
+  console.log(`✓ 휴가 신청 1건 (이디자이너 ${thu} 목 종일 · 승인 대기)`);
   console.log(`  근무표: /console/schedule?week=${addDays(tue, -2)}`);
   printAccounts();
   await pool.end();

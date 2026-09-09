@@ -41,6 +41,8 @@ export const productStatusEnum = pgEnum("product_status", ["DRAFT", "ACTIVE", "H
 // ── 근무 ─────────────────────────────────────────────────────────────
 export const holidayTypeEnum = pgEnum("holiday_type", ["ONCE", "WEEKLY", "MONTHLY_DAY", "YEARLY"]);
 export const workExceptionKindEnum = pgEnum("work_exception_kind", ["OFF", "MODIFIED", "BLOCK", "EXTRA"]);
+/** 근무 예외 상태 — 사장님이 직접 둔 예외는 APPROVED, 매니저의 휴가 신청은 PENDING → APPROVED/REJECTED */
+export const workExceptionStatusEnum = pgEnum("work_exception_status", ["PENDING", "APPROVED", "REJECTED"]);
 export const swapTypeEnum = pgEnum("swap_type", ["GIVE", "EXCHANGE"]);
 export const shiftSwapStatusEnum = pgEnum("shift_swap_status", [
   "PENDING",
@@ -123,6 +125,8 @@ export const auditActionEnum = pgEnum("audit_action", [
   "SHIFT_APPROVE",
   "SHIFT_DENY",
   "HOLIDAY_BULK_CANCEL",
+  "LEAVE_APPROVE", // 매니저 휴가 신청 승인
+  "LEAVE_DENY", // 매니저 휴가 신청 반려
   // 예약
   "RESERVATION_STATUS_CHANGE",
   "RESERVATION_REASSIGN",

@@ -4,7 +4,7 @@ import { businesses, reservations, resources } from "@/db/schema";
 import { HttpError } from "@/features/auth/errors";
 import { holidaysForRange, type HolidayItem } from "./holidays";
 import { dateRange, fmtMin, holidayApplies, resolveWorkDay, totalMinutes, type DaySource, type Interval } from "./resolve";
-import { listExceptions, ownResourceId, type Actor, type ExceptionItem } from "./work-exceptions";
+import { applicable, listExceptions, listLeaveRequests, ownResourceId, type Actor, type ExceptionItem, type LeaveRequest } from "./work-exceptions";
 import { schedulesForRange } from "./work-schedules";
 
 /**
@@ -22,7 +22,8 @@ export type DayCell = {
   closed: boolean;
   /** 사업장 전체 휴무 메모 (있으면) */
   holiday: string | null;
-  exceptions: Array<{ id: string; kind: ExceptionItem["kind"]; startTime: string | null; endTime: string | null; reason: string | null }>;
+  /** 그날의 예외 전부 — 승인된 것만 근무에 반영됐고, 대기·반려는 표시용 */
+  exceptions: Array<{ id: string; kind: ExceptionItem["kind"]; startTime: string | null; endTime: string | null; reason: string | null; status: ExceptionItem["status"]; decidedAt: Date | null; decisionNote: string | null }>;
   reservations: number;
 };
 
@@ -43,11 +44,13 @@ export type ScheduleGrid = {
   dayMeta: Array<{ date: string; open: boolean; holiday: string | null; staffOnDuty: number }>;
   rows: ResourceRow[];
   holidays: HolidayItem[];
+  /** 휴가 신청 — OWNER: 승인 대기 전부(오늘 이후) · MANAGER: 본인의 대기·반려 */
+  leaveRequests: LeaveRequest[];
 };
 
 const fmtI = (l: Interval[]) => l.map((i) => ({ start: fmtMin(i.start), end: fmtMin(i.end) }));
 
-export async function getScheduleGrid(businessId: string, from: string, to: string, actor: Actor, opts: { resourceIds?: string[] } = {}): Promise<ScheduleGrid> {
+export async function getScheduleGrid(businessId: string, from: string, to: string, actor: Actor, opts: { resourceIds?: string[]; today?: string } = {}): Promise<ScheduleGrid> {
   const dates = dateRange(from, to);
   if (dates.length === 0 || dates.length > 62) throw new HttpError(400, "INVALID_RANGE");
   const [b] = await db.select({ openingHours: businesses.openingHours, tz: businesses.timezone }).from(businesses).where(eq(businesses.id, businessId)).limit(1);
@@ -60,7 +63,8 @@ export async function getScheduleGrid(businessId: string, from: string, to: stri
     .where(and(eq(resources.businessId, businessId), eq(resources.type, "STAFF"), opts.resourceIds?.length ? inArray(resources.id, opts.resourceIds) : undefined))
     .orderBy(asc(resources.sortOrder), asc(resources.createdAt));
 
-  const [schedules, exceptions, hols] = await Promise.all([schedulesForRange(businessId, from, to), listExceptions(businessId, from, to, actor), holidaysForRange(businessId, from, to)]);
+  const [schedules, exceptions, hols, leaveRequests] = await Promise.all([schedulesForRange(businessId, from, to), listExceptions(businessId, from, to, actor), holidaysForRange(businessId, from, to), listLeaveRequests(businessId, actor, opts.today ?? from)]);
+  const approved = applicable(exceptions);
 
   // 자원·날짜별 예약 수 (REQUESTED/CONFIRMED)
   // 자정을 넘겨 끝나는 예약은 시작일과 종료일 양쪽 날짜에 잡힌 것으로 본다 (holidays.ts reservationsOnDates 와 같은 기준) — 날짜 셀은 "그날 손님이 오는 건수", 요약은 예약 건수(중복 없이)
@@ -84,7 +88,7 @@ export async function getScheduleGrid(businessId: string, from: string, to: stri
 
   const rows: ResourceRow[] = staff.map((r) => {
     const days = dates.map((date): DayCell => {
-      const day = resolveWorkDay({ date, resourceId: r.id, openingHours: b.openingHours, schedules, exceptions, holidays: hols });
+      const day = resolveWorkDay({ date, resourceId: r.id, openingHours: b.openingHours, schedules, exceptions: approved, holidays: hols });
       const bizHoliday = day.holidays.find((h) => h.resourceId === null && h.isFullDay) ?? day.holidays.find((h) => h.resourceId === r.id && h.isFullDay) ?? null;
       return {
         date,
@@ -94,10 +98,7 @@ export async function getScheduleGrid(businessId: string, from: string, to: stri
         source: day.source,
         closed: day.closed,
         holiday: bizHoliday ? ((bizHoliday as HolidayItem).memo ?? (bizHoliday.resourceId ? "자원 휴무" : "휴무")) : null,
-        exceptions: day.exceptions.map((e) => {
-          const x = e as ExceptionItem;
-          return { id: x.id, kind: x.kind, startTime: x.startTime ?? null, endTime: x.endTime ?? null, reason: x.reason ?? null };
-        }),
+        exceptions: exceptions.filter((x) => x.resourceId === r.id && x.date === date).map((x) => ({ id: x.id, kind: x.kind, startTime: x.startTime ?? null, endTime: x.endTime ?? null, reason: x.reason, status: x.status, decidedAt: x.decidedAt, decisionNote: x.decisionNote })),
         reservations: countMap.get(`${r.id}|${date}`) ?? 0,
       };
     });
@@ -128,5 +129,5 @@ export async function getScheduleGrid(businessId: string, from: string, to: stri
     };
   });
 
-  return { from, to, dates, dayMeta, rows, holidays: hols };
+  return { from, to, dates, dayMeta, rows, holidays: hols, leaveRequests };
 }

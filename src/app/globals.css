@@ -1248,3 +1248,106 @@ button {
   outline-offset: 2px;
   border-radius: 4px;
 }
+
+/* 토스트 — 화면 아래 가운데 (components/ui/Toast) */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: min(560px, calc(100vw - 32px));
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 10px 30px rgba(var(--shadow-rgb), 0.18);
+  animation: toast-in 0.18s ease-out;
+}
+.toast--error {
+  background: var(--bad-bg);
+  color: var(--bad);
+  border-color: var(--bad-border);
+}
+.toast--ok {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+.toast--warn {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+.toast-body {
+  flex: 1;
+}
+.toast-x {
+  background: none;
+  border: 0;
+  padding: 0 2px;
+  font: inherit;
+  color: inherit;
+  opacity: 0.7;
+  cursor: pointer;
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    animation: none;
+  }
+}
+
+/* 근무표: 휴가 신청 상태 배지 · 승인 대기 패널 */
+.table.sched .badge.st-PENDING {
+  background: var(--surface);
+  color: var(--text-2);
+  border: 1px dashed var(--border-strong, var(--border));
+}
+.table.sched .badge.st-REJECTED {
+  background: var(--muted-fill);
+  color: var(--text-2);
+  text-decoration: line-through;
+}
+.leave-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.leave-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 13.5px;
+}
+.leave-row .who {
+  font-weight: 700;
+}
+.leave-row .when {
+  color: var(--text-2);
+}
+.leave-row .reason {
+  color: var(--text-2);
+  flex: 1 1 160px;
+}
+.leave-row .actions {
+  margin-left: auto;
+}
