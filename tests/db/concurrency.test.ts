@@ -6,6 +6,7 @@ import { businesses, productResources, products, reservationLogs, reservations, 
 import { DEFAULT_POLICY } from "@/features/business/policy-defaults";
 import { createReservation } from "@/features/booking/create";
 import { HttpError } from "@/features/auth/errors";
+import { fakeBizRegNo } from "./_fixture";
 
 /**
  * FR-BOOK-020 동시성 회귀 — 명세가 요구하는 두 케이스 (에픽 #7 의 "부하 테스트 필수").
@@ -33,7 +34,7 @@ async function makeFixture(opts: { capacity: number; capacityPerSlot: number; ma
     .values({
       slug: `t-${tag}`,
       name: `동시성 ${tag}`,
-      bizRegNo: String(Date.now()).slice(-10),
+      bizRegNo: fakeBizRegNo(),
       category: "etc",
       status: "APPROVED",
       // 매일 00:00~00:00 = 24시간 영업 — 테스트가 요일·영업시간에 흔들리지 않게

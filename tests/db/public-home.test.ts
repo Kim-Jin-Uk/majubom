@@ -5,9 +5,10 @@ import { db, pool } from "@/db/client";
 import { businessSlugHistory, businesses, holidays, productResources, products, reservationLogs, reservations, resources, reviews, sitePages, users, workSchedules } from "@/db/schema";
 import { createReservation } from "@/features/booking/create";
 import { DEFAULT_POLICY } from "@/features/business/policy-defaults";
-import { loadPublicHome, maskName, resolveSlug } from "@/features/site/public-home";
+import { loadPublicHome, resolveSlug } from "@/features/site/public-home";
 import { addDays } from "@/features/schedule/resolve";
 import { todayIn } from "@/lib/dates";
+import { fakeBizRegNo } from "./_fixture";
 
 /**
  * 공개 사업장 홈 (FR-SITE-010, #71). DB 가 있어야 볼 수 있는 것만.
@@ -31,7 +32,7 @@ async function fixture() {
     .values({
       slug: `shop-${tag}`,
       name: `봄 네일 ${tag}`,
-      bizRegNo: String(Date.now()).slice(-10),
+      bizRegNo: fakeBizRegNo(),
       category: "nail",
       status: "APPROVED",
       timezone: TZ,
