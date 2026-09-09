@@ -3,7 +3,6 @@ import { db } from "@/db/client";
 import { reservations } from "@/db/schema";
 import { openingWindows, operatingWindows } from "@/features/schedule/operating";
 import { addDays, dateRange, dowOf, fmtMin, normalize, resolveWorkDay, type Interval } from "@/features/schedule/resolve";
-import { ownResourceId } from "@/features/schedule/work-exceptions";
 import type { ISODate } from "./slot-types";
 import { loadOperatingContext, type OperatingContext } from "./operating-context";
 import { listReservations, MAX_SPAN_MIN, reservationCounts, scope, type ConsoleActor, type ReservationRow } from "./console";
@@ -125,9 +124,8 @@ export async function getDashboard(actor: ConsoleActor, today: ISODate): Promise
   const prevStart = addDays(weekStart, -7);
 
   const ctx = await loadOperatingContext(actor.businessId, prevStart, weekEnd);
-  // 스코프·"내 자원" 판정은 목록·상세와 같은 함수로 (사장님도 본인이 STAFF 자원이면 "내 근무" 가 나온다 — 1인 매장)
-  const { scoped, mineId: scopedMine } = await scope(actor);
-  const mineId = scopedMine ?? (await ownResourceId(actor.businessId, actor.memberId));
+  // 스코프·"내 자원" 판정은 목록·캘린더와 같은 함수로 (사장님도 본인이 STAFF 자원이면 "내 근무" 가 나온다)
+  const { scoped, mineId } = await scope(actor);
 
   const [todayList, counts, thisWeek, prev] = await Promise.all([
     // 미리보기용 목록. 건수는 아래 counts 에서 온다 — 목록은 한 페이지(50건)에서 잘리므로 세는 데 쓰면 안 된다

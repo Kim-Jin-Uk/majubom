@@ -91,12 +91,17 @@ const likeTerm = (raw: string) => `%${raw.replace(/[\\%_]/g, (c) => `\\${c}`)}%`
 export const spansRange = (lo: Date, hi: Date) => and(gte(reservations.startAt, new Date(lo.getTime() - MAX_SPAN_MIN * 60_000)), lt(reservations.startAt, hi), sql`${reservations.endAt} > ${lo.toISOString()}::timestamptz`);
 
 /**
- * 매니저가 볼 수 있는 범위. `scoped` 는 질의에 붙일 자원 제한(전체 권한이면 null),
- * `mineId` 는 "내 담당 건" 표시용 — 전체 권한이 있어도 내 자원은 알아야 강조할 수 있다.
+ * 볼 수 있는 범위와 "내 담당" 판정. 콘솔의 모든 화면이 이 함수 하나를 탄다.
+ *
+ * `scoped` — 질의에 붙일 자원 제한. OWNER 와 `viewAllReservations` 매니저는 null(전체),
+ *            담당 자원이 없는 매니저는 존재할 수 없는 uuid(빈 결과).
+ * `mineId`  — 내가 담당하는 STAFF 자원. **역할과 무관하게** 찾는다: 사장님도 본인이 자원으로 등록돼
+ *            시술을 하면 자기 컬럼·자기 근무를 알아야 한다(1인 매장이거나, 사장이 함께 일하는 매장).
+ *            권한이 아니라 표시용이라 호출자마다 다시 구하지 않게 여기서 한 번에 준다.
  */
 export async function scope(actor: ConsoleActor): Promise<{ scoped: string | null; mineId: string | null }> {
-  if (actor.role === "OWNER") return { scoped: null, mineId: null };
   const mineId = await ownResourceId(actor.businessId, actor.memberId);
+  if (actor.role === "OWNER") return { scoped: null, mineId };
   return { scoped: actor.canViewAll ? null : (mineId ?? NO_RESOURCE), mineId };
 }
 

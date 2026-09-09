@@ -27,7 +27,6 @@ export function ReservationsPanel({
   to,
   resources,
   products,
-  role,
   initialStatus = [],
 }: {
   initial: ReservationRow[];
@@ -36,7 +35,6 @@ export function ReservationsPanel({
   to: string;
   resources: FilterOption[];
   products: FilterOption[];
-  role: "OWNER" | "MANAGER";
   /** URL 로 들어온 상태 필터 (대시보드의 "승인 대기 보기") — 서버가 이미 이걸로 걸러 그린 첫 페이지와 칩이 어긋나면 안 된다 */
   initialStatus?: ReservationStatus[];
 }) {
@@ -96,6 +94,9 @@ export function ReservationsPanel({
   // 조건이 앞서 나갔으면 커서는 이전 조건의 것이다 — 그걸로 이어 받으면 다른 조건의 행이 섞인다
   const stale = key !== page.key;
   const items = page.items;
+  // "내 담당" 강조는 **구분이 될 때만** 켠다 — 자원이 하나뿐인 매장에서는 모든 줄이 칠해져 뜻을 잃는다.
+  // 역할로 가르지 않는다: 사장님도 함께 시술하면 자기 건을 찾고 싶다
+  const highlightMine = resources.length > 1;
   const days = groupByDay(items);
 
   return (
@@ -181,7 +182,7 @@ export function ReservationsPanel({
               </thead>
               <tbody>
                 {rows.map((r) => (
-                  <tr key={r.id} className={role === "MANAGER" && r.mine ? "mine" : undefined}>
+                  <tr key={r.id} className={highlightMine && r.mine ? "mine" : undefined}>
                     <td>
                       <Link href={`/console/reservations/${r.id}`}>{rangeLabel(r.startAt, r.endAt)}</Link>
                     </td>

@@ -94,8 +94,6 @@ async function make() {
   return f;
 }
 
-/** 서버가 주는 벽시계 문자열(`…+09:00`)의 날짜 부분 */
-const dayOf = (iso: string) => iso.slice(0, 10);
 /** UTC 순간 → 사업장(KST) 날짜. `at()` 결과는 UTC 문자열이라 앞 10자를 그냥 자르면 UTC 15시 이후가 어긋난다 */
 const kstDay = (iso: string) => todayIn(TZ, new Date(iso));
 
@@ -154,8 +152,10 @@ describe.skipIf(!enabled)("예약 콘솔 (FR-BOOK-080)", () => {
     expect(wide.items.find((x) => x.id === a.id)!.mine).toBe(true);
     expect(wide.items.find((x) => x.id === b.id)!.mine).toBe(false);
 
-    // OWNER 에게 "내 담당" 강조는 없다 — 사장님은 전부 자기 것이라 표시가 뜻을 잃는다 (자원에 memberId 가 있어도 마찬가지)
-    expect(asOwner.items.every((x) => x.mine === false)).toBe(true);
+    // 사장님도 본인이 자원으로 등록돼 있으면 자기 건을 안다 — 함께 시술하는 매장에서 필요하다.
+    // (강조를 켤지는 화면이 정한다: 자원이 하나뿐이면 모든 줄이 칠해져 뜻을 잃으므로 끈다)
+    expect(asOwner.items.find((x) => x.id === b.id)!.mine, "동료 자리는 OWNER 의 담당 자원이다(memberId = owner)").toBe(true);
+    expect(asOwner.items.find((x) => x.id === a.id)!.mine, "매니저 자리는 아니다").toBe(false);
   }, 30_000);
 
   it("상태 전이도 범위 밖이면 404 — 409 로 현재 상태를 흘리지 않는다", async () => {

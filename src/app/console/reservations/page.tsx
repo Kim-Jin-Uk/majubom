@@ -97,7 +97,6 @@ export default async function ReservationsPage({ searchParams }: { searchParams:
             to={to}
             resources={resources.filter((r) => r.isActive).map((r) => ({ id: r.id, name: r.name }))}
             products={products.map((p) => ({ id: p.id, name: p.name }))}
-            role={v.membership.role}
             initialStatus={status}
           />
         )

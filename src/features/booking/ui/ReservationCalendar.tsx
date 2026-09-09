@@ -17,6 +17,8 @@ const fmtMinShort = (m: number) => `0000-00-00T${String(Math.floor(m / 60) % 24)
 
 export function ReservationCalendar({ data, span, resourceNames }: { data: CalendarData; span: "day" | "week"; resourceNames: Map<string, string> }) {
   const total = data.gridEndMin - data.gridStartMin;
+  // 자원이 하나면 모든 블록이 "내 것" 이라 강조가 뜻을 잃는다 (목록과 같은 규칙)
+  const highlightMine = data.columns.length > 1;
   const hours: number[] = [];
   // 마지막 눈금(gridEndMin)은 넣지 않는다 — 가운데 정렬이라 절반이 격자 밖으로 잘린다
   for (let m = data.gridStartMin; m < data.gridEndMin; m += 60) hours.push(m);
@@ -78,7 +80,7 @@ export function ReservationCalendar({ data, span, resourceNames }: { data: Calen
                   <Link
                     key={b.id}
                     href={`/console/reservations/${b.id}`}
-                    className={b.mine ? "cal-block mine" : "cal-block"}
+                    className={highlightMine && b.mine ? "cal-block mine" : "cal-block"}
                     style={{ top: `${top}%`, height: `${height}%`, background: bg, color: fg, left: c.withResource ? `${(di / c.days.length) * 100 + 1}%` : "2px", width: c.withResource ? `${100 / c.days.length - 2}%` : "calc(100% - 4px)" }}
                     title={`${b.customerName} · ${b.productName} · ${STATUS_LABEL[b.status]}${rid ? ` · ${resourceNames.get(rid) ?? ""}` : ""}`}
                   >

@@ -352,4 +352,20 @@ describe.skipIf(!enabled)("대시보드 · 캘린더 (FR-BOOK-080)", () => {
     expect(after.busyMin, "지금 정원으로 다시 판정하면 60 으로 줄어든다 — 지난 기록이 설정 변경으로 바뀌면 안 된다").toBe(120);
     expect(after.openMin, "가진 재고는 지금 정원 기준").toBe(DAY_MIN);
   }, 60_000);
+
+  it("사장님도 본인이 STAFF 자원이면 캘린더에서 자기 담당을 안다", async () => {
+    const f = await make();
+    const day = kstDay(at(0));
+    // 픽스처의 `theirs` 는 memberId = owner — 사장님이 함께 시술하는 매장이다
+    const own = await createReservation({ productId: f.productId, startAt: at(1), partySize: 1, resourceId: f.theirs, customerNote: null }, { uid: f.customerId });
+    const other = await createReservation({ productId: f.productId, startAt: at(1), partySize: 1, resourceId: f.mine, customerNote: null }, { uid: f.customerId });
+
+    const cal = await getCalendar(f.ownerActor, day, day);
+    const find = (id: string) => cal.columns.flatMap((c) => c.days.flatMap((d) => d.blocks)).find((b) => b.id === id)!;
+    expect(find(own.id).mine, "scope() 가 OWNER 에게 mineId 를 안 주면 여기서 false 가 된다").toBe(true);
+    expect(find(other.id).mine).toBe(false);
+
+    const d = await getDashboard(f.ownerActor, day);
+    expect(d.myResourceName, "대시보드의 내 근무도 같은 판정이어야 한다").toBe("동료 자리");
+  }, 60_000);
 });
