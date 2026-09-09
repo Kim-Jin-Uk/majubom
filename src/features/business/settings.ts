@@ -176,7 +176,7 @@ export async function changeSlug(businessId: string, slug: string, actor: { uid:
       .where(and(eq(businessSlugHistory.slug, slug), eq(businessSlugHistory.businessId, businessId)))
       .limit(1);
     if (!mine) await tx.insert(businessSlugHistory).values({ businessId, slug });
-    await writeAudit({ action: "POLICY_UPDATE", actorId: actor.uid, actorRole: actor.role, businessId, targetType: "BUSINESS", targetId: businessId, diff: { slug: { from: cur.slug, to: slug } }, meta }, tx);
+    await writeAudit({ action: "BUSINESS_UPDATE", actorId: actor.uid, actorRole: actor.role, businessId, targetType: "BUSINESS", targetId: businessId, diff: { slug: { from: cur.slug, to: slug } }, meta }, tx);
     return { ok: true, slug } as const;
   });
 }

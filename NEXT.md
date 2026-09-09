@@ -5,19 +5,19 @@
 
 ## 지금 어디
 
-에픽 #7 예약 엔진 ★ — **FR-BOOK-010 가용 슬롯 조회까지 됐다.** `computeSlots` 는 순수 함수이고 `tests/fixtures/slot-cases.json` 40건이 전부 통과한다.
-브랜치 `feat/7-booking-engine`(main 위, 스키마 변경 없음). 공개 API `GET /api/public/products/:id/slots?date&to&partySize&durationMin&resourceId`.
-직전: 에픽 #37 근무표 PR #157 머지(e3f2787) + 매니저 휴가 신청. 로컬 테스트는 `npm run db:seed:test` (사업장이 APPROVED 로 들어간다 — 공개 API 가 승인 사업장만 답한다).
+에픽 #7 예약 엔진 ★ — **FR-BOOK-010 슬롯 조회 + FR-BOOK-020 예약 생성까지.** 픽스처 40건과 동시성 회귀 2건이 통과한다.
+브랜치 `feat/7-booking-engine`(PR #158). 마이그레이션 0005(감사 action 2개) — **Neon 에 `npm run db:migrate` 필요.**
+`POST /api/reservations` 는 프론트 결과를 믿지 않고 `computeSlots` 를 다시 부른다. 정원 1 은 배타 제약, 정원 N 은 advisory lock + 재계산.
+로컬 테스트: `npm run db:seed:test`. 동시성 테스트는 DB 이름에 test 가 든 `DATABASE_URL` 일 때만 돈다(CI 는 자동).
 
 ## 막힌 것
 
 소셜 로그인·Resend·Cloud Scheduler·App Hosting 시크릿은 운영 작업(코드는 준비돼 있다).
-**아직 정하지 못한 것은 전부 `LATER.md` (추후 논의).** 예약 엔진에 걸린 것은 L-06(슬롯 계산 가정 A1~A11 — 명세를 고칠지) · L-31(합산 잔여의 의미) · L-09(maxActivePerCustomer 경쟁 조건).
+**아직 정하지 못한 것은 전부 `LATER.md` (추후 논의).** 예약 엔진에 걸린 것은 L-06(슬롯 계산 가정 A1~A11 — 명세를 고칠지) · L-31(합산 잔여의 의미 — 예약 생성은 자원별 잔여로 검증한다).
 
 ## 다음 한 수
 
-1. FR-BOOK-020 예약 생성 — `exclusive` 스냅샷 · EXCLUDE 제약(정원 1) · advisory lock + 재계산(정원 N) · 40P01 재시도 · 409 `SLOT_TAKEN` + 대체 시각 3개.
-   트랜잭션 안에서 `computeSlots` 를 그대로 다시 불러 재검증한다(프론트 결과를 믿지 않는다).
-2. 그 마이그레이션에 감사 action `BUSINESS_UPDATE`·`MEMBER_REACTIVATE` 를 묶는다 (`LATER.md` L-20).
-3. 동시성 회귀 테스트(정원 1 에 20요청 → 1건 / 정원 15 에 20요청 → 15건)를 CI 에 상주시킨다.
+1. FR-BOOK-030 승인/거절 — `validateExisting()`(신규 예약용 `computeSlots` 를 그대로 쓰면 안 된다: 바뀐 상품 설정·"유지하기로 한" 휴무까지 반영해 승인 불가로 만든다) · 조건부 UPDATE(0행 → 409) · `REQUESTED` 만료 `EXPIRED`.
+2. FR-BOOK-040 취소 — 생성 시점 `cancelDeadlineHours` 스냅샷 기준. 취소 즉시 점유 해제.
+3. FR-BOOK-070 워크인 대리 등록 — 사업장 내부 계정(`walkin+{businessId}@internal`), 정책(선행시간·한도)은 우회하되 자원 충돌 검증은 동일.
 4. 운영: App Hosting 시크릿 · Cloud Scheduler `cleanup-unverified` · 관리자 승격 + TOTP

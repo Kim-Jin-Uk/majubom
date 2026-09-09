@@ -47,7 +47,7 @@ function resourceWindows(ctx: SlotContext, date: ISODate, r: SlotResource, openi
  * 익일로 미는 것은 **그렇게 밀면 그날 영업 구간 안에 들어올 때만** 이다 — 20:00~02:00 영업의 19:00 회차는 개장 전이지 익일 19:00 이 아니다.
  * 같은 요일 항목이 여러 개여도 전부 모으고, 같은 시각은 한 번만 센다(합산 잔여가 부풀지 않게).
  */
-function fixedCandidates(ctx: SlotContext, date: ISODate): number[] {
+export function fixedStartMinutes(ctx: SlotContext, date: ISODate): number[] {
   const dow = dowOf(date);
   const times = (ctx.product.fixedStartTimes ?? []).filter((x) => x.dow === dow).flatMap((x) => x.times);
   if (times.length === 0) return [];
@@ -107,7 +107,7 @@ export function computeSlots(ctx: SlotContext, q: SlotQuery): SlotResult {
 
   // FREE 상품의 격자 간격은 DB CHECK(products_start_mode_shape)가 보장한다 — 없으면 데이터가 깨진 것이지 기본값을 끼워 넣을 자리가 아니다
   if (!isFixed && !p.slotIntervalMin) throw new TypeError(`FREE 상품 ${p.id} 에 slotIntervalMin 이 없다`);
-  const fixedTimes = isFixed ? fixedCandidates(ctx, q.date) : [];
+  const fixedTimes = isFixed ? fixedStartMinutes(ctx, q.date) : [];
 
   const leadCutoff = nowMs + biz.policy.minLeadTimeMin * 60_000;
   const merged = new Map<number, { start: number; end: number; resourceIds: string[]; remaining: number }>();

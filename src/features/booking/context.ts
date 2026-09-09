@@ -32,7 +32,22 @@ export type SlotContextOptions = {
   requirePublic?: boolean;
 };
 
+/** 사업장 타임존만 — 시작 시각이 어느 영업일에 속하는지 알아야 기간을 정할 수 있다 (예약 생성) */
+export async function loadProductTimezone(productId: string, opts: { requirePublic?: boolean } = {}): Promise<string> {
+  const [row] = await db.select({ tz: businesses.timezone, status: products.status, businessStatus: businesses.status }).from(products).innerJoin(businesses, eq(businesses.id, products.businessId)).where(eq(products.id, productId)).limit(1);
+  if (!row) throw new HttpError(404, "NOT_FOUND");
+  if (opts.requirePublic && (row.status !== "ACTIVE" || row.businessStatus !== "APPROVED")) throw new HttpError(404, "NOT_FOUND");
+  return row.tz;
+}
+
+/** 슬롯 계산 입력 + 계산에는 안 쓰지만 저장할 때 필요한 것(businessId) */
+export type BookingContext = { ctx: SlotContext; businessId: string };
+
 export async function loadSlotContext(productId: string, from: string, to: string, opts: SlotContextOptions = {}): Promise<SlotContext> {
+  return (await loadBookingContext(productId, from, to, opts)).ctx;
+}
+
+export async function loadBookingContext(productId: string, from: string, to: string, opts: SlotContextOptions = {}): Promise<BookingContext> {
   const now = opts.now ?? new Date();
   const [row] = await db
     .select({ p: products, tz: businesses.timezone, openingHours: businesses.openingHours, policy: businesses.policy, businessId: businesses.id, businessStatus: businesses.status })
@@ -109,7 +124,7 @@ export async function loadSlotContext(productId: string, from: string, to: strin
       }))
     : [];
 
-  return {
+  const ctx: SlotContext = {
     now: now.toISOString(),
     business: {
       timezone: tz,
@@ -169,4 +184,5 @@ export async function loadSlotContext(productId: string, from: string, to: strin
     ),
     existingReservations: rsv,
   };
+  return { ctx, businessId: row.businessId };
 }

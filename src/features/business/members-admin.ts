@@ -53,7 +53,7 @@ export async function setMemberActive(businessId: string, memberId: string, acti
       // 조건부 UPDATE 의 영향 행 수로 판정 — 읽고 나서 바뀌었으면(동시 요청) 0행
       const rows = await tx.update(businessMembers).set({ status: "ACTIVE" }).where(and(scope, eq(businessMembers.status, "INACTIVE"))).returning({ id: businessMembers.id });
       if (rows.length !== 1) throw new HttpError(409, "NOT_INACTIVE");
-      await writeAudit({ action: "MEMBER_PERMISSION_UPDATE", actorId: actor.uid, actorRole: "OWNER", businessId, targetType: "BUSINESS_MEMBER", targetId: memberId, diff: { status: { from: "INACTIVE", to: "ACTIVE" } }, meta }, tx);
+      await writeAudit({ action: "MEMBER_REACTIVATE", actorId: actor.uid, actorRole: "OWNER", businessId, targetType: "BUSINESS_MEMBER", targetId: memberId, diff: { status: { from: "INACTIVE", to: "ACTIVE" } }, meta }, tx);
     });
     return;
   }

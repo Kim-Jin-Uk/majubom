@@ -75,6 +75,5 @@ INVITED(초대 대기) 는 비활성화할 수 없다(409 `NOT_ACTIVE`) — 비�
 - 상품 등록(3단계) → 에픽 #31. 로고·색상(4단계) → 홈페이지 빌더. 공개 스위치(`SitePage.isPublished`) → #71
 - 자원 드래그 정렬 (지금은 ↑↓ 버튼) · 자원 이미지 업로드 (스키마·API 는 http(s) URL 을 받는다, UI 는 상품 에픽과 함께)
 - 주소 검색(도로명 API)·좌표(lat/lng)·대표 이미지 — FR-BIZ-010 에 있지만 공개 홈(#71)이 쓰기 시작할 때. 지금은 자유 입력
-- 감사 action 세분화(`BUSINESS_UPDATE`·`MEMBER_REACTIVATE`) — enum 확장은 마이그레이션이라 다음 스키마 변경 때 묶는다. 지금은 slug 변경이 `POLICY_UPDATE`, 재활성화가 `MEMBER_PERMISSION_UPDATE` 로 남는다
 - 매니저 비활성화의 `revokeAllSessions` 는 겸업 계정의 고객 세션까지 끊는다 — 콘솔 프록시가 매 요청 memberStatus 를 보므로 차단 자체엔 불필요하지만, 초대 계정의 "모든 기기에서 로그아웃" 을 보장하는 쪽을 택했다
 - 확인 대화상자는 브라우저 `confirm()` — 공통 모달이 생기면(#11) 교체

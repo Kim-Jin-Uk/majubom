@@ -59,3 +59,38 @@ FREE 는 후보가 구간 안에서 만들어지므로 `excluded` 를 쓰지 않
 - 슬롯 캐시 — 키(`win:{businessId}:{resourceId}:{date}` · `occ:…`)와 무효화 트리거·TTL 60초는 명세가 이미 정해 뒀다. 캐시 없이 먼저 만들고 느려지면 붙인다
 - `AUTO` 배정 후보 정렬(FR-BOOK-020 3.5) — 지금은 `resourceIds` 를 sortOrder 로 담아만 둔다 (가정 A6)
 - 예약 위젯·공개 홈(에픽 #10·#11)이 이 API 를 쓴다. 지금은 API 만 있고 화면이 없다
+- 승인/거절·취소·변경·워크인(FR-BOOK-030~070), 알림·상담방 예약 카드(7단계) — 다음 조각들
+- 취소 남용 방지("하루 3건 초과 취소 시 당일 재예약 차단", FR-BOOK-040) — 취소가 생길 때 함께
+
+## 예약 생성 (FR-BOOK-020)
+
+`POST /api/reservations` — 로그인한 고객 본인 명의. 명세 7단계를 그대로 따르되 3단계(슬롯 재검증)는 **`computeSlots` 를 다시 부른다**.
+프론트가 준 시각을 믿지 않고, 조회와 생성이 같은 순수 함수를 쓰므로 둘이 어긋날 수 없다. 시작 시각이 속할 영업일은 자정을 넘길 수 있어 전날 영업일도 함께 본다.
+
+**동시성은 자원 락 + 재계산이 본선이고, 배타 제약이 2차 방어선이다.**
+- 정원과 무관하게 `pg_advisory_xact_lock(자원)` 으로 직렬화하고 트랜잭션 안에서 점유를 **다시 세고** INSERT 한다.
+  `Σ partySize ≤ capacity` 는 쌍 단위 겹침 검사로 표현할 수 없어서 정원 N 은 애초에 제약이 불가능하고,
+  정원 1 도 제약만으로는 부족하다 — `no_overlap` 의 술어가 `exclusive AND …` 라, 자원 정원을 N→1 로 바꾼 뒤 남아 있는 `exclusive=false` 행과는 비교되지 않는다.
+  `SELECT … FOR UPDATE` 로도 부족하다 — 아직 아무 예약이 없는 회차에 동시에 들어온 둘이 서로를 못 본다(팬텀).
+- `exclusive = (resource.capacity = 1)` 스냅샷은 그대로 두고 배타 제약 `no_overlap` 이 마지막으로 한 번 더 막는다. 23P01 이면 이 자원은 방금 찬 것이므로 다음 후보로.
+- 1인 동시 예약 한도도 check-then-act 경쟁이라 `pg_advisory_xact_lock('cust:'||customerId)` 안에서 센다.
+- **락 순서는 언제나 고객 → 자원.** 반대로 잡는 경로가 없으면 순환이 안 생긴다. 그래도 40P01 이면 한 번만 재시도한다(계속 재시도하면 폭주한다).
+- `pg_advisory_xact_lock` 은 트랜잭션 스코프라 PgBouncer transaction mode 에서도 안전하다 — 세션 스코프 락(`pg_advisory_lock`)을 쓰면 안 된다.
+
+**자원 배정은 후보를 순서대로 시도한다.** 합산 잔여(L-31)만 보고 들어온 요청이 특정 자원에서만 실패하는 것을 막기 위해서다.
+정렬은 명세대로 잔여 내림차순 → 그날 확정 건수 오름차순(부하 분산) → sortOrder. 전부 실패하면 409 `SLOT_TAKEN` 과 함께 **가장 가까운 대체 시각 3개**를 준다.
+
+**예약번호 충돌은 예외로 잡지 않는다.** `onConflictDoNothing` 으로 보고 비면 다시 뽑는다 — PG 는 첫 에러로 트랜잭션을 aborted 로 만들고
+이후 문장은 전부 25P02 라, 트랜잭션 안에서 23505 를 잡아 재시도하는 코드는 동작하지 않는다(drizzle 최상위 `transaction` 은 문장별 savepoint 를 만들지 않는다).
+
+**1인 동시 예약 한도는 사업장 단위로, 앞으로의 예약만 센다.** 정책이 사업장 것이고, 지난 예약은 상태 전이(COMPLETED·EXPIRED)가 늦어질 수 있는데
+그게 고객을 영구히 막으면 안 된다. check-then-act 라 고객 락 안에서 센다.
+
+**스냅샷.** `cancelDeadlineHours`·버퍼·`exclusive` 는 생성 시점 값을 박아 둔다 — 사업자가 나중에 정책을 바꿔도 이미 잡힌 예약의 조건은 그대로다(FR-BIZ-020).
+상태는 `policy.autoConfirm ? CONFIRMED : REQUESTED`, 예약번호는 혼동 문자를 뺀 8자리(`code.ts`)이고 unique 라 부딪히면 다시 뽑는다.
+
+오류: 400 `INVALID_START_TIME`(격자·회차에 없는 시각) · `LEAD_TIME` · `OUT_OF_RANGE`(예약 가능일 밖) · `DURATION_NOT_ALLOWED` · `PARTY_SIZE_EXCEEDED` / 409 `SLOT_TAKEN`(+`alternatives`, 요청한 시각은 빼고 가까운 순 3개) · `TOO_MANY_ACTIVE`.
+"누가 방금 채갔다"(409)와 "그런 시각은 없다"(400)를 구분하는 것이 요점이다 — 위젯 문구가 다르다.
+
+동시성 회귀는 `tests/db/concurrency.test.ts` — 실제 Postgres 가 있을 때만 돈다(CI 는 임시 컨테이너, 로컬은 DB 이름에 test 가 든 `DATABASE_URL` 일 때만).
+정원 1 에 20 동시 → 1건, 정원 15 에 20 동시 → 15건, 2명씩 20 동시 → 7건, 정원 1 자원 3개 → 3건(자원마다 하나씩).
