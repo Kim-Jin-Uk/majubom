@@ -92,6 +92,8 @@ describe.skipIf(!enabled)("공개 사업장 홈 (FR-SITE-010)", () => {
     const home = await loadPublicHome(f.businessId);
     expect(home, "site_pages 행이 없다고 404 면 아무도 공개될 수 없다").toBeTruthy();
     expect(home!.name).toContain("봄 네일");
+    // DB 에는 `nail` 이 들어 있다 — 코드값이 화면과 <title> 에 그대로 나가면 안 된다
+    expect(home!.category, "업종은 사람이 읽는 이름으로").toBe("네일 · 왁싱");
     expect(home!.products.map((p) => p.name)).toEqual(["젤네일"]);
     expect(home!.products[0].images).toHaveLength(2);
   }, 30_000);

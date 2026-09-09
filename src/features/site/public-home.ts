@@ -6,6 +6,7 @@ import { holidaysForRange, upcomingOccurrences } from "@/features/schedule/holid
 import { addDays } from "@/features/schedule/resolve";
 import { todayIn } from "@/lib/dates";
 import { isInfoComplete } from "@/features/business/settings";
+import { categoryLabel } from "@/features/business/policy-defaults";
 import type { OpeningHour } from "@/db/schema";
 
 /**
@@ -41,6 +42,7 @@ export type PublicReviewSummary = {
 export type PublicHome = {
   slug: string;
   name: string;
+  /** 사람이 읽는 업종 이름. DB 의 `nail` 같은 코드가 아니다 — 화면·메타태그·JSON-LD 가 전부 이걸 쓴다 */
   category: string;
   description: string | null;
   phone: string | null;
@@ -161,7 +163,7 @@ export const loadPublicHome = cache(async (businessId: string): Promise<PublicHo
   return {
     slug: b.slug,
     name: b.name,
-    category: b.category,
+    category: categoryLabel(b.category),
     description: b.description,
     phone: b.phone,
     address: b.address,
