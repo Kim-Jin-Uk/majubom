@@ -70,7 +70,8 @@ Auth.js v5 + 서버 저장 리프레시 토큰. **액세스 스냅샷(JWT 쿠키
 ## 중단하고 돌아올 때
 
 [NEXT.md](NEXT.md)의 3줄을 먼저 읽는다. 세션 끝에는 코드가 안 돌아도 `wip:` 커밋 후 push한다.
+아직 못 정한 것은 [LATER.md](LATER.md)(추후 논의)에 모아 둔다 — 그 자리에서 임의로 정하지 않는다.
 
 ## 라이선스
 
-별도 LICENSE 파일이 없으므로 **all rights reserved** 다. 코드는 열람할 수 있지만 사용·수정·배포 권한은 없다. (Q12 — 추후 재검토)
+별도 LICENSE 파일이 없으므로 **all rights reserved** 다. 코드는 열람할 수 있지만 사용·수정·배포 권한은 없다. (Q12 — [LATER.md](LATER.md) L-30)

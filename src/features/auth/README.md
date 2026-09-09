@@ -101,11 +101,11 @@ IP 로 보고(`TRUSTED_PROXY_HOPS`, 기본 0 = Cloud Run 직결), 파싱 실패�
 
 ## 아직 안 한 것 (의도적)
 
+결정이 아직 안 된 것(다중 소속·소셜 계정 연결 UX·사업자번호 진위 확인 등)은 루트 `LATER.md` 로 옮겼다 — L-02·L-04·L-22.
+
 - CAPTCHA(FR-AUTH-010 "발송 전 CAPTCHA") — 1기 게이트(Basic Auth) 뒤라 생략. 게이트를 내리는 #12 에서 Turnstile.
 - `auth_tokens`(사용·만료) · `sessions`(폐기·만료) · `audit_logs`(1년) 정리 배치 — 알림/운영 에픽의 C 배치와 함께.
-- 소셜 미검증 이메일 충돌 시 "기존 계정 로그인 후 명시적 연결" 화면 — 지금은 거부 + 안내만 (2기).
 - `selectionId`(예약 위젯 30분 임시 선택 토큰) — 예약 에픽(#47)에서.
-- 사업자등록증 이미지 첨부 — 저장 컬럼이 없다. 관리자 심사(FR-ADM-010) 와 함께.
 - 관리자 알림(BUSINESS_APPLIED) — 알림 에픽에서 Notification 으로. 지금은 접수 확인 메일 + 서버 로그.
 - TOTP QR — 라이브러리 대신 시크릿 텍스트 + `otpauth://` 링크. 관리자 1인이라 충분.
 - 카카오 프로바이더 실 연결 — 앱 등록(#12) 후 env 만 넣으면 켜진다. 코드는 `readIdentity` 가 `kakao_account` 를 이미 읽는다.

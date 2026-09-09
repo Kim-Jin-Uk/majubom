@@ -13,11 +13,11 @@
 
 ## 막힌 것
 
-휴무 등록 시 "일괄 취소 + 고객 알림" 은 예약 취소·알림이 생겨야 한다 — 지금은 "예약은 두고 등록" 만.
-자정 넘기는 근무 패턴은 DB CHECK 가 막는다(심야 사업장 생기면 완화). 소셜 로그인·Resend·Cloud Scheduler·App Hosting 시크릿은 운영 작업.
+소셜 로그인·Resend·Cloud Scheduler·App Hosting 시크릿은 운영 작업(코드는 준비돼 있다).
+**아직 정하지 못한 것은 전부 `LATER.md` (추후 논의).** 예약 엔진을 시작하기 전에 L-06(슬롯 계산 가정 A1~A11)·L-07 은 읽고 들어갈 것.
 
 ## 다음 한 수
 
 1. PR #157(근무표) 머지 → Neon `db:migrate`(0003·0004) → `db:seed:test` 로 로컬 확인
-2. 에픽 예약 엔진 ★ (FR-BOOK-010 슬롯 계산 — `tests/fixtures/slot-cases.json` 40건이 기준, `resolveWorkDay`·`peakOccupancy` 재사용)
+2. 에픽 예약 엔진 ★ (FR-BOOK-010 슬롯 계산 — `tests/fixtures/slot-cases.json` 40건이 기준, `resolveWorkDay`(APPROVED 만)·`peakOccupancy` 재사용). 감사 action `BUSINESS_UPDATE`·`MEMBER_REACTIVATE` 를 이때 마이그레이션에 묶는다(L-20)
 3. 운영: App Hosting 시크릿 · Cloud Scheduler `cleanup-unverified` · 관리자 승격 + TOTP

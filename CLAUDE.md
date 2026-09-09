@@ -10,3 +10,4 @@
 - **검증**: push 전 `npm run verify` (typecheck + lint + test). CI는 게이트, 진단 도구가 아니다.
 - **비밀**: `.env.local` 만. 서비스 계정 JSON·`.pem` 은 커밋 금지 (`.gitignore` 가 막지만 확인).
 - **세션 종료**: `NEXT.md` 3줄 갱신 → 코드가 안 돌아도 `wip:` 커밋 → push.
+- **미정 사항**: 결정이 필요한데 아직 못 정한 것은 그 자리에서 임의로 정하지 말고 `LATER.md` 에 `L-nn` 으로 적는다. 정해지면 그 줄을 지우고 정본·README 로 옮긴다. (정했는데 안 만든 것은 각 `features/*/README.md` 의 "아직 안 한 것".)
