@@ -9,6 +9,7 @@ import { transitionReservation } from "@/features/booking/transitions";
 import { DEFAULT_POLICY } from "@/features/business/policy-defaults";
 import { todayIn } from "@/lib/dates";
 import type { RequestMeta } from "@/lib/request-meta";
+import { fakeBizRegNo } from "./_fixture";
 
 /**
  * FR-BOOK-080 예약 콘솔 — 스코프(#63)가 이 파일의 핵심이다.
@@ -35,7 +36,7 @@ async function fixture() {
     .values({
       slug: `k-${tag}`,
       name: `콘솔 ${tag}`,
-      bizRegNo: String(Date.now()).slice(-10),
+      bizRegNo: fakeBizRegNo(),
       category: "etc",
       status: "APPROVED",
       timezone: TZ,

@@ -5,6 +5,7 @@ import { loadConsoleBusiness } from "@/features/business/publish-gate";
 import { createHoliday, holidayInputSchema, listHolidays } from "@/features/schedule/holidays";
 import { readJson } from "@/lib/api";
 import { todayIn } from "@/lib/dates";
+import { revalidatePublicHome } from "@/features/site/revalidate";
 
 /** GET /api/console/holidays — 휴무 규칙 목록 (소속 멤버) · POST — 등록 (OWNER, FR-SCH-010). 미래 예약 충돌 시 409 HOLIDAY_CONFLICT */
 export const GET = handle(async () => {
@@ -19,5 +20,6 @@ export const POST = handle(async (req) => {
   const body = await readJson(req, holidayInputSchema);
   const { settings } = await loadConsoleBusiness(v.membership.businessId);
   const r = await createHoliday(v.membership.businessId, body, todayIn(settings.timezone));
+  await revalidatePublicHome(v.membership.businessId);
   return NextResponse.json({ ok: true, id: r.id, conflicts: r.conflicts }, { status: 201 });
 });

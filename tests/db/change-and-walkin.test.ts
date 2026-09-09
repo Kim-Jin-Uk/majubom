@@ -5,6 +5,7 @@ import { db, pool } from "@/db/client";
 import { businesses, productResources, products, reservationLogs, reservations, resources, users } from "@/db/schema";
 import { createReservation, createWalkIn } from "@/features/booking/create";
 import { DEFAULT_POLICY } from "@/features/business/policy-defaults";
+import { fakeBizRegNo } from "./_fixture";
 
 /**
  * FR-BOOK-050 예약 변경 · FR-BOOK-070 워크인 — DB 가 있어야 볼 수 있는 것만.
@@ -26,7 +27,7 @@ async function fixture() {
     .values({
       slug: `c-${tag}`,
       name: `변경 ${tag}`,
-      bizRegNo: String(Date.now()).slice(-10),
+      bizRegNo: fakeBizRegNo(),
       category: "etc",
       status: "APPROVED",
       openingHours: [0, 1, 2, 3, 4, 5, 6].map((dow) => ({ dow, open: "00:00", close: "00:00" })),

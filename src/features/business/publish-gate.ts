@@ -10,7 +10,7 @@ import { isInfoComplete, type BusinessSettings } from "./settings";
  *
  * 공개 URL(/@slug) 이 살아 있으려면 셋이 모두 참이어야 한다:
  *   활성 상품 ≥ 1 · 활성 자원 ≥ 1 · SitePage.isPublished — 그리고 사업장 status = APPROVED (관리자 승인은 공개 URL 게이트).
- * 미충족이면 공개 URL 은 "준비 중" 페이지를 낸다 (공개 홈 에픽 #71 에서 렌더링). 여기서는 판정만.
+ * 미충족이면 공개 URL 은 **404** 다 — 상태를 구별할 수 있으면 slug 를 훑어 사업장 목록을 만들 수 있다 (features/site/README.md). 여기서는 판정만.
  *
  * 위저드 단계(기획서 6.1)와의 대응: 1 매장 정보 · 2 자원 · 3 상품 이 공개 조건, 4 로고·색상 · 5 정책 · 6 상담은 선택.
  */
@@ -51,7 +51,9 @@ export async function loadConsoleBusiness(businessId: string): Promise<ConsoleBu
       // 주의: 단일 테이블 select 에서 drizzle 은 ${businesses.id} 를 "id" 로만 렌더링해 서브쿼리 안에서 r.id 로 잡힌다 — 테이블명을 글자로 쓴다
       activeResources: sql<number>`(select count(*)::int from resources r where r.business_id = businesses.id and r.is_active)`,
       activeProducts: sql<number>`(select count(*)::int from products p where p.business_id = businesses.id and p.status = 'ACTIVE')`,
-      sitePublished: sql<boolean>`coalesce((select sp.is_published from site_pages sp where sp.business_id = businesses.id limit 1), false)`,
+      // 행이 없으면 **공개**다 — 승인된 사업장에는 업종별 시작 템플릿이 적용돼 "빌더를 한 번도 열지 않아도
+      // 즉시 예약을 받을 수 있다"(기획서). 기본값을 false 로 두면 빌더(에픽 #15)가 오기 전까지 아무도 공개될 수 없다
+      sitePublished: sql<boolean>`coalesce((select sp.is_published from site_pages sp where sp.business_id = businesses.id limit 1), true)`,
     })
     .from(businesses)
     .where(eq(businesses.id, businessId))

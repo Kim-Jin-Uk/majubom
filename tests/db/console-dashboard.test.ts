@@ -11,6 +11,7 @@ import { createReservation } from "@/features/booking/create";
 import { DEFAULT_POLICY } from "@/features/business/policy-defaults";
 import { todayIn } from "@/lib/dates";
 import { addDays, dateRange, dowOf } from "@/features/schedule/resolve";
+import { fakeBizRegNo } from "./_fixture";
 
 /**
  * 대시보드·캘린더 (FR-BOOK-080 #59·#60). DB 가 있어야 볼 수 있는 것만.
@@ -61,7 +62,7 @@ async function fixture() {
     .values({
       slug: `d-${tag}`,
       name: `대시보드 ${tag}`,
-      bizRegNo: String(Date.now()).slice(-10),
+      bizRegNo: fakeBizRegNo(),
       category: "etc",
       status: "APPROVED",
       timezone: TZ,

@@ -28,6 +28,14 @@ export const BUSINESS_CATEGORIES = [
 ] as const;
 
 export type BusinessCategory = (typeof BUSINESS_CATEGORIES)[number][0];
+
+/**
+ * 업종 코드 → 사람이 읽는 이름. DB 에는 `nail` 같은 코드가 들어 있고 화면·메타태그·검색 결과에는 그대로 나가면 안 된다.
+ * 모르는 코드(목록이 바뀌기 전에 저장된 값)는 "기타" 로 — 코드값이 손님에게 보이는 것보다 낫다.
+ */
+export function categoryLabel(code: string): string {
+  return BUSINESS_CATEGORIES.find(([c]) => c === code)?.[1] ?? "기타";
+}
 export const BUSINESS_CATEGORY_CODES = BUSINESS_CATEGORIES.map(([c]) => c) as unknown as [BusinessCategory, ...BusinessCategory[]];
 
 /** 가입 시 임시 slug — 온보딩(FR-BIZ-010)에서 바꾼다. `b-` + 8자 [a-z0-9] */
