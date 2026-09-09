@@ -234,6 +234,8 @@ export interface Slot {
   resourceIds: string[];
   /**
    * 잔여 정원 = Σ(자원별 cap − peakOccupancy), 요구 좌석 이상인 자원만 합산.
+   * 주의: 합산이라 **한 건이 실제로 쓸 수 있는 최대 인원과 다르다** — 정원 2 짜리 방 셋이면 6 이지만 6명 예약은 들어가지 않는다.
+   * 예약 생성(FR-BOOK-020)의 인원 검증은 이 합계가 아니라 자원별 잔여로 해야 한다 (LATER.md L-31).
    * cap = min(capacityPerSlot, resource.capacity)가 1이면 한 팀이 슬롯을 통째로 쓰므로 팀 단위(0 또는 1)이고
    * partySize와 비교하지 않는다 — 공간형 프리셋(정원 1, 최대 4명)이 성립하기 위한 해석 (tests/fixtures/README.md 가정 A1)
    */
@@ -254,10 +256,12 @@ export interface ExcludedSlot {
 }
 
 export type SlotErrorCode =
-  /** durationMin이 durationOptions 밖 — 400, 조용히 기본값으로 바꾸지 않는다 */
+  /** durationMin이 durationOptions 밖 — 400, 조용히 기본값으로 바꾸지 않는다. 확정된 이용 시간이 0 이하인 경우도 */
   | "DURATION_NOT_ALLOWED"
   /** partySize > product.maxPartySize */
   | "PARTY_SIZE_EXCEEDED"
+  /** partySize가 1 미만이거나 정수가 아님 — 0을 넣으면 만석 슬롯도 "잔여 0 ≥ 0" 으로 통과한다 */
+  | "PARTY_SIZE_INVALID"
   /** resourceSelectMode=REQUIRED인데 query.resourceId가 없음 */
   | "RESOURCE_REQUIRED"
   /** query.resourceId가 상품에 연결되지 않은 자원 */

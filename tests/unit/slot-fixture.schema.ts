@@ -214,7 +214,7 @@ export const slotSuccess: z.ZodType<SlotSuccess> = z.object({
 });
 
 export const slotFailure: z.ZodType<SlotFailure> = z.object({
-  error: z.enum(["DURATION_NOT_ALLOWED", "PARTY_SIZE_EXCEEDED", "RESOURCE_REQUIRED", "RESOURCE_NOT_LINKED"]),
+  error: z.enum(["DURATION_NOT_ALLOWED", "PARTY_SIZE_EXCEEDED", "PARTY_SIZE_INVALID", "RESOURCE_REQUIRED", "RESOURCE_NOT_LINKED"]),
 });
 
 export const slotResult: z.ZodType<SlotResult> = z.union([slotSuccess, slotFailure]);

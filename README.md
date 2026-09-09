@@ -33,7 +33,7 @@ npm run dev
 | 명령 | 하는 일 |
 |---|---|
 | `npm run verify` | typecheck + lint + test — **push 전에 한 번** |
-| `npm test` | vitest 유닛 (슬롯 계산 40건은 `todo`, 구현은 이슈 #7) |
+| `npm test` | vitest 유닛 (슬롯 계산 40건 포함 — FR-BOOK-010 구현 완료) |
 | `npm run test:rules:emu` | Firestore 보안 규칙 테스트 (에뮬레이터 기동 포함, Java 필요) |
 | `npm run db:generate` | 스키마 변경 → 마이그레이션 SQL 생성 |
 | `npm run db:migrate` | 마이그레이션 적용 (직결 연결 · `lock_timeout 3s` · 재시도) |
@@ -70,7 +70,8 @@ Auth.js v5 + 서버 저장 리프레시 토큰. **액세스 스냅샷(JWT 쿠키
 ## 중단하고 돌아올 때
 
 [NEXT.md](NEXT.md)의 3줄을 먼저 읽는다. 세션 끝에는 코드가 안 돌아도 `wip:` 커밋 후 push한다.
+아직 못 정한 것은 [LATER.md](LATER.md)(추후 논의)에 모아 둔다 — 그 자리에서 임의로 정하지 않는다.
 
 ## 라이선스
 
-별도 LICENSE 파일이 없으므로 **all rights reserved** 다. 코드는 열람할 수 있지만 사용·수정·배포 권한은 없다. (Q12 — 추후 재검토)
+별도 LICENSE 파일이 없으므로 **all rights reserved** 다. 코드는 열람할 수 있지만 사용·수정·배포 권한은 없다. (Q12 — [LATER.md](LATER.md) L-30)

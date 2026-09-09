@@ -133,7 +133,8 @@ export function holidayApplies(h: Holiday, date: ISODate): boolean {
   }
 }
 
-function holidayCut(h: Holiday): Interval[] {
+/** 그 휴무가 하루에서 잘라내는 구간. 전일이면 이틀치(자정 넘긴 구간까지) */
+export function holidayCut(h: Holiday): Interval[] {
   return h.isFullDay || !h.startTime || !h.endTime ? [{ start: 0, end: 2880 }] : [span(h.startTime, h.endTime)];
 }
 

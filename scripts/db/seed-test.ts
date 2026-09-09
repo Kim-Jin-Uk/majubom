@@ -3,7 +3,9 @@
  *   npm run db:seed:test
  *
  * 만드는 것 (이미 있으면 그대로 두고 계정 정보만 다시 찍는다):
- *   - 사장님  owner@example.com   / test1234   — 사업장 "봄 네일" (사업자번호 체크섬 통과, 이메일 인증 완료, 심사 PENDING)
+ *   - 사장님  owner@example.com   / test1234   — 사업장 "봄 네일" (사업자번호 체크섬 통과, 이메일 인증 완료, 심사 APPROVED)
+ *     승인 상태로 두는 이유: 관리자 콘솔(FR-ADM-010)이 아직 없어 손으로 승인할 방법이 없는데, 공개 예약 API 는 APPROVED 사업장만 답한다.
+ *     심사 중(PENDING) 화면을 보려면 db:studio 에서 businesses.status 를 PENDING 으로 되돌리면 된다.
  *   - 매니저  manager@example.com / test1234   — STAFF 자원 "이디자이너" 에 연결된 매니저 (초대 수락 상태, 권한 4종 전부)
  *   - 자원: 김디자이너·이디자이너(STAFF), A룸(SPACE) · 영업시간 월~토 10–20 (휴게 13–14) · 타임존 Asia/Seoul
  *   - 근무 패턴: 두 담당자 월~금 10–19 (휴게 13–14), 오늘부터
@@ -63,9 +65,9 @@ async function main() {
     meta,
   );
   const now = new Date();
-  await db.update(businesses).set({ emailVerifiedAt: now }).where(eq(businesses.id, businessId));
+  await db.update(businesses).set({ emailVerifiedAt: now, status: "APPROVED", approvedAt: now }).where(eq(businesses.id, businessId));
   await db.update(users).set({ emailVerifiedAt: now }).where(eq(users.id, ownerId));
-  console.log(`✓ 사업장 ${businessId} (PENDING · 이메일 인증 완료)`);
+  console.log(`✓ 사업장 ${businessId} (APPROVED · 이메일 인증 완료)`);
 
   // 2) 설정: 타임존·영업시간
   await updateBusinessInfo(
@@ -140,6 +142,7 @@ async function main() {
   await createException(businessId, { resourceId: s2, date: thu, kind: "OFF", reason: "가족 행사", leave: true }, { uid: mgrUser.id, role: "MANAGER", memberId });
   console.log(`✓ 휴가 신청 1건 (이디자이너 ${thu} 목 종일 · 승인 대기)`);
   console.log(`  근무표: /console/schedule?week=${addDays(tue, -2)}`);
+  console.log(`  슬롯 API: /api/public/products/${productId}/slots?date=${tue}&partySize=1`);
   printAccounts();
   await pool.end();
 }

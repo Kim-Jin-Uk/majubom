@@ -1,19 +1,18 @@
 /**
- * FR-BOOK-010 가용 슬롯 계산 — 테스트 골격 (이슈 1-12).
+ * FR-BOOK-010 가용 슬롯 계산 — 픽스처 40건 (이슈 1-12 골격 + 7-1·7-2 구현).
  *
- * 구현(이슈 7-1·7-2)이 없으므로 40건은 `it.todo`로 등록만 한다.
- * 지금 실제로 통과해야 하는 것은 픽스처 자체의 무결성이다:
+ * 두 가지를 검사한다. 하나는 픽스처 자체의 무결성:
  *   (1) 정확히 40건이고 id가 유일하다
  *   (2) 모든 케이스가 slot-types.ts 타입(zod 스키마)에 맞는다
  *   (3) 태그 분포 최소치를 만족한다
  *   (+) 픽스처 내부 일관성 — 시각 오프셋, 정렬, FIXED/FREE 출력 형태, 명세 20석 예시 포함
- *
- * 구현이 들어오면 `it.todo` 를 아래 형태로 바꾼다:
- *   it(`${id} ${title}`, () => expect(computeSlots(ctx, query)).toEqual(expected));
+ * 다른 하나는 `computeSlots(ctx, query)` 가 케이스마다 기대값과 같은가.
+ * 기대값은 명세를 손으로 따라가 만든 것이다 — 어긋나면 구현을 고치기 전에 `rationale` 줄을 먼저 검산한다.
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { computeSlots } from "@/features/booking/slots";
 import { isSlotFailure } from "@/features/booking/slot-types";
 import { slotCasesFile, type CaseTag, type SlotCase } from "./slot-fixture.schema";
 
@@ -162,9 +161,9 @@ describe("slot-cases.json 픽스처 무결성", () => {
   });
 });
 
-describe("FR-BOOK-010 computeSlots — 40건 (구현 전, todo)", () => {
-  // 구현이 들어오면 it.todo 를 it 로 바꾸고 computeSlots(ctx, query) 와 expected 를 toEqual 로 비교한다.
-  describe.each(rawCases.map((c) => [c.id, c.title] as const))("%s", (id, title) => {
-    it.todo(`${id} ${title}`);
+describe("FR-BOOK-010 computeSlots — 40건", () => {
+  const cases: SlotCase[] = slotCasesFile.parse(raw).cases;
+  it.each(cases.map((c) => [`${c.id} ${c.title}`, c] as const))("%s", (_name, c) => {
+    expect(computeSlots(c.ctx, c.query)).toEqual(c.expected);
   });
 });
