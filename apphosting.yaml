@@ -14,9 +14,10 @@ env:
     value: majubom
     availability: [BUILD, RUNTIME]
 
-  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
-    value: ""            # 클라이언트 노출 전제 값. 콘솔에서 채운다
-    availability: [BUILD, RUNTIME]
+  # NEXT_PUBLIC_FIREBASE_API_KEY 는 **일부러 없다**. App Hosting 파서는 `value: ""` 를 "값 없음" 으로 보고
+  # 빌드를 통째로 거부한다(fah/invalid-apphosting-yaml, "either 'value' or 'secret' field is required').
+  # 지금 이 키를 읽는 코드가 없으므로(웹 푸시 에픽에서 처음 필요해진다) 빈 값으로 자리만 잡아 두지 않는다.
+  # 필요해지면 그때 실제 값을 넣는다 — 클라이언트에 노출되는 값이라 시크릿이 아니다.
 
   # ── 시크릿: Cloud Secret Manager 참조 ──
   # 등록: firebase apphosting:secrets:set DATABASE_URL
