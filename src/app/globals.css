@@ -1441,3 +1441,269 @@ button {
     margin-bottom: 8px;
   }
 }
+
+/* 콘솔 대시보드 (FR-BOOK-080 #59) — 폰이 기본이라 세로 스택, 넓어지면 2열 */
+.dash {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+.dash-card {
+  padding: 18px;
+  gap: 10px;
+}
+.dash-card h2 {
+  font-size: 14px;
+  color: var(--text-2);
+}
+.dash-big {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 800;
+  line-height: 1.1;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.dash-big span {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.dash-big.warn {
+  color: var(--warn);
+}
+.dash-big .up {
+  color: var(--primary-dark);
+}
+.dash-big .down {
+  color: var(--bad);
+}
+.dash-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 13.5px;
+}
+.dash-timeline li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+.dash-timeline .t {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  min-width: 42px;
+}
+.dash-bars {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12.5px;
+}
+.dash-bars li {
+  display: grid;
+  grid-template-columns: minmax(60px, 96px) 1fr 38px;
+  align-items: center;
+  gap: 8px;
+}
+.dash-bars .n {
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dash-bars .bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--muted-fill);
+  overflow: hidden;
+}
+.dash-bars .bar i {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+}
+.dash-bars .v {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+}
+.dash-week {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 13px;
+}
+.dash-week li {
+  display: flex;
+  gap: 10px;
+}
+.dash-week .d {
+  min-width: 44px;
+  color: var(--text-2);
+}
+.dash-week li.today {
+  font-weight: 700;
+}
+
+/* 예약 캘린더 (#60 일/주 뷰) */
+.cal-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+/*
+ * 폭은 컬럼이 정한다(width: max-content). `.cal` 에 overflow:hidden 을 걸면 넘친 컬럼이 잘려 나가고
+ * 그 폭이 래퍼의 스크롤 범위에 잡히지 않아 폰에서는 뒤쪽 요일에 **영영 닿을 수 없다** — 모서리 둥글리기는 래퍼가 맡는다.
+ */
+.cal {
+  display: grid;
+  width: max-content;
+  min-width: 100%;
+  background: var(--surface);
+}
+.cal-corner,
+.cal-head {
+  background: var(--table-head);
+  border-bottom: 1px solid var(--border);
+  padding: 8px 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-2);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cal-gutter,
+.cal-col {
+  position: relative;
+}
+.cal-col {
+  border-left: 1px solid var(--border-2);
+}
+.cal-gutter {
+  background: var(--surface);
+}
+.cal-hour {
+  position: absolute;
+  right: 6px;
+  transform: translateY(-50%);
+  font-size: 11px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+/* 첫 눈금은 가운데 정렬하면 위쪽 절반이 헤더 칸으로 넘어간다 */
+.cal-hour:first-child {
+  transform: none;
+}
+.cal-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px solid var(--border-2);
+}
+/* 운영시간만 밝게 — 나머지는 바탕이라 "닫힌 시간" 이 저절로 드러난다 */
+.cal-open {
+  position: absolute;
+  background: var(--surface-2);
+}
+.cal-block {
+  position: absolute;
+  border-radius: 6px;
+  padding: 2px 5px;
+  font-size: 11px;
+  line-height: 1.25;
+  overflow: hidden;
+  text-decoration: none;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 1px 2px rgba(var(--shadow-rgb), 0.14);
+}
+.cal-block b {
+  font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cal-block span {
+  opacity: 0.85;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cal-block.mine {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+.cal-block:hover,
+.cal-block:focus-visible {
+  filter: brightness(0.96);
+}
+.cal-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  font-size: 13px;
+}
+.cal-nav b {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.cal-nav .today {
+  font-weight: 700;
+}
+.cal-block .who {
+  opacity: 0.7;
+  font-size: 10.5px;
+}
+/* 패널 밖에서도 보조 문구로 읽히게 (.sub 는 .panel/.card 안에서만 정의돼 있다) */
+.cal-wrap + .sub,
+.console-body > .sub {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--text-2);
+}
+
+@media (min-width: 900px) {
+  .dash {
+    grid-template-columns: 1fr 1fr;
+  }
+  /* 오늘 예약은 목록이라 세로로 길다 — 넓은 화면에서 한 줄을 통째로 준다 */
+  .dash-card:first-child {
+    grid-column: 1 / -1;
+  }
+}
+
+/* 콘솔 모바일 (#62 · 01 §10) — 매니저는 이 화면을 폰에서 연다 */
+@media (max-width: 640px) {
+  .console-body {
+    padding: 18px 14px 40px;
+    gap: 16px;
+  }
+  .cal-nav {
+    margin-left: 0;
+    width: 100%;
+    justify-content: space-between;
+  }
+  /* 좁은 폭에서 기본은 목록이다(캘린더는 링크로 들어가는 뷰). 들어왔을 때는 가로 스크롤로 버틴다 */
+  .rsv-table {
+    min-width: 480px;
+  }
+  .dash-big {
+    font-size: 27px;
+  }
+}

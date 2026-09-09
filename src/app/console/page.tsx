@@ -1,5 +1,9 @@
 import Link from "next/link";
 import { Alert } from "@/components/ui";
+import { consoleActor } from "@/features/booking/console";
+import { getDashboard } from "@/features/booking/dashboard";
+import { DashboardCards } from "@/features/booking/ui/DashboardCards";
+import { todayIn } from "@/lib/dates";
 import { isPolicyTouched } from "@/features/business/policy";
 import { loadConsoleBusiness, nextWizardStep, wizardSteps } from "@/features/business/publish-gate";
 import { ConsoleShell } from "@/features/business/ui/ConsoleShell";
@@ -9,7 +13,9 @@ import { flags } from "@/lib/flags";
 export const metadata = { title: "콘솔 — 마주,봄" };
 
 /**
- * 콘솔 홈. 대시보드(예약 현황)는 #59(8-1). 지금은 공개 조건과 다음 할 일을 보여준다.
+ * 콘솔 홈 = 대시보드 (FR-BOOK-080, #59). 오늘 예약 · 승인 대기 · 이번 주 가동률 · 이번 주 내 근무.
+ * 매장 준비(온보딩)는 그 아래로 내린다 — 매일 여는 화면에서 매번 보고 싶은 것은 오늘 할 일이지 위저드가 아니다.
+ * 아직 공개 조건을 못 갖춘 사업장은 순서를 뒤집는다(예약이 있을 수 없으니 준비가 먼저다).
  * 접근 제어(로그인·소속·상태·이메일 검증)는 프록시가, 상태 배너는 layout.tsx 가 맡는다.
  */
 export default async function ConsoleHome() {
@@ -19,6 +25,8 @@ export default async function ConsoleHome() {
   const steps = wizardSteps(status, { chatEnabled: flags.chat, policyTouched: isPolicyTouched(policy), brandTouched: false });
   const nextStep = nextWizardStep(steps);
   const waitingProduct = !nextStep && steps.some((s) => s.required && !s.done && s.comingSoon);
+  // 예약을 받을 수 있는 상태일 때만 대시보드가 뜻이 있다 — 준비 중인 매장에 "가동률 0%" 를 보여줄 이유가 없다
+  const dash = status.readyToPublish ? await getDashboard(consoleActor(v), todayIn(b.timezone)) : null;
   return (
     <ConsoleShell current="home" viewer={{ name: v.name, role: v.membership.role }}>
       <h1>{b.name}</h1>
@@ -47,6 +55,7 @@ export default async function ConsoleHome() {
           예약을 받으려면 매장 정보 · 담당자(공간) · 상품이 필요해요.{nextStep ? ` 다음: ${nextStep.label}` : waitingProduct ? " 상품 등록은 다음 배포에서 열려요 — 그때까지 로고·정책을 다듬어 두세요." : ""}
         </Alert>
       )}
+      {dash && <DashboardCards data={dash} role={v.membership.role} />}
       <section className="panel">
         <h2>매장 준비</h2>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10 }}>

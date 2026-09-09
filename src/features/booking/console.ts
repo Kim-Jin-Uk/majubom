@@ -71,13 +71,13 @@ export type ReservationRow = {
 };
 
 /** 존재할 수 없는 uuid — 담당 자원이 없는 매니저에게 빈 결과를 주려고 술어에 넣는다 */
-const NO_RESOURCE = "00000000-0000-4000-8000-000000000000";
+export const NO_RESOURCE = "00000000-0000-4000-8000-000000000000";
 
 /**
  * 예약이 기간에 걸치려면 시작 시각이 아무리 일러도 이만큼 안이다 — 이용 시간 ≤ 480분(products CHECK) + 앞뒤 버퍼 각 ≤ 60분.
  * `end_at > lo` 만으로는 (resource_id, start_at)·(business_id, start_at) 인덱스를 못 태워 전체 스캔이 된다.
  */
-const MAX_SPAN_MIN = 480 + 60 + 60;
+export const MAX_SPAN_MIN = 480 + 60 + 60;
 
 /** ilike 패턴의 와일드카드를 글자로 되돌린다 — `%` 한 글자를 검색하면 전부 나오는 것을 막는다 */
 const likeTerm = (raw: string) => `%${raw.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
@@ -88,15 +88,20 @@ const likeTerm = (raw: string) => `%${raw.replace(/[\\%_]/g, (c) => `\\${c}`)}%`
  * 근무표(`calendar.ts`)·휴무 충돌(`holidays.ts`)이 이미 시작·종료 양쪽을 보므로 화면끼리 어긋나지 않게 여기도 같은 기준으로 둔다.
  * 정확히 lo 에 끝나는 예약은 그 날을 차지하지 않는다(`> lo`).
  */
-const spansRange = (lo: Date, hi: Date) => and(gte(reservations.startAt, new Date(lo.getTime() - MAX_SPAN_MIN * 60_000)), lt(reservations.startAt, hi), sql`${reservations.endAt} > ${lo.toISOString()}::timestamptz`);
+export const spansRange = (lo: Date, hi: Date) => and(gte(reservations.startAt, new Date(lo.getTime() - MAX_SPAN_MIN * 60_000)), lt(reservations.startAt, hi), sql`${reservations.endAt} > ${lo.toISOString()}::timestamptz`);
 
 /**
- * 매니저가 볼 수 있는 범위. `scoped` 는 질의에 붙일 자원 제한(전체 권한이면 null),
- * `mineId` 는 "내 담당 건" 표시용 — 전체 권한이 있어도 내 자원은 알아야 강조할 수 있다.
+ * 볼 수 있는 범위와 "내 담당" 판정. 콘솔의 모든 화면이 이 함수 하나를 탄다.
+ *
+ * `scoped` — 질의에 붙일 자원 제한. OWNER 와 `viewAllReservations` 매니저는 null(전체),
+ *            담당 자원이 없는 매니저는 존재할 수 없는 uuid(빈 결과).
+ * `mineId`  — 내가 담당하는 STAFF 자원. **역할과 무관하게** 찾는다: 사장님도 본인이 자원으로 등록돼
+ *            시술을 하면 자기 컬럼·자기 근무를 알아야 한다(1인 매장이거나, 사장이 함께 일하는 매장).
+ *            권한이 아니라 표시용이라 호출자마다 다시 구하지 않게 여기서 한 번에 준다.
  */
-async function scope(actor: ConsoleActor): Promise<{ scoped: string | null; mineId: string | null }> {
-  if (actor.role === "OWNER") return { scoped: null, mineId: null };
+export async function scope(actor: ConsoleActor): Promise<{ scoped: string | null; mineId: string | null }> {
   const mineId = await ownResourceId(actor.businessId, actor.memberId);
+  if (actor.role === "OWNER") return { scoped: null, mineId };
   return { scoped: actor.canViewAll ? null : (mineId ?? NO_RESOURCE), mineId };
 }
 

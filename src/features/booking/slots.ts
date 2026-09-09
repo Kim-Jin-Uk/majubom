@@ -1,4 +1,5 @@
-import { addDays, dowOf, holidayApplies, holidayCut, intersect, resolveWorkDay, span, subtract, toMin, type Interval } from "@/features/schedule/resolve";
+import { addDays, dowOf, span, toMin, type Interval } from "@/features/schedule/resolve";
+import { openingWindows, operatingWindows } from "@/features/schedule/operating";
 import { countsTowardOccupancy, peakOccupancy } from "./peak-occupancy";
 import type { ExcludedSlot, FixedExclusionReason, ISODate, Slot, SlotContext, SlotQuery, SlotResource, SlotResult } from "./slot-types";
 import { todayIn } from "@/lib/dates";
@@ -20,27 +21,13 @@ import { formatInstant, localToInstant, toMs } from "./time";
 /** 정원 1 은 한 팀이 슬롯을 통째로 쓴다 — 인원과 비교하지 않는다 (가정 A1) */
 const isTeamUnit = (cap: number) => cap === 1;
 
-function openingWindows(ctx: SlotContext, date: ISODate, subtractBreaks: boolean): Interval[] {
-  const o = ctx.business.openingHours.find((x) => x.dow === dowOf(date));
-  if (!o) return [];
-  const base = [span(o.open, o.close)];
-  return subtractBreaks ? subtract(base, (o.breaks ?? []).map((b) => span(b.start, b.end))) : base;
-}
-
-/** 그 자원이 그날 예약을 받을 수 있는 구간 (1~4단계) */
-function resourceWindows(ctx: SlotContext, date: ISODate, r: SlotResource, opening: Interval[]): Interval[] {
-  if (r.type === "STAFF") {
-    // 근무 구간에는 이미 휴게·BLOCK·휴무가 반영돼 있다. 승인되지 않은 휴가 신청(PENDING)은 호출자가 걸러 넣는다.
-    // day.bookable 을 쓰지 않는 이유: 그건 늘 영업시간 브레이크를 빼는데, FIXED 상품은 그 브레이크를 차감하지 않는다(A4)
-    const day = resolveWorkDay({ date, resourceId: r.id, openingHours: ctx.business.openingHours, schedules: ctx.workSchedules, exceptions: ctx.workExceptions, holidays: ctx.holidays });
-    return intersect(opening, day.work);
-  }
-  // 공간·공유 자원은 근무표가 없다 — 영업시간에서 휴무와 개인 차단만 뺀다
-  let w = opening;
-  for (const h of ctx.holidays) if ((h.resourceId === null || h.resourceId === r.id) && holidayApplies(h, date)) w = subtract(w, holidayCut(h));
-  for (const e of ctx.workExceptions) if (e.resourceId === r.id && e.date === date && e.kind === "BLOCK" && e.startTime && e.endTime) w = subtract(w, [span(e.startTime, e.endTime)]);
-  return w;
-}
+/**
+ * 그 자원이 그날 예약을 받을 수 있는 구간 (1~4단계). 구현은 `schedule/operating.ts` 하나다 —
+ * 콘솔의 가동률·캘린더가 같은 함수를 쓰므로 "화면에 보이는 운영시간" 과 "실제로 팔리는 슬롯" 이 어긋나지 않는다.
+ * 승인되지 않은 휴가 신청(PENDING)은 호출자(`context.ts`)가 걸러 넣는다.
+ */
+const resourceWindows = (ctx: SlotContext, date: ISODate, r: SlotResource, opening: Interval[]): Interval[] =>
+  operatingWindows({ date, resource: r, opening, openingHours: ctx.business.openingHours, schedules: ctx.workSchedules, exceptions: ctx.workExceptions, holidays: ctx.holidays });
 
 /**
  * FIXED 회차 시각 → 영업일 기준 분. 자정을 넘겨 영업하는 날의 이른 시각은 익일이다 (`{dow:2,"01:00"}` = 수요일 새벽 1시).
@@ -99,7 +86,7 @@ export function computeSlots(ctx: SlotContext, q: SlotQuery): SlotResult {
   if (q.date < today || q.date > addDays(today, biz.policy.maxAdvanceDays)) return isFixed ? { slots: [], excluded: [] } : { slots: [] };
 
   // FIXED 는 영업시간 브레이크를 차감하지 않는다(fixedIgnoreBreaks 기본 true). 근무표 휴게는 늘 차감된다 (가정 A4)
-  const opening = openingWindows(ctx, q.date, !(isFixed && (p.fixedIgnoreBreaks ?? true)));
+  const opening = openingWindows(ctx.business.openingHours, q.date, !(isFixed && (p.fixedIgnoreBreaks ?? true)));
 
   const resources = ctx.resources
     .filter((r) => p.resourceIds.includes(r.id) && r.isActive && (!q.resourceId || r.id === q.resourceId))
