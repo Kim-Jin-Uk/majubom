@@ -28,6 +28,7 @@ export function ReservationsPanel({
   resources,
   products,
   role,
+  initialStatus = [],
 }: {
   initial: ReservationRow[];
   initialCursor: string | null;
@@ -36,16 +37,18 @@ export function ReservationsPanel({
   resources: FilterOption[];
   products: FilterOption[];
   role: "OWNER" | "MANAGER";
+  /** URL 로 들어온 상태 필터 (대시보드의 "승인 대기 보기") — 서버가 이미 이걸로 걸러 그린 첫 페이지와 칩이 어긋나면 안 된다 */
+  initialStatus?: ReservationStatus[];
 }) {
   /** 입력 중인 값 — 다 채워졌고 순서가 맞을 때만 질의에 반영한다 */
   const [draft, setDraft] = useState({ from, to });
-  const [status, setStatus] = useState<ReservationStatus[]>([]);
+  const [status, setStatus] = useState<ReservationStatus[]>(initialStatus);
   const [resourceId, setResourceId] = useState("");
   const [productId, setProductId] = useState("");
   const [createdVia, setCreatedVia] = useState("");
   const [q, setQ] = useState("");
   /** 지금 화면에 있는 목록 + 그것을 만든 조건 — 조건이 앞서 나가면 커서가 무효라는 것을 이걸로 안다 */
-  const [page, setPage] = useState({ items: initial, cursor: initialCursor, key: queryKey(from, to, [], "", "", "", "") });
+  const [page, setPage] = useState({ items: initial, cursor: initialCursor, key: queryKey(from, to, initialStatus, "", "", "", "") });
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   /** 늦게 도착한 예전 질의가 새 결과를 덮지 않게 */
