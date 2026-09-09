@@ -7,7 +7,7 @@
 
 에픽 #7 예약 엔진 ★ — **FR-BOOK-010·020·030·040·050·060·070 이 전부 들어왔다.** 남은 것은 알림·상담방 예약 카드(알림 에픽)뿐.
 브랜치 `feat/7-booking-engine`. 마이그레이션 0005(감사 action)·0006(`guest_label`)·0007(replaces 인덱스) — **Neon 에 `npm run db:migrate` 필요.**
-테스트: 슬롯 픽스처 40건 · 전이 표 검사 · DB 회귀 10건(동시성 4 + 변경·워크인 6, `DATABASE_URL` 이 test DB 일 때만).
+테스트: 슬롯 픽스처 40건 · 전이 표 검사 · DB 회귀 11건(동시성 4 + 변경·워크인 7, `DATABASE_URL` 이 test DB 일 때만).
 Cloud Scheduler 에 C2(`/api/cron/expire-requests`, 5분)·C3(`/api/cron/auto-no-show`, 일 1회)를 걸어야 한다.
 
 ## 막힌 것

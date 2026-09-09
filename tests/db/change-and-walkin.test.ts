@@ -133,6 +133,18 @@ describe.skipIf(!enabled)("예약 변경 · 워크인", () => {
     await expect(createReservation({ productId: f.productId, startAt: at(6), partySize: 1, customerNote: null, replacesReservationId: mine.id }, { uid: f.customerId })).rejects.toMatchObject({ status: 400, code: "ALREADY_STARTED" });
   }, 30_000);
 
+  it("워크인은 남의 사업장에 예약을 만들 수 없다 (콘솔이 자원만 보고 상품 소속을 놓쳤던 자리)", async () => {
+    const mine = await make();
+    const other = await make();
+    // 내 사업장 콘솔에서 **남의 사업장 상품·자원** 으로 워크인을 시도한다.
+    // 저장되는 businessId 는 상품에서 오므로, 여기서 막지 않으면 남의 사업장에 내 워크인 계정 명의로 예약이 생긴다
+    await expect(
+      createWalkIn({ productId: other.productId, resourceId: other.resourceId, startAt: at(20), partySize: 1, guestLabel: "침입" }, { customerId: mine.walkInId, businessId: mine.businessId }),
+    ).rejects.toMatchObject({ status: 404 });
+    const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(reservations).where(eq(reservations.businessId, other.businessId));
+    expect(n, "남의 사업장에 아무것도 남지 않아야 한다").toBe(0);
+  }, 30_000);
+
   it("취소 마감을 지난 변경은 자동 승인이어도 REQUESTED 로 들어간다", async () => {
     const f = await make();
     const a = await createReservation({ productId: f.productId, startAt: at(10), partySize: 1, customerNote: null }, { uid: f.customerId });
