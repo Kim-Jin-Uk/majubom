@@ -4,6 +4,7 @@ import { assertSameOrigin } from "@/features/auth/csrf";
 import { assertWritable, handle, requireOwner } from "@/features/auth/guards";
 import { setProductStatus } from "@/features/product/products";
 import { readJson, uuidParam } from "@/lib/api";
+import { revalidatePublicHome } from "@/features/site/revalidate";
 
 const Body = z.object({ status: z.enum(["DRAFT", "ACTIVE", "HIDDEN"]) });
 
@@ -15,5 +16,6 @@ export const PATCH = handle(async (req, ctx) => {
   const id = uuidParam((await ctx.params).id);
   const { status } = await readJson(req, Body);
   await setProductStatus(v.membership.businessId, id, status);
+  await revalidatePublicHome(v.membership.businessId);
   return NextResponse.json({ ok: true });
 });

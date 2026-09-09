@@ -4,6 +4,7 @@ import { assertSameOrigin } from "@/features/auth/csrf";
 import { assertWritable, handle, requireOwner } from "@/features/auth/guards";
 import { reorderProducts } from "@/features/product/products";
 import { readJson } from "@/lib/api";
+import { revalidatePublicHome } from "@/features/site/revalidate";
 
 const Body = z.object({ ids: z.array(z.uuid()).min(1).max(200) });
 
@@ -14,5 +15,6 @@ export const PUT = handle(async (req) => {
   const v = await requireOwner();
   const { ids } = await readJson(req, Body);
   await reorderProducts(v.membership.businessId, ids);
+  await revalidatePublicHome(v.membership.businessId);
   return NextResponse.json({ ok: true });
 });

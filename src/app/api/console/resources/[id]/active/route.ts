@@ -4,6 +4,7 @@ import { assertSameOrigin } from "@/features/auth/csrf";
 import { assertWritable, handle, requireOwner } from "@/features/auth/guards";
 import { setResourceActive } from "@/features/business/resources";
 import { readJson, uuidParam } from "@/lib/api";
+import { revalidatePublicHome } from "@/features/site/revalidate";
 
 const Body = z.object({ isActive: z.boolean() });
 
@@ -15,5 +16,6 @@ export const PATCH = handle(async (req, ctx) => {
   const id = uuidParam((await ctx.params).id);
   const { isActive } = await readJson(req, Body);
   await setResourceActive(v.membership.businessId, id, isActive);
+  await revalidatePublicHome(v.membership.businessId);
   return NextResponse.json({ ok: true });
 });

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { ADMIN_PREFIXES, PROTECTED_API_PREFIXES, PROTECTED_PAGE_PREFIXES } from "@/features/auth/constants";
 import { refreshSession, type RefreshOutcome } from "@/features/auth/refresh";
+import { internalSitePath, isPublicHome, SITE_PREFIX } from "@/features/site/routing";
 
 /**
  * 프록시 = (1) 1기 게이트 (08 §3.1) + (2) 세션 갱신·접근 제어 (FR-AUTH-030).
@@ -198,6 +199,10 @@ export async function proxy(request: NextRequest) {
     if (supplied === null || !ok) return unauthorized(gate);
   }
 
+  // 내부 경로를 직접 치는 것은 막는다 — 같은 내용이 두 주소로 열리면 색인이 갈리고 canonical 이 무의미해진다.
+  // rewrite 로 들어온 요청은 미들웨어를 다시 타지 않으므로 여기 걸리는 것은 전부 직접 접근이다
+  if (pathname.startsWith(SITE_PREFIX)) return new NextResponse(null, { status: 404 });
+
   const { block, outcome } = await handleSession(request);
   if (block) {
     if (gate) block.headers.set("X-Robots-Tag", ROBOTS_HEADER);
@@ -215,8 +220,19 @@ export async function proxy(request: NextRequest) {
     // 로그아웃시킨 쿠키를 도로 심는다.
     requestHeaders.set("cookie", replaceCookie(requestHeaders.get("cookie"), c.name, c.value));
   }
-  const res = applyCookies(NextResponse.next({ request: { headers: requestHeaders } }), outcome);
+  const internal = internalSitePath(pathname);
+  const rewritten = internal ? new URL(`${internal}${request.nextUrl.search}`, request.nextUrl) : null;
+  const res = applyCookies(rewritten ? NextResponse.rewrite(rewritten, { request: { headers: requestHeaders } }) : NextResponse.next({ request: { headers: requestHeaders } }), outcome);
   if (gate) res.headers.set("X-Robots-Tag", ROBOTS_HEADER);
+  // 공개 사업장 홈은 CDN 이 실질 캐시 계층이다 (FR-SITE-010) — App Hosting 은 Cloud Run 위라 Next 의 ISR 캐시가
+  // 인스턴스마다 따로다. 공유 캐시에 올리지 **않는** 경우가 둘 있다:
+  //   · 이 응답이 쿠키를 심을 때 — 세션 갱신으로 붙은 Set-Cookie 가 캐시를 타면 남의 세션이 배달된다
+  //   · 1기 Basic Auth 가 켜져 있을 때 — `public` 은 RFC 9111 §3.5 의 "Authorization 요청은 캐시 금지" 를 푸는
+  //     지시어라, 한 번 통과한 응답이 인증 없는 요청에 그대로 나간다. 미리보기 게이트가 통째로 뚫린다
+  if (isPublicHome(pathname)) {
+    const shareable = !basicAuth && res.cookies.getAll().length === 0;
+    res.headers.set("Cache-Control", shareable ? "public, s-maxage=60, stale-while-revalidate=300" : "private, no-store");
+  }
   return res;
 }
 
