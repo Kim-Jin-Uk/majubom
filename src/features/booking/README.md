@@ -1,7 +1,7 @@
 # 예약 엔진 (에픽 #7) — 설계 기록
 
 정본은 `majubom-docs/02_기능명세서.md` §3.7 (FR-BOOK-010 ~ 070). 명세가 정하지 않은 것을 여기서 어떻게 정했는지만 적는다.
-지금 있는 것은 **가용 슬롯 조회(FR-BOOK-010)** 까지다 — 예약 생성·상태 전이·취소·워크인은 다음 조각.
+지금 있는 것은 **슬롯 조회(010) · 생성(020) · 상태 전이(030·040·060)** 까지다 — 예약 변경·워크인은 다음 조각.
 
 ## 구조
 
@@ -11,7 +11,12 @@ features/booking/time.ts          로컬 시각 ↔ 순간. 벽시계 기준, �
 features/booking/peak-occupancy.ts 순간 최대 동시 인원 (겹침 합산이 아니다)
 features/booking/slots.ts         computeSlots — 순수 함수. DB·시계 없음
 features/booking/context.ts       DB → SlotContext. 유일한 DB 접점
-app/api/public/products/[id]/slots
+features/booking/create.ts        예약 생성 — 재검증 · 자원 배정 · 락
+features/booking/transition-rules.ts 상태 전이 표. 순수
+features/booking/transitions.ts   전이 실행 · 승인 재검증 · 배치(C2·C3)
+app/api/public/products/[id]/slots · app/api/reservations
+app/api/console/reservations/[id]/status · app/api/me/reservations/[id]/cancel
+app/api/cron/{expire-requests,auto-no-show}
 ```
 
 ## 결정한 것
@@ -59,8 +64,10 @@ FREE 는 후보가 구간 안에서 만들어지므로 `excluded` 를 쓰지 않
 - 슬롯 캐시 — 키(`win:{businessId}:{resourceId}:{date}` · `occ:…`)와 무효화 트리거·TTL 60초는 명세가 이미 정해 뒀다. 캐시 없이 먼저 만들고 느려지면 붙인다
 - `AUTO` 배정 후보 정렬(FR-BOOK-020 3.5) — 지금은 `resourceIds` 를 sortOrder 로 담아만 둔다 (가정 A6)
 - 예약 위젯·공개 홈(에픽 #10·#11)이 이 API 를 쓴다. 지금은 API 만 있고 화면이 없다
-- 승인/거절·취소·변경·워크인(FR-BOOK-030~070), 알림·상담방 예약 카드(7단계) — 다음 조각들
-- 취소 남용 방지("하루 3건 초과 취소 시 당일 재예약 차단", FR-BOOK-040) — 취소가 생길 때 함께
+- 예약 변경(FR-BOOK-050, `replacesReservationId`) · 워크인 대리 등록(FR-BOOK-070, `guestLabel` 컬럼이 필요하다) — 다음 조각들
+- 알림·상담방 예약 카드(생성 7단계, 승인·취소 알림) — 알림 에픽
+- 자동 노쇼를 사업자가 끄는 스위치 — 명세엔 있는데 `policy` 에 키가 없다. 정책 폼과 함께 추가한다
+- 예약 목록·상세(FR-BOOK-080, `/api/console/reservations`·`/api/me/reservations`) — 예약 콘솔 에픽 #8
 
 ## 예약 생성 (FR-BOOK-020)
 
@@ -94,3 +101,26 @@ FREE 는 후보가 구간 안에서 만들어지므로 `excluded` 를 쓰지 않
 
 동시성 회귀는 `tests/db/concurrency.test.ts` — 실제 Postgres 가 있을 때만 돈다(CI 는 임시 컨테이너, 로컬은 DB 이름에 test 가 든 `DATABASE_URL` 일 때만).
 정원 1 에 20 동시 → 1건, 정원 15 에 20 동시 → 15건, 2명씩 20 동시 → 7건, 정원 1 자원 3개 → 3건(자원마다 하나씩).
+
+## 상태 전이 (FR-BOOK-030 · 040 · 060)
+
+전이 표는 `transition-rules.ts` **하나뿐**이다 — 순수 모듈이라 DB 도 시계도 모르고, 표가 조용히 넓어지지 않게 테스트가 표 자체를 검사한다.
+실행은 `transitions.ts`: 권한 확인 → 사유 필수 검사 → 조건 → (승인이면) 재검증 → **조건부 UPDATE** → ReservationLog + 감사 로그.
+`UPDATE … WHERE id = ? AND status = <from>` 이 0행이면 409 `INVALID_TRANSITION` 이다. 매니저 승인과 고객 취소가 동시에 들어와도 한쪽만 성공한다.
+
+**승인 재검증(`validateExisting`)은 `computeSlots` 를 쓰지 않는다.** 그 함수는 신규 예약용이라, 예약이 잡힌 뒤 바뀐 상품 설정(격자·이용 시간 옵션)까지
+반영해 멀쩡한 예약을 승인 불가로 만든다(사업자가 240분 옵션을 지웠다고 기존 240분 요청을 승인 못 하면 안 된다). 보는 것은 셋뿐이다:
+상품이 ARCHIVED 가 아닐 것 · 자원이 있을 것(`isActive` 는 보지 않는다 — FR-RES-010 "기존 예약 유지") · 그 자리가 아직 비어 있을 것.
+
+명세는 "예약 유지로 표시되지 않은 Holiday/WorkException 이 새로 생기지 않았을 것" 도 든다. 우리 구현에서 이 조건은 **항상 참**이다 —
+겹치는 예약이 있는 휴무·예외는 OWNER 가 `keepReservations`/`confirmConflicts` 로 명시적으로 확인해야만 등록되기 때문에, 예약 위에 덮인 휴무는
+이미 "유지하기로 한" 것이다. "일괄 취소" 선택지가 생기면(`LATER.md` L-11) 그때 플래그를 저장하고 여기서 함께 본다.
+
+**주체별로 할 수 있는 것이 다르다.** 고객은 자기 예약의 취소만(`CONFIRMED` 는 생성 시점 스냅샷 마감 전까지 — 마감 뒤에는 화면이 [문의하기]로 안내한다).
+OWNER 는 전부, MANAGER 는 **본인 담당 자원 건만**(FR-BOOK-030), 오판 교정(`COMPLETED ↔ NO_SHOW`)은 OWNER 만 + 사유 필수.
+남의 예약 id 는 403 이 아니라 404 다 — 존재를 알리지 않는다.
+
+**배치 둘.** `POST /api/cron/expire-requests`(C2, 5분 — `REQUESTED` 가 슬롯을 무기한 묶지 않게)와 `POST /api/cron/auto-no-show`(C3, 일 1회).
+둘 다 조건부 UPDATE 라 재실행이 무해하고, 그 사이 다른 전이가 일어난 건은 409 로 건너뛴다. 로컬은 `npm run job:reservations`.
+
+**취소 남용 방지.** 같은 사업장에서 24시간 안에 3건을 **넘겨** 취소한 고객은 재예약이 막힌다(409 `CANCEL_ABUSE`). 생성 경로의 고객 락 안에서 센다.
