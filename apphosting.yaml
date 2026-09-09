@@ -41,9 +41,10 @@ env:
   #   - variable: AUTH_GOOGLE_ID    value: <클라이언트 ID>
   #   - variable: AUTH_GOOGLE_SECRET secret: AUTH_GOOGLE_SECRET
 
-  - variable: FIREBASE_ADMIN_PRIVATE_KEY
-    secret: FIREBASE_ADMIN_PRIVATE_KEY
-    availability: [RUNTIME]
+  # FIREBASE_ADMIN_PRIVATE_KEY 도 **일부러 없다**. `admin.ts` 는 FIREBASE_ADMIN_ 셋(PROJECT_ID·CLIENT_EMAIL·PRIVATE_KEY)이
+  # 모두 있을 때만 서비스 계정으로 초기화하고, 아니면 ADC(App Hosting 런타임 서비스 계정)로 간다.
+  # 여기에 PRIVATE_KEY 만 선언해도 그 조건을 못 채워 ADC 경로 그대로다 — 역할은 없고, 시크릿이 없으면
+  # fah/misconfigured-secret 으로 빌드만 죽는다. 서비스 계정 키로 가야 할 이유가 생기면 세 개를 함께 넣는다.
 
   # ── R2 (다섯 개는 세트 — 일부만 있으면 env 검증이 거부한다) ──
   - variable: R2_ACCOUNT_ID
