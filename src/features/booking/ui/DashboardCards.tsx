@@ -61,10 +61,10 @@ export function DashboardCards({ data, role }: { data: DashboardData; role: "OWN
           <span>건</span>
         </p>
         <p className="sub">{data.pending > 0 ? "고객이 답을 기다리고 있어요. 대기 상태는 자리를 잡아 두기 때문에 오래 두면 팔 수 있는 시간이 막힙니다." : "기다리는 요청이 없어요."}</p>
-        {/* 대기 건수는 기간을 안 보지만 목록은 기본이 7일이다 — 링크가 기간을 넉넉히 열지 않으면
-            "3건" 을 눌렀는데 빈 목록이 나와서 숫자가 틀린 줄 안다 */}
+        {/* 기간은 실제 대기 건의 최소·최대 날짜다 — 고정 폭으로 넓히면 `maxAdvanceDays` 가 큰 매장에서
+            "3건" 을 눌렀는데 빈 목록이 나와 숫자가 틀린 줄 안다 */}
         {data.pending > 0 && (
-          <Link href={`/console/reservations?status=REQUESTED&from=${data.today}&to=${data.pendingTo}`} className="btn btn--primary">
+          <Link href={`/console/reservations?status=REQUESTED&from=${data.pendingFrom}&to=${data.pendingTo}`} className="btn btn--primary">
             승인 대기 보기
           </Link>
         )}

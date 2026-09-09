@@ -4,8 +4,8 @@ import { afterAll, describe, expect, it } from "vitest";
 import { db, pool } from "@/db/client";
 import { businessMembers, businesses, productResources, products, reservationLogs, reservations, resources, users, workSchedules } from "@/db/schema";
 import { getCalendar } from "@/features/booking/calendar";
-import type { ConsoleActor } from "@/features/booking/console";
 import { getDashboard, utilization } from "@/features/booking/dashboard";
+import { listReservations, type ConsoleActor } from "@/features/booking/console";
 import { loadOperatingContext } from "@/features/booking/operating-context";
 import { createReservation } from "@/features/booking/create";
 import { DEFAULT_POLICY } from "@/features/business/policy-defaults";
@@ -367,5 +367,49 @@ describe.skipIf(!enabled)("대시보드 · 캘린더 (FR-BOOK-080)", () => {
 
     const d = await getDashboard(f.ownerActor, day);
     expect(d.myResourceName, "대시보드의 내 근무도 같은 판정이어야 한다").toBe("동료 자리");
+  }, 60_000);
+
+  it("비활성 자원의 남은 예약은 캘린더에서 사라지지 않는다 — 목록에는 보이니까", async () => {
+    const f = await make();
+    const day = kstDay(at(0));
+    const a = await createReservation({ productId: f.productId, startAt: at(1), partySize: 1, resourceId: f.mine, customerNote: null }, { uid: f.customerId });
+    await db.update(reservations).set({ status: "CONFIRMED" }).where(eq(reservations.id, a.id));
+    // 미래 예약을 가진 채로 비활성화 — removeResource 가 허용하는 정상 플로우다
+    await db.update(resources).set({ isActive: false }).where(eq(resources.id, f.mine));
+
+    const cal = await getCalendar(f.ownerActor, day, day);
+    const col = cal.columns.find((c) => c.resourceId === f.mine);
+    expect(col, "컬럼이 통째로 없으면 그 예약을 캘린더에서 못 찾는다").toBeTruthy();
+    expect(col!.inactive).toBe(true);
+    expect(col!.days[0].blocks.map((b) => b.id)).toEqual([a.id]);
+    expect(col!.days[0].open, "팔 수 있는 시간은 없다 — 컬럼 전체가 닫힌 색").toEqual([]);
+    // 목록에도 그대로 있다 (두 화면이 같은 것을 보여야 한다)
+    const list = await listReservations(f.ownerActor, { from: day, to: day }, TZ, day);
+    expect(list.items.map((x) => x.id)).toContain(a.id);
+
+    // 예약이 없는 비활성 자원은 컬럼을 만들지 않는다
+    await db.update(resources).set({ isActive: false }).where(eq(resources.id, f.theirs));
+    expect((await getCalendar(f.ownerActor, day, day)).columns.map((c) => c.resourceId)).toEqual([f.mine]);
+
+    // 가동률의 재고에서는 빠진다 — 지금 팔 수 있는 시간이 아니다
+    const u = await utilization(f.businessId, day, day, await loadOperatingContext(f.businessId, day, day), null);
+    expect(u.openMin).toBe(0);
+    expect(u.rate).toBeNull();
+  }, 60_000);
+
+  it("승인 대기 링크의 기간은 실제 대기 건에서 나온다 — 고정 폭이면 먼 예약에서 어긋난다", async () => {
+    const f = await make();
+    const day = kstDay(at(0));
+    const a = await createReservation({ productId: f.productId, startAt: at(1), partySize: 1, resourceId: f.mine, customerNote: null }, { uid: f.customerId });
+    // maxAdvanceDays 가 365 라 200일 뒤 대기 건이 가능하다. 90일 고정이면 카운트는 1인데 목록은 비어 있다
+    const far = addDays(day, 200);
+    await moveTo(a.id, `${far}T14:00:00+09:00`, 60);
+
+    const d = await getDashboard(f.ownerActor, day);
+    expect(d.pending).toBe(1);
+    expect(d.pendingTo, "링크가 그 건까지 열려 있어야 한다").toBe(far);
+    // 링크가 여는 기간으로 실제 조회했을 때 그 건이 나오는지 — 세는 것과 보는 것이 같은 집합인가
+    const seen = await listReservations(f.ownerActor, { from: d.pendingFrom, to: d.pendingTo, status: ["REQUESTED"] }, TZ, day);
+    expect(seen.items.map((x) => x.id)).toEqual([a.id]);
   }, 60_000);
 });

@@ -29,7 +29,9 @@ export async function loadOperatingContext(businessId: string, from: ISODate, to
   const rs = await db
     .select({ id: resources.id, name: resources.name, type: resources.type, capacity: resources.capacity, isActive: resources.isActive, sortOrder: resources.sortOrder, memberId: resources.memberId })
     .from(resources)
-    .where(and(eq(resources.businessId, businessId), eq(resources.isActive, true)))
+    // 비활성 자원도 싣는다 — 미래 예약을 가진 채로 비활성화되는 것이 정상 플로우다(`removeResource`).
+    // 팔 수 있는 시간이 없을 뿐 남은 예약은 처리해야 하므로, 거르는 것은 호출자의 몫이다
+    .where(eq(resources.businessId, businessId))
     .orderBy(asc(resources.sortOrder), asc(resources.createdAt));
 
   const [sched, exs, hols] = await Promise.all([

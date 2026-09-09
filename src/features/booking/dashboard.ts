@@ -7,6 +7,7 @@ import type { ISODate } from "./slot-types";
 import { loadOperatingContext, type OperatingContext } from "./operating-context";
 import { listReservations, MAX_SPAN_MIN, reservationCounts, scope, type ConsoleActor, type ReservationRow } from "./console";
 import { localToInstant } from "./time";
+import { todayIn } from "@/lib/dates";
 
 /**
  * 콘솔 대시보드 (FR-BOOK-080, #59) — 오늘 예약 · 승인 대기 · 이번 주 가동률 · 이번 주 내 근무.
@@ -40,7 +41,8 @@ export type Utilization = { busyMin: number; openMin: number; rate: number | nul
  */
 export async function utilization(businessId: string, from: ISODate, to: ISODate, ctx: OperatingContext, scopedResourceId: string | null): Promise<Utilization> {
   const dates = dateRange(from, to);
-  const pool = ctx.resources.filter((r) => !scopedResourceId || r.id === scopedResourceId);
+  // 가동률의 재고는 **지금 팔 수 있는 것**이다 — 비활성 자원은 분모에도 분자에도 넣지 않는다
+  const pool = ctx.resources.filter((r) => r.isActive && (!scopedResourceId || r.id === scopedResourceId));
   if (pool.length === 0 || dates.length === 0) return { busyMin: 0, openMin: 0, rate: null, byResource: [] };
 
   // 자원 × 날짜 운영 구간을 ms 로 펼쳐 둔다. 근무가 자정을 넘겨 다음 날 근무와 겹치면(22:00~06:00 + 05:00~13:00)
@@ -107,7 +109,12 @@ export type DashboardData = {
   weekStart: ISODate;
   /** 오늘 걸치는 예약 건수 (미리보기 목록은 잘릴 수 있다) */
   todayCount: number;
-  /** 승인 대기 링크가 열어 줄 기간의 끝 — 대기 건수는 기간을 안 보므로 목록 기본(7일)보다 넓혀 준다 */
+  /**
+   * 승인 대기 링크가 열어 줄 기간. 대기 건수는 기간을 안 보는데 목록은 기본이 7일이라 그대로 보내면 빈 목록이 나온다.
+   * 고정 폭(90일 같은 것)으로 넓히면 `maxAdvanceDays` 가 365 인 매장에서 다시 어긋나고, 만료 배치가 밀리면
+   * 과거 쪽으로도 어긋난다 — 그래서 **실제 대기 건의 최소·최대 날짜**를 쓴다. 세는 것과 보는 것이 같은 집합이 된다.
+   */
+  pendingFrom: ISODate;
   pendingTo: ISODate;
   todayItems: ReservationRow[];
   pending: number;
@@ -135,6 +142,16 @@ export async function getDashboard(actor: ConsoleActor, today: ISODate): Promise
     utilization(actor.businessId, prevStart, addDays(prevStart, 6), ctx, scoped),
   ]);
 
+  // 대기 건이 실제로 걸쳐 있는 날짜 범위 (사업장 타임존 기준). 없으면 오늘 하루
+  const [range] = await db
+    .select({ lo: sql<Date | null>`min(${reservations.startAt})`, hi: sql<Date | null>`max(${reservations.startAt})` })
+    .from(reservations)
+    .where(and(eq(reservations.businessId, actor.businessId), eq(reservations.status, "REQUESTED"), scoped ? eq(reservations.resourceId, scoped) : undefined));
+  const pendingRange = {
+    from: range?.lo ? todayIn(ctx.tz, new Date(range.lo)) : today,
+    to: range?.hi ? todayIn(ctx.tz, new Date(range.hi)) : today,
+  };
+
   const mineResource = mineId ? ctx.resources.find((r) => r.id === mineId) : undefined;
   const myWeek: MyDay[] | null = mineResource
     ? dateRange(weekStart, weekEnd).map((date) => {
@@ -148,7 +165,8 @@ export async function getDashboard(actor: ConsoleActor, today: ISODate): Promise
     today,
     weekStart,
     todayCount: counts.today,
-    pendingTo: addDays(today, 90),
+    pendingFrom: pendingRange.from,
+    pendingTo: pendingRange.to,
     todayItems: todayList.items,
     pending: counts.pending,
     thisWeek,

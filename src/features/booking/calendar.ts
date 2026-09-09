@@ -34,7 +34,7 @@ export type CalendarBlock = {
 };
 
 export type CalendarDay = { date: ISODate; open: Interval[]; blocks: CalendarBlock[] };
-export type CalendarColumn = { resourceId: string; name: string; days: CalendarDay[] };
+export type CalendarColumn = { resourceId: string; name: string; /** 비활성 자원 — 남은 예약 때문에만 떠 있는 컬럼 */ inactive: boolean; days: CalendarDay[] };
 export type CalendarData = {
   from: ISODate;
   to: ISODate;
@@ -53,13 +53,13 @@ export async function getCalendar(actor: ConsoleActor, from: ISODate, to: ISODat
   // 전날 것도 계산해야 한다 — 자정을 넘겨 영업하는 날은 **다음 달력 날짜의 새벽까지** 자기 영업일이라,
   // 그 전날을 안 보면 어느 컬럼 임자인지 판정할 수 없다
   const ctx = await loadOperatingContext(actor.businessId, addDays(from, -1), to);
-  const pool = ctx.resources.filter((r) => !scoped || r.id === scoped);
+  const visible = ctx.resources.filter((r) => !scoped || r.id === scoped);
 
   const lo = new Date(localToInstant(from, 0, ctx.tz));
   // 영업일은 자정을 넘길 수 있다 — `to` 의 영업일은 최대 다음 날 23:59 까지 간다(`span()` 이 익일에 1440 을 더한다).
   // 상한을 `to` 24:00 으로 두면 20:00~02:00 영업의 마지막 날 새벽 예약이 통째로 빠진다
   const hi = new Date(localToInstant(to, 2880, ctx.tz));
-  const rows = pool.length
+  const rows = visible.length
     ? await db
         .select({
           id: reservations.id,
@@ -80,7 +80,7 @@ export async function getCalendar(actor: ConsoleActor, from: ISODate, to: ISODat
         .where(
           and(
             eq(reservations.businessId, actor.businessId),
-            inArray(reservations.resourceId, pool.map((r) => r.id)),
+            inArray(reservations.resourceId, visible.map((r) => r.id)),
             inArray(reservations.status, SHOWN),
             // 시작 시각으로만 뽑는다 — 어느 컬럼의 것인지는 아래에서 **영업일**로 정한다.
             // (기간 이전에 시작한 예약은 그 영업일이 이 범위 밖이므로 여기 없는 게 맞다)
@@ -91,9 +91,16 @@ export async function getCalendar(actor: ConsoleActor, from: ISODate, to: ISODat
         .orderBy(asc(reservations.startAt))
     : [];
 
+  // 비활성 자원은 컬럼을 만들지 않는다 — 단, **남은 예약이 있으면 만든다**.
+  // 미래 예약을 가진 채로 비활성화하는 것이 정상 플로우라(`business/resources.ts` removeResource),
+  // 여기서 빼 버리면 그 예약이 캘린더에서 통째로 사라지는데 목록에는 그대로 보여 두 화면이 어긋난다.
+  const withRows = new Set(rows.map((x) => x.resourceId));
+  const pool = visible.filter((r) => r.isActive || withRows.has(r.id));
+
   /** 그 자원의 그날 운영 구간 (분). 전날도 필요하다 — 아래 `ownsBlock` 참고 */
   const winOf = (r: (typeof pool)[number], date: ISODate) =>
-    operatingWindows({ date, resource: r, opening: openingWindows(ctx.openingHours, date, true), openingHours: ctx.openingHours, schedules: ctx.schedules, exceptions: ctx.exceptions, holidays: ctx.holidays });
+    // 비활성 자원은 팔 수 있는 시간이 없다 — 컬럼 전체가 닫힌 색이라 "남은 예약만 처리하는 자리" 로 읽힌다
+    r.isActive ? operatingWindows({ date, resource: r, opening: openingWindows(ctx.openingHours, date, true), openingHours: ctx.openingHours, schedules: ctx.schedules, exceptions: ctx.exceptions, holidays: ctx.holidays }) : [];
   /** 그 영업일이 덮는 끝 시각 (분). 자정을 넘기면 1440 초과 */
   const endOf = (r: (typeof pool)[number], date: ISODate) => Math.max(1440, ...winOf(r, date).map((w) => w.end));
 
@@ -137,7 +144,7 @@ export async function getCalendar(actor: ConsoleActor, from: ISODate, to: ISODat
         });
       return { date, open, blocks };
     });
-    return { resourceId: r.id, name: r.name, days };
+    return { resourceId: r.id, name: r.name, inactive: !r.isActive, days };
   });
 
   // 아무것도 없는 주(전부 휴무)면 기본 창을 준다 — 높이 0 짜리 격자를 그리지 않게
