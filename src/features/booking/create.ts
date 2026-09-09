@@ -9,6 +9,7 @@ import { newReservationCode } from "./code";
 import { loadBookingContext, loadProductTimezone } from "./context";
 import { peakOccupancy } from "./peak-occupancy";
 import { computeSlots, fixedStartMinutes } from "./slots";
+import { canceledTodayCount } from "./transitions";
 import { isSlotFailure, type Slot, type SlotContext } from "./slot-types";
 import { localToInstant, toMs } from "./time";
 
@@ -25,6 +26,9 @@ import { localToInstant, toMs } from "./time";
  * 고객 동시 예약 한도도 check-then-act 라 `pg_advisory_xact_lock('cust:'||customerId)` 안에서 센다.
  * 락 순서는 언제나 **고객 → 자원** 이다(반대로 잡는 경로가 없어야 데드락이 안 생긴다). 그래도 40P01 이면 한 번 재시도한다.
  */
+
+/** 하루에 이만큼을 **넘겨** 취소하면 당일 재예약이 막힌다 (FR-BOOK-040 남용 방지) */
+const CANCEL_ABUSE_LIMIT = 3;
 
 export const createReservationSchema = z.object({
   productId: z.uuid(),
@@ -127,7 +131,7 @@ export async function createReservation(input: CreateReservationInput, customer:
   for (const cand of candidates) {
     const resource = byId.get(cand.id)!;
     try {
-      return await withDeadlockRetry(() => insertOne(ctx, businessId, input, cand.id, resource.capacity, customer.uid, policy, new Date(wantedMs), new Date(wantedMs + durationMs), now));
+      return await withDeadlockRetry(() => insertOne(ctx, businessId, input, cand.id, resource.capacity, customer.uid, policy, new Date(wantedMs), new Date(wantedMs + durationMs), now, tz));
     } catch (e) {
       // 배타 제약 위반·락 후 재계산 실패는 "이 자원은 방금 찼다" 는 뜻 — 다음 후보로 넘어간다
       if (pgCode(e) === "23P01" || (e instanceof HttpError && e.code === "SLOT_TAKEN")) continue;
@@ -159,6 +163,7 @@ async function insertOne(
   startAt: Date,
   endAt: Date,
   now: Date,
+  tz: string,
 ): Promise<CreatedReservation> {
   const p = ctx.product;
   const durationMin = Math.round((endAt.getTime() - startAt.getTime()) / 60_000);
@@ -179,6 +184,10 @@ async function insertOne(
       .from(reservations)
       .where(and(eq(reservations.customerId, customerId), eq(reservations.businessId, businessId), inArray(reservations.status, ["REQUESTED", "CONFIRMED"]), gte(reservations.startAt, now)));
     if (active >= policy.maxActivePerCustomer) throw new HttpError(409, "TOO_MANY_ACTIVE", { limit: policy.maxActivePerCustomer });
+    // 남용 방지 (FR-BOOK-040): 같은 사업장에서 오늘 3건을 넘겨 취소한 고객은 당일 재예약을 막는다. 같은 고객 락 안이라 경쟁이 없다
+    // "당일" 은 사업장 타임존의 달력 하루다 (24시간 롤링이 아니다 — 어젯밤 취소가 다음 날 아침을 막으면 안 된다)
+    const since = new Date(localToInstant(todayIn(tz, now), 0, tz));
+    if ((await canceledTodayCount(businessId, customerId, since, tx)) > CANCEL_ABUSE_LIMIT) throw new HttpError(409, "CANCEL_ABUSE", { limit: CANCEL_ABUSE_LIMIT });
 
     {
       // 자원 단위로 직렬화하고 점유를 다시 센다. 정원 N 은 제약으로 표현할 수 없고(Σ partySize ≤ capacity 는 쌍 단위 겹침 검사가 아니다),
