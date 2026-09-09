@@ -64,6 +64,8 @@ export const reservations = pgTable(
     status: reservationStatusEnum("status").notNull(),
     /** MANUAL(매니저 처리) / AUTO(배치). 노쇼율 지표에서 AUTO 는 분모 제외. */
     noShowSource: noShowSourceEnum("no_show_source"),
+    /** 워크인 대리 등록에서 받은 표시용 이름 (FR-BOOK-070). 계정이 아니라 라벨이라 검증하지 않는다 — 고객 식별에 쓰지 않는다 */
+    guestLabel: varchar("guest_label", { length: 60 }),
     customerNote: text("customer_note"),
     /** 매니저 전용, 고객 비공개 */
     internalMemo: text("internal_memo"),

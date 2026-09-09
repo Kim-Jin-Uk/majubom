@@ -249,11 +249,22 @@ export async function autoNoShow(now = new Date(), limit = 500): Promise<number>
   return n;
 }
 
-/** FR-BOOK-040 남용 방지 — 같은 사업장에서 오늘 3건 초과 취소한 고객은 당일 재예약을 막는다 */
+/**
+ * FR-BOOK-040 남용 방지 — 같은 사업장에서 오늘 3건 초과 취소한 고객은 당일 재예약을 막는다.
+ * **예약 변경으로 취소된 건은 세지 않는다** — 변경은 취소가 아니고(새 예약이 그 자리를 대신 잡았다), 시간을 몇 번 옮긴 고객을 막으면 안 된다.
+ */
 export async function canceledTodayCount(businessId: string, customerId: string, since: Date, q: DbLike = db): Promise<number> {
   const [row] = await q
     .select({ n: count() })
     .from(reservations)
-    .where(and(eq(reservations.businessId, businessId), eq(reservations.customerId, customerId), eq(reservations.status, "CANCELED_BY_USER"), gte(reservations.canceledAt, since)));
+    .where(
+      and(
+        eq(reservations.businessId, businessId),
+        eq(reservations.customerId, customerId),
+        eq(reservations.status, "CANCELED_BY_USER"),
+        gte(reservations.canceledAt, since),
+        sql`not exists (select 1 from reservations later where later.replaces_reservation_id = ${reservations.id})`,
+      ),
+    );
   return row?.n ?? 0;
 }

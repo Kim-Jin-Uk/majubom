@@ -1,7 +1,7 @@
 # 예약 엔진 (에픽 #7) — 설계 기록
 
 정본은 `majubom-docs/02_기능명세서.md` §3.7 (FR-BOOK-010 ~ 070). 명세가 정하지 않은 것을 여기서 어떻게 정했는지만 적는다.
-지금 있는 것은 **슬롯 조회(010) · 생성(020) · 상태 전이(030·040·060)** 까지다 — 예약 변경·워크인은 다음 조각.
+지금 있는 것은 **슬롯 조회(010) · 생성(020) · 상태 전이(030·040·060) · 변경(050) · 워크인(070)** 이다 — FR-BOOK 은 알림·예약 카드만 남았다.
 
 ## 구조
 
@@ -11,11 +11,12 @@ features/booking/time.ts          로컬 시각 ↔ 순간. 벽시계 기준, �
 features/booking/peak-occupancy.ts 순간 최대 동시 인원 (겹침 합산이 아니다)
 features/booking/slots.ts         computeSlots — 순수 함수. DB·시계 없음
 features/booking/context.ts       DB → SlotContext. 유일한 DB 접점
-features/booking/create.ts        예약 생성 — 재검증 · 자원 배정 · 락
+features/booking/create.ts        예약 생성·변경·워크인 — 재검증 · 자원 배정 · 락
 features/booking/transition-rules.ts 상태 전이 표. 순수
 features/booking/transitions.ts   전이 실행 · 승인 재검증 · 배치(C2·C3)
 app/api/public/products/[id]/slots · app/api/reservations
-app/api/console/reservations/[id]/status · app/api/me/reservations/[id]/cancel
+app/api/console/reservations/[id]/status · app/api/console/reservations/walk-in
+app/api/me/reservations/[id]/cancel
 app/api/cron/{expire-requests,auto-no-show}
 ```
 
@@ -60,11 +61,9 @@ FREE 는 후보가 구간 안에서 만들어지므로 `excluded` 를 쓰지 않
 
 결정이 아직 안 된 것(슬롯 계산 가정 A1~A11 을 명세로 올릴지 · 합산 잔여의 의미)은 루트 `LATER.md` — L-06·L-31.
 
-- 예약 생성(FR-BOOK-020) · 승인/거절 · 취소 · 변경 · 워크인 — 이 에픽의 다음 조각들
 - 슬롯 캐시 — 키(`win:{businessId}:{resourceId}:{date}` · `occ:…`)와 무효화 트리거·TTL 60초는 명세가 이미 정해 뒀다. 캐시 없이 먼저 만들고 느려지면 붙인다
 - `AUTO` 배정 후보 정렬(FR-BOOK-020 3.5) — 지금은 `resourceIds` 를 sortOrder 로 담아만 둔다 (가정 A6)
 - 예약 위젯·공개 홈(에픽 #10·#11)이 이 API 를 쓴다. 지금은 API 만 있고 화면이 없다
-- 예약 변경(FR-BOOK-050, `replacesReservationId`) · 워크인 대리 등록(FR-BOOK-070, `guestLabel` 컬럼이 필요하다) — 다음 조각들
 - 알림·상담방 예약 카드(생성 7단계, 승인·취소 알림) — 알림 에픽
 - 자동 노쇼를 사업자가 끄는 스위치 — 명세엔 있는데 `policy` 에 키가 없다. 정책 폼과 함께 추가한다
 - 예약 목록·상세(FR-BOOK-080, `/api/console/reservations`·`/api/me/reservations`) — 예약 콘솔 에픽 #8
@@ -124,3 +123,20 @@ OWNER 는 전부, MANAGER 는 **본인 담당 자원 건만**(FR-BOOK-030), 오�
 둘 다 조건부 UPDATE 라 재실행이 무해하고, 그 사이 다른 전이가 일어난 건은 409 로 건너뛴다. 로컬은 `npm run job:reservations`.
 
 **취소 남용 방지.** 같은 사업장에서 24시간 안에 3건을 **넘겨** 취소한 고객은 재예약이 막힌다(409 `CANCEL_ABUSE`). 생성 경로의 고객 락 안에서 센다.
+
+## 예약 변경 (FR-BOOK-050) · 워크인 (FR-BOOK-070)
+
+**변경은 새 예약 + `replacesReservationId` 다.** "취소하고 다시 잡으세요" 로 안내하면 셋이 막힌다 — 같은 시각 이용 시간 연장(원 예약이 자기 자신과 충돌해 늘 409),
+한도를 채운 고객의 변경, 취소 마감 안에서의 변경(취소가 막혀 변경도 불가 → 고객이 전화하게 된다).
+그래서 원 예약을 **점유 계산에서 빼고**(`ctx.existingReservations` 에서 제외) 트랜잭션 안에서 **먼저 취소한 뒤** 새 예약을 넣는다. 실패하면 통째로 롤백이라 원 예약은 살아 있다.
+취소 마감을 지난 변경은 `autoConfirm` 과 무관하게 `REQUESTED` 로 만들어 매장 승인을 받는다. 남의 예약·끝난 예약을 대체하려 하면 404.
+**변경으로 취소된 건은 취소 남용 카운트에서 뺀다** — 시간을 몇 번 옮긴 고객을 막으면 안 된다.
+
+**워크인은 정책만 우회한다.** 선행시간·예약 가능일·1인 한도·취소 남용은 건너뛰되(현장 접수라 정책 대상이 아니다) **자원 시간 충돌 검증은 동일**하다.
+구현은 정책 두 값(`minLeadTimeMin=0`·`maxAdvanceDays=365`)만 느슨하게 바꾼 컨텍스트로 같은 `computeSlots` 를 돌리는 것이다 — 영업시간·근무표·휴무·정원은 그대로 본다.
+격자·회차도 그대로 지킨다(콘솔이 슬롯을 보여 주고 고르게 한다). 고객은 사업장별 내부 계정(`walkin+{businessId}@internal`), 받아 적은 이름은 `guestLabel` 에 표시용으로만,
+`createdVia=WALK_IN` 이라 리뷰 자격에서 빠진다(FR-REV-010 — 연락처 검증 없이 만든 예약으로 리뷰를 쌓을 수 없게). OWNER 전체 / MANAGER 는 본인 자원만. 감사 `RESERVATION_CREATE_WALKIN`.
+
+격자에는 있지만 영업시간 밖인 시각은 400 이 아니라 409 `SLOT_TAKEN` 으로 답한다 — 위젯·콘솔이 그런 시각을 주지 않으므로 구분을 더 두지 않았다.
+
+DB 회귀는 `tests/db/change-and-walkin.test.ts`: 같은 시각 변경이 자기 자신과 충돌하지 않는다 · 실패하면 원 예약이 살아 있다 · 변경은 한도를 넘기지 않는다 · 워크인은 선행시간을 우회하되 충돌은 막는다.
