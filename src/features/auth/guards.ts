@@ -76,6 +76,8 @@ export function handle(fn: (req: Request, ctx: { params: Promise<Record<string, 
       if (pgCode(e) === "23505") return new HttpError(409, "CONFLICT").toResponse();
       // FK 위반(참조 중인 행 삭제 등)도 충돌 — 제약 이름은 내부 구조라 응답에 싣지 않는다
       if (pgCode(e) === "23503") return new HttpError(409, "IN_USE").toResponse();
+      // EXCLUDE 위반(근무 패턴 기간 겹침 등 동시 저장 경합)도 충돌
+      if (pgCode(e) === "23P01") return new HttpError(409, "CONFLICT").toResponse();
       console.error(`[api] ${req.method} ${new URL(req.url).pathname}:`, e);
       return NextResponse.json({ error: "INTERNAL" }, { status: 500 });
     }

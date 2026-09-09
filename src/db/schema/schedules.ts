@@ -15,7 +15,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { createdAtOnly, timestamps, uuidPk } from "./_common";
 import { businesses } from "./businesses";
-import { holidayTypeEnum, shiftSwapStatusEnum, swapTypeEnum, workExceptionKindEnum } from "./enums";
+import { holidayTypeEnum, shiftSwapStatusEnum, swapTypeEnum, workExceptionKindEnum, workExceptionStatusEnum } from "./enums";
 import { resources } from "./resources";
 import { users } from "./users";
 
@@ -117,6 +117,12 @@ export const workExceptions = pgTable(
     createdBy: uuid("created_by")
       .notNull()
       .references(() => users.id),
+    /** 매니저의 휴가 신청(OFF·BLOCK)은 PENDING 으로 들어와 사장님이 승인해야 근무표에 적용된다. 사장님이 직접 둔 예외와 매니저 차단은 APPROVED */
+    status: workExceptionStatusEnum("status").notNull().default("APPROVED"),
+    decidedBy: uuid("decided_by").references(() => users.id),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    /** 반려 사유 (신청자에게 보인다) */
+    decisionNote: varchar("decision_note", { length: 200 }),
     ...createdAtOnly,
   },
   (t) => [
@@ -125,6 +131,7 @@ export const workExceptions = pgTable(
       sql`(${t.kind} = 'OFF') OR (${t.startTime} IS NOT NULL AND ${t.endTime} IS NOT NULL AND ${t.startTime} < ${t.endTime})`,
     ),
     index("work_exceptions_resource_date_idx").on(t.resourceId, t.date),
+    index("work_exceptions_business_status_idx").on(t.businessId, t.status),
   ],
 );
 

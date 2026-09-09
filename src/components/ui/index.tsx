@@ -64,3 +64,5 @@ export function Alert({ kind = "info", children }: { kind?: "error" | "ok" | "wa
 export function Divider({ children }: { children: ReactNode }) {
   return <div className="divider">{children}</div>;
 }
+
+export { Toast } from "./Toast";

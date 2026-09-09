@@ -1,0 +1,31 @@
+import { NextResponse } from "next/server";
+import { isoDateSchema } from "@/lib/dates";
+import { assertSameOrigin } from "@/features/auth/csrf";
+import { assertWritable, handle, HttpError, requireConsole } from "@/features/auth/guards";
+import { createException, exceptionInputSchema, listExceptions } from "@/features/schedule/work-exceptions";
+import { readJson } from "@/lib/api";
+
+const dateQ = isoDateSchema;
+
+/**
+ * GET /api/console/work-exceptions?from&to — 기간의 근무 예외 (소속 멤버; 사유는 본인·OWNER 만)
+ * POST — 등록. OWNER 는 모든 종류·모든 담당자(충돌 시 409 EXCEPTION_CONFLICT, confirmConflicts 로 강행).
+ *   MANAGER 는 본인 자원에 BLOCK 즉시 차단(예약 있으면 409 BLOCK_HAS_RESERVATIONS) 또는 leave:true 휴가 신청(OFF·BLOCK → PENDING, 사장님 승인 후 적용)
+ */
+export const GET = handle(async (req) => {
+  const v = await requireConsole();
+  const u = new URL(req.url);
+  const from = dateQ.safeParse(u.searchParams.get("from"));
+  const to = dateQ.safeParse(u.searchParams.get("to"));
+  if (!from.success || !to.success) throw new HttpError(400, "INVALID_RANGE");
+  return NextResponse.json({ exceptions: await listExceptions(v.membership.businessId, from.data, to.data, { uid: v.uid, role: v.membership.role, memberId: v.membership.memberId }) });
+});
+
+export const POST = handle(async (req) => {
+  assertSameOrigin(req);
+  assertWritable(req);
+  const v = await requireConsole();
+  const body = await readJson(req, exceptionInputSchema);
+  const r = await createException(v.membership.businessId, body, { uid: v.uid, role: v.membership.role, memberId: v.membership.memberId });
+  return NextResponse.json({ ok: true, id: r.id, status: r.status, conflicts: r.conflicts }, { status: 201 });
+});

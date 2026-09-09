@@ -5,18 +5,19 @@
 
 ## 지금 어디
 
-에픽 #31 예약 상품 콘솔 — #32 등록 폼(프리셋·3스위치·회차 시간표) · #33 이미지(R2 presign 업로드·정렬·대표) · #34 자원 매핑·선택 방식 · #35 수정(매니저 제한·미래 예약 확인) · #36 삭제→보관.
-브랜치 `feat/4-product-console`. 위저드 3단계가 실제 폼이 됐다. 스키마 변경 없음.
-`npm run verify` · vitest · `next build` · Playwright(상품 흐름·검증·수정 영향·삭제) 통과. 설계 기록 `src/features/product/README.md`.
+에픽 #37 휴무일·근무표 콘솔 — #38 휴무(반복/일회성/자원별/부분) · #39 주간 패턴(버전·일괄) · #40 예외(OFF/MODIFIED/BLOCK/EXTRA·예약 충돌) · #41 조회(주간 그리드·요약) · #42 매니저 BLOCK.
++ 매니저 휴가 신청(종일/시간 → PENDING, 사장님 승인 후 적용 — `work_exceptions.status`, 마이그레이션 0003·0004 **Neon 에 `npm run db:migrate` 필요**).
+브랜치 `feat/5-schedule`, PR #157 (리뷰 2회 반영). `resolveWorkDay` 가 우선순위 8단계의 정본 — 슬롯 엔진이 이걸 쓴다 (APPROVED 예외만 넘길 것 — `applicable()`).
+로컬 테스트: `npm run db:seed:test` (사장님·매니저·고객 계정, 자원·패턴·예약·휴가 신청 시드).
+직전: 에픽 #31 상품 콘솔 PR #156 머지(a67263f).
 
 ## 막힌 것
 
-로컬(클라우드·VM)에는 R2 env 가 없어 이미지 업로드는 URL 직접 입력으로만 확인했다 — Mac 은 .env.local 에 R2 가 있으니 실제 업로드 확인은 거기서.
-`fixedIgnoreBreaks` 는 컬럼 없이 항상 true. 감사 action 세분화(BUSINESS_UPDATE 등)는 여전히 다음 마이그레이션 때.
-소셜 로그인·Resend·Cloud Scheduler·App Hosting 시크릿은 운영 작업 (features/auth/README.md).
+휴무 등록 시 "일괄 취소 + 고객 알림" 은 예약 취소·알림이 생겨야 한다 — 지금은 "예약은 두고 등록" 만.
+자정 넘기는 근무 패턴은 DB CHECK 가 막는다(심야 사업장 생기면 완화). 소셜 로그인·Resend·Cloud Scheduler·App Hosting 시크릿은 운영 작업.
 
 ## 다음 한 수
 
-1. PR `feat(prd): 예약 상품 콘솔` 리뷰 반영 → 머지
-2. 에픽 #37 휴무일·근무표 콘솔 (FR-SCH) → 그 다음 예약 엔진 ★ (`tests/fixtures/slot-cases.json` 이 슬롯 계산의 기준)
+1. PR #157(근무표) 머지 → Neon `db:migrate`(0003·0004) → `db:seed:test` 로 로컬 확인
+2. 에픽 예약 엔진 ★ (FR-BOOK-010 슬롯 계산 — `tests/fixtures/slot-cases.json` 40건이 기준, `resolveWorkDay`·`peakOccupancy` 재사용)
 3. 운영: App Hosting 시크릿 · Cloud Scheduler `cleanup-unverified` · 관리자 승격 + TOTP

@@ -20,6 +20,7 @@
     "db:migrate": "tsx scripts/db/migrate.ts",
     "db:check": "tsx scripts/db/check-invariants.ts",
     "db:reset": "tsx scripts/db/reset.ts",
+    "db:seed:test": "tsx scripts/db/seed-test.ts",
     "db:studio": "drizzle-kit studio",
     "job:cleanup-unverified": "tsx scripts/jobs/cleanup-unverified.ts",
     "admin:promote": "tsx scripts/db/promote-admin.ts",
