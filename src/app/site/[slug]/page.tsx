@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound, permanentRedirect } from "next/navigation";
 import { loadPublicHome, resolveSlug, type PublicHome } from "@/features/site/public-home";
+import { themeInitScript } from "@/features/site/theme";
 import { PublicHomeView } from "@/features/site/ui/PublicHome";
 
 /**
@@ -97,6 +98,12 @@ export default async function PublicHomePage({ params }: { params: Promise<{ slu
   const home = await load(slug);
   return (
     <>
+      {/*
+        밝기는 첫 페인트 전에 확정한다 (#76). `<html>` 은 루트 레이아웃 것이라 서버에서 속성을 못 박고,
+        감싸는 div 에 걸면 `body` 배경만 반대 색으로 남는다 — 파싱 중에 도는 인라인 스크립트가 가장 이르다.
+        본문보다 **앞에** 있어야 깜빡임이 없다. 내용은 features/site/theme.ts 가 만든다(값은 셋 중 하나뿐).
+      */}
+      <script dangerouslySetInnerHTML={{ __html: themeInitScript(home.colorScheme) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(jsonLd(home, base())) }} />
       <PublicHomeView home={home} />
     </>
