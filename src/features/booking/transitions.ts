@@ -88,7 +88,9 @@ async function load(id: string, q: DbLike): Promise<Loaded> {
  * **명시적으로 확인해야만** 등록되기 때문이다(휴무 에픽). 즉 예약 위에 덮인 휴무는 이미 "유지하기로 한" 것이다.
  * 나중에 "일괄 취소" 선택지가 생기면(LATER.md L-11) 그때 플래그를 저장하고 여기서 함께 본다.
  */
-export async function validateExisting(r: Loaded, q: DbLike): Promise<void> {
+export type ValidateSubject = Pick<Loaded, "id" | "resourceId" | "startAt" | "endAt" | "partySize" | "exclusive" | "bufferBeforeMin" | "bufferAfterMin" | "resourceCapacity" | "productStatus">;
+
+export async function validateExisting(r: ValidateSubject, q: DbLike): Promise<void> {
   if (r.productStatus === "ARCHIVED") throw new HttpError(409, "PRODUCT_GONE");
   const occupyStart = new Date(r.startAt.getTime() - r.bufferBeforeMin * 60_000);
   const occupyEnd = new Date(r.endAt.getTime() + r.bufferAfterMin * 60_000);
@@ -119,17 +121,25 @@ export async function validateExisting(r: Loaded, q: DbLike): Promise<void> {
 /**
  * 볼 수 있는 예약인가 — **규칙을 찾기 전에** 본다. 순서가 반대면 "그런 전이는 안 된다(409 + 현재 상태)" 가
  * 남의 예약에도 나가서, id 를 훑어 남의 예약의 존재와 상태를 알아낼 수 있다. 없는 것과 남의 것은 똑같이 404 다.
+ *
+ * 매니저의 담당 범위도 여기서 본다 (FR-BOOK-080 #63). 이 검사가 `authorize` 에만 있으면
+ * 표에 없는 전이를 먼저 만나 409 `INVALID_TRANSITION` + `from` 이 나가고, 그것만으로 동료 담당 예약의
+ * **존재와 현재 상태**를 알 수 있다 — 상태 값을 하나씩 넣어 보면 전부 읽힌다.
+ * `viewAllReservations` 가 있으면 보이기는 하므로 여기를 통과하고, 처리 권한은 `authorize` 가 403 으로 따로 막는다.
  */
 function assertVisible(r: Loaded, actor: TransitionActor): void {
   if (actor.kind === "CUSTOMER" && r.customerId !== actor.uid) throw new HttpError(404, "NOT_FOUND");
-  if (actor.kind === "CONSOLE" && r.businessId !== actor.businessId) throw new HttpError(404, "NOT_FOUND");
+  if (actor.kind !== "CONSOLE") return;
+  if (r.businessId !== actor.businessId) throw new HttpError(404, "NOT_FOUND");
+  if (actor.role !== "OWNER" && !actor.canViewAll && r.resourceMemberId !== actor.memberId) throw new HttpError(404, "NOT_FOUND");
 }
 
 function authorize(r: Loaded, actor: TransitionActor, rule: Rule): void {
   if (!rule.by.includes(actor.kind)) throw new HttpError(403, "FORBIDDEN");
   if (actor.kind === "CONSOLE") {
     if (rule.ownerOnly && actor.role !== "OWNER") throw new HttpError(403, "OWNER_ONLY");
-    // FR-BOOK-030: OWNER 전체 / MANAGER 는 본인 담당 건만. 담당이 없는 자원(공간·공용)은 OWNER 만 — LATER.md L-32
+    // FR-BOOK-030: OWNER 전체 / MANAGER 는 본인 담당 건만 — 볼 수 있다고(viewAllReservations) 처리까지 되는 것은 아니다.
+    // 담당이 없는 자원(공간·공용)은 OWNER 만 — LATER.md L-32
     if (actor.role !== "OWNER" && r.resourceMemberId !== actor.memberId) throw new HttpError(403, "NOT_OWN_RESOURCE");
   }
 }

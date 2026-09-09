@@ -1351,3 +1351,93 @@ button {
 .leave-row .actions {
   margin-left: auto;
 }
+
+/* 예약 콘솔 (FR-BOOK-080) — 목록 필터 · 표 · 상세 */
+.rsv-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+  align-items: flex-end;
+}
+.rsv-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.rsv-filters label.grow {
+  flex: 1 1 200px;
+}
+.rsv-filters .input {
+  height: 38px;
+  font-size: 13.5px;
+}
+.rsv-day {
+  margin: 6px 0 6px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-2);
+}
+/* 표는 좁은 화면에서 가로로만 스크롤한다 — 본문이 밀리지 않게 */
+.table-wrap {
+  overflow-x: auto;
+}
+.rsv-table {
+  min-width: 560px;
+}
+.rsv-table td a {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.rsv-table tr.mine td {
+  background: var(--surface-2);
+}
+.rsv-table .tag--soft {
+  margin-left: 6px;
+  background: var(--muted-fill);
+  color: var(--text-2);
+}
+.rsv-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.rsv-dl {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 8px 14px;
+  margin: 0;
+  font-size: 14px;
+}
+.rsv-dl dt {
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 600;
+}
+.rsv-dl dd {
+  margin: 0;
+}
+.rsv-log {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13.5px;
+}
+
+@media (max-width: 560px) {
+  .rsv-filters label {
+    flex: 1 1 140px;
+  }
+  .rsv-dl {
+    grid-template-columns: 1fr;
+    gap: 2px 0;
+  }
+  .rsv-dl dd {
+    margin-bottom: 8px;
+  }
+}

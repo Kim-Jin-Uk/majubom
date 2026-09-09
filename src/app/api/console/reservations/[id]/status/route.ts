@@ -21,7 +21,7 @@ export const PATCH = handle(async (req, ctx) => {
   const r = await transitionReservation(
     id,
     body.status,
-    { kind: "CONSOLE", uid: v.uid, role: v.membership.role, memberId: v.membership.memberId, businessId: v.membership.businessId },
+    { kind: "CONSOLE", uid: v.uid, role: v.membership.role, memberId: v.membership.memberId, businessId: v.membership.businessId, canViewAll: Boolean(v.membership.permissions.viewAllReservations) },
     { reason: body.reason, meta: requestMeta(req.headers) },
   );
   return NextResponse.json({ ok: true, ...r });
