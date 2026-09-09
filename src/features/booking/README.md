@@ -1,7 +1,7 @@
 # 예약 엔진 (에픽 #7) — 설계 기록
 
 정본은 `majubom-docs/02_기능명세서.md` §3.7 (FR-BOOK-010 ~ 070). 명세가 정하지 않은 것을 여기서 어떻게 정했는지만 적는다.
-지금 있는 것은 **슬롯 조회(010) · 생성(020) · 상태 전이(030·040·060) · 변경(050) · 워크인(070)** 이다 — FR-BOOK 은 알림·예약 카드만 남았다.
+지금 있는 것은 **슬롯 조회(010) · 생성(020) · 상태 전이(030·040·060) · 변경(050) · 워크인(070) · 콘솔 목록·상세(080)** 이다 — FR-BOOK 은 알림·예약 카드만 남았다.
 
 ## 구조
 
@@ -14,8 +14,12 @@ features/booking/context.ts       DB → SlotContext. 유일한 DB 접점
 features/booking/create.ts        예약 생성·변경·워크인 — 재검증 · 자원 배정 · 락
 features/booking/transition-rules.ts 상태 전이 표. 순수
 features/booking/transitions.ts   전이 실행 · 승인 재검증 · 배치(C2·C3)
+features/booking/console.ts       콘솔 읽기 계층 — 목록·상세·담당 변경·요약 (스코프가 여기 한 곳)
+features/booking/ui/              콘솔 화면 (status.ts 는 표시 규칙만, 순수)
 app/api/public/products/[id]/slots · app/api/reservations
+app/api/console/reservations · app/api/console/reservations/[id]
 app/api/console/reservations/[id]/status · app/api/console/reservations/walk-in
+app/console/reservations · app/console/reservations/[id]
 app/api/me/reservations/[id]/cancel
 app/api/cron/{expire-requests,auto-no-show}
 ```
@@ -66,7 +70,8 @@ FREE 는 후보가 구간 안에서 만들어지므로 `excluded` 를 쓰지 않
 - 예약 위젯·공개 홈(에픽 #10·#11)이 이 API 를 쓴다. 지금은 API 만 있고 화면이 없다
 - 알림·상담방 예약 카드(생성 7단계, 승인·취소 알림) — 알림 에픽
 - 자동 노쇼를 사업자가 끄는 스위치 — 명세엔 있는데 `policy` 에 키가 없다. 정책 폼과 함께 추가한다
-- 예약 목록·상세(FR-BOOK-080, `/api/console/reservations`·`/api/me/reservations`) — 예약 콘솔 에픽 #8
+- 고객 쪽 예약 목록(`/api/me/reservations`) — 마이페이지 에픽
+- 콘솔 대시보드·캘린더 뷰(#59·#62) — 에픽 #8 의 다음 조각
 
 ## 예약 생성 (FR-BOOK-020)
 
@@ -140,3 +145,44 @@ OWNER 는 전부, MANAGER 는 **본인 담당 자원 건만**(FR-BOOK-030), 오�
 격자에는 있지만 영업시간 밖인 시각은 400 이 아니라 409 `SLOT_TAKEN` 으로 답한다 — 위젯·콘솔이 그런 시각을 주지 않으므로 구분을 더 두지 않았다.
 
 DB 회귀는 `tests/db/change-and-walkin.test.ts` 7건: 같은 시각 변경이 자기 자신과 충돌하지 않는다 · 실패하면 원 예약이 살아 있다 · 변경은 한도를 넘기지 않는다 · 워크인은 선행시간을 우회하되 충돌은 409 로 막는다 · 남의/다른 상품/이미 시작한 예약은 대체 불가 · 마감 지난 변경은 REQUESTED · **워크인은 남의 사업장에 예약을 만들 수 없다**.
+
+## 예약 콘솔 (FR-BOOK-080)
+
+`console.ts` 하나가 콘솔의 **모든** 읽기를 맡는다. 라우트를 늘리면서 조건을 복사하다 보면 어느 하나가 사업장 조건을 빠뜨리는 날이 오기 때문에,
+목록·상세·요약이 같은 `scope(actor)` 를 거치게 했다.
+
+**스코프는 세 겹이다 (#63).**
+1. 모든 질의가 `reservations.business_id = 내 사업장` 으로 시작한다.
+2. MANAGER 는 `permissions.viewAllReservations` 가 없으면 본인 담당 자원(`resources.member_id = 내 memberId`)의 건만 본다.
+3. 담당 자원이 아예 없는 매니저는 **존재할 수 없는 uuid** 를 술어에 넣어 빈 결과를 받는다 — 조건을 빼면 전부 보이게 되는 자리라, "없으면 조건도 없음" 을 만들지 않는다.
+
+**범위 밖은 403 이 아니라 404.** 403 은 "그 id 는 있다" 를 알려 준다. 다른 사업장 예약도, 남의 담당 건도 똑같이 404 다.
+`tests/db/console-reservations.test.ts` 가 이 셋을 각각 확인한다(스코프를 끄면 그 두 건이 바로 깨진다).
+
+**시각은 서버에서 사업장 타임존 벽시계 문자열로 만들어 내려보낸다** (`2026-10-01T10:00:00+09:00`).
+클라이언트에서 `new Date()` 로 되돌려 포맷하면 보는 사람의 시계로 옮겨져, 다른 지역에서 접속한 사장님에게 매장 시각이 어긋나 보인다.
+그래서 `ui/status.ts` 는 문자열을 자를 뿐 파싱하지 않는다.
+
+**워크인의 내부 계정은 사람이 아니다.** `walkin+…@internal` 이메일·`LOCAL` provider 는 목록에도 상세에도 나가지 않고,
+받아 적은 이름(`guestLabel`)이 고객명 자리에 온다.
+
+**담당 변경(`PATCH /api/console/reservations/:id`)은 상태 전이가 아니다.** 시간은 그대로 두고 자원만 옮긴다 —
+시간이 바뀌는 것은 고객의 예약 변경(FR-BOOK-050)이다. 옮길 자리가 비었는지는 승인 재검증과 **같은 함수**(`validateExisting`)로 보고,
+자원 단위 `pg_advisory_xact_lock` 안에서 조건부 UPDATE 한다. 감사 action 은 `RESERVATION_REASSIGN`, 이력에는 `from/to_resource_id` 가 남는다.
+지금은 OWNER 만 할 수 있다 — 매니저에게 열지는 L-32 와 함께 정한다.
+
+**페이지네이션은 `startAt|id` 커서다.** offset 은 같은 시각 예약이 페이지 경계에 걸릴 때 건너뛰거나 겹친다.
+커서 형식은 스키마(`CURSOR_RE`)가 본다 — 안 보면 손으로 고친 값이 `new Date("abc").toISOString()` 을 타고 500 이 된다.
+
+**기간은 시작 시각이 아니라 걸침으로 본다.** `startAt` 만 비교하면 자정을 넘겨 끝나는 예약이 종료일 목록에서 사라진다 —
+20:00~02:00 영업에서 아침에 콘솔을 연 사장님이 지금 가게에 있는 손님의 예약을 못 찾는 상황이다.
+근무표(`calendar.ts`)·휴무 충돌(`holidays.ts`)이 이미 시작·종료 양쪽을 보므로 화면끼리 어긋나지 않게 같은 기준으로 뒀다.
+`end_at > lo` 만으로는 인덱스를 못 태우므로 `start_at ≥ lo − (최대 이용시간 + 버퍼)` 를 같은 뜻으로 덧붙인다.
+
+**요약의 두 숫자는 기간이 다르다.** "오늘" 은 오늘 걸치는 건, "승인 대기" 는 기간 없이 전부다.
+한 번의 스캔에 담으려고 바깥 WHERE 로 묶으면 만료 배치(C2)가 며칠 멈췄을 때 지난 주의 진짜 미처리 건이 "대기 0" 으로 보인다 — 그걸 알아채라고 있는 숫자다.
+
+목록의 첫 페이지는 서버 컴포넌트가 그리고, 필터가 바뀔 때만 패널이 API 를 친다 — 첫 화면에 로딩이 없다.
+기간만 `?from`·`?to` 로 받는다(대시보드·근무표에서 날짜를 들고 넘어온다). 나머지 필터는 URL 에 남기지 않는다 — 공유할 주소가 아니고, 매니저마다 보이는 범위가 달라 같은 주소가 같은 화면이 아니다.
+"첫 렌더인가" 를 ref 로 세지 않고 **지금 조건이 화면에 그려진 조건과 같은지**로 판단한다 — ref 플래그는 StrictMode 의 두 번째 마운트에서 한 번 더 요청을 낸다.
+커서도 같은 이유로 조건과 함께 들고 있다. 필터를 바꾼 직후 디바운스 250ms 안에 "더 보기" 를 누르면 다른 조건의 행이 이어 붙는다.

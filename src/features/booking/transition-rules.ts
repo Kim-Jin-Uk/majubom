@@ -17,7 +17,8 @@ export type TransitionSubject = {
 
 export type TransitionActor =
   | { kind: "CUSTOMER"; uid: string }
-  | { kind: "CONSOLE"; uid: string; role: "OWNER" | "MANAGER"; memberId: string; businessId: string }
+  /** canViewAll: `permissions.viewAllReservations`. **보이는 범위**를 넓힐 뿐, 처리 권한은 넓히지 않는다 (FR-BOOK-030) */
+  | { kind: "CONSOLE"; uid: string; role: "OWNER" | "MANAGER"; memberId: string; businessId: string; canViewAll: boolean }
   /** 배치 — 만료·자동 노쇼. actorId 는 null 로 남는다 */
   | { kind: "SYSTEM" };
 

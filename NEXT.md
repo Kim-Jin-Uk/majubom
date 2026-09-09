@@ -5,9 +5,10 @@
 
 ## 지금 어디
 
-에픽 #7 예약 엔진 ★ — **FR-BOOK-010·020·030·040·050·060·070 이 전부 들어왔다.** 남은 것은 알림·상담방 예약 카드(알림 에픽)뿐.
-브랜치 `feat/7-booking-engine`. 마이그레이션 0005(감사 action)·0006(`guest_label`)·0007(replaces 인덱스) — **Neon 에 `npm run db:migrate` 필요.**
-테스트: 슬롯 픽스처 40건 · 전이 표 검사 · DB 회귀 11건(동시성 4 + 변경·워크인 7, `DATABASE_URL` 이 test DB 일 때만).
+에픽 #8 예약 콘솔 ★ — **목록·필터·상세·담당 변경·스코프(#60·#61·#63) 가 들어왔다.** 남은 것은 대시보드(#59)와 캘린더 뷰·모바일(#62).
+브랜치 `feat/8-reservation-console`. 에픽 #7 예약 엔진(FR-BOOK-010~070)은 PR #158~#161 로 전부 머지됐다 — 남은 것은 알림·상담방 예약 카드(알림 에픽).
+마이그레이션 0003~0007 — **Neon 에 `npm run db:migrate` 필요.**
+테스트: 슬롯 픽스처 40건 · 전이 표 검사 · DB 회귀 19건(동시성 4 + 변경·워크인 7 + 콘솔 스코프 8, `DATABASE_URL` 이 test DB 일 때만).
 Cloud Scheduler 에 C2(`/api/cron/expire-requests`, 5분)·C3(`/api/cron/auto-no-show`, 일 1회)를 걸어야 한다.
 
 ## 막힌 것
@@ -17,7 +18,7 @@ Cloud Scheduler 에 C2(`/api/cron/expire-requests`, 5분)·C3(`/api/cron/auto-no
 
 ## 다음 한 수
 
-1. 에픽 #8 예약 콘솔 — 목록·필터·캘린더(FR-BOOK-080) · 예약 상세(승인/거절/취소/노쇼/담당자 변경) · 대시보드. 엔진은 다 됐고 화면이 없다.
+1. 에픽 #8 남은 조각 — 대시보드(#59: 오늘 예약·승인 대기·다음 일정) · 주간 캘린더 뷰와 모바일 레이아웃(#62).
 2. 에픽 #11 예약 위젯 — `/api/public/products/:id/slots` 와 `POST /api/reservations` 를 쓰는 7단계 흐름.
 3. 알림 최소본(확정·취소·거절 메일, Resend) — M2 편입분. 예약 생성 7단계의 마지막 조각.
 4. 운영: App Hosting 시크릿 · Cloud Scheduler(C2·C3) · 관리자 승격 + TOTP

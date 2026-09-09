@@ -82,6 +82,9 @@ export function describeError(r: { error: string; message?: string; retryAfterSe
       return "사업장이 일시정지 상태라 변경할 수 없습니다";
     case "OWNER_ONLY":
       return "사업자 계정만 할 수 있는 작업입니다";
+    case "INVALID_QUERY":
+    case "INVALID_RANGE":
+      return "조회 조건을 확인해 주세요";
     case "NOT_FOUND":
       return "대상을 찾을 수 없습니다. 새로 고친 뒤 다시 확인해 주세요";
     case "CSRF":
