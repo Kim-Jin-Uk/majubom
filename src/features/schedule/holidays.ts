@@ -96,7 +96,7 @@ export async function reservationsOnDates(businessId: string, dates: string[], o
   const localMin = sql<number>`(extract(hour from (${reservations.startAt} at time zone ${opts.tz})) * 60 + extract(minute from (${reservations.startAt} at time zone ${opts.tz})))::int`;
   const localEndMin = sql<number>`(extract(hour from (${reservations.endAt} at time zone ${opts.tz})) * 60 + extract(minute from (${reservations.endAt} at time zone ${opts.tz})))::int`;
   const rows = await q
-    .select({ id: reservations.id, code: reservations.code, startAt: reservations.startAt, endAt: reservations.endAt, resourceName: resources.name, customerName: users.name, status: reservations.status, startMin: localMin, endMin: localEndMin, sameDay: sql<boolean>`(${reservations.startAt} at time zone ${opts.tz})::date = (${reservations.endAt} at time zone ${opts.tz})::date` })
+    .select({ id: reservations.id, code: reservations.code, startAt: reservations.startAt, endAt: reservations.endAt, resourceName: resources.name, customerName: users.name, status: reservations.status, startDate: localDate, endDate: localEndDate, startMin: localMin, endMin: localEndMin })
     .from(reservations)
     .innerJoin(resources, eq(resources.id, reservations.resourceId))
     .leftJoin(users, eq(users.id, reservations.customerId))
@@ -110,12 +110,17 @@ export async function reservationsOnDates(businessId: string, dates: string[], o
       ),
     )
     .orderBy(asc(reservations.startAt));
-  const cut = opts.cut;
+  // 시간 비교는 "그 날짜" 의 분 좌표로 옮겨서 한다. 자정을 넘긴 예약은 시작일에서는 [startMin, endMin+1440), 종료일에서는 [0, endMin) 을 차지한다
+  // (전날 23:00 → 01:00 예약은 종료일 00:00–02:00 휴무와 충돌). cut 이 없으면(종일) 하루 전체 [0, 1440) — 정확히 00:00 에 끝나는 예약은 종료일을 차지하지 않는다.
+  const cut = opts.cut ?? { start: 0, end: 1440 };
+  const wanted = new Set(dates);
+  const hits = (s: number, e: number) => s < cut.end && e > cut.start;
   return rows
     .filter((r) => {
-      if (!cut) return true;
-      const end = r.sameDay ? r.endMin : r.endMin + 1440; // 자정 넘긴 예약
-      return r.startMin < cut.end && end > cut.start;
+      const sameDay = r.startDate === r.endDate;
+      if (wanted.has(r.startDate) && hits(r.startMin, sameDay ? r.endMin : r.endMin + 1440)) return true;
+      if (!sameDay && wanted.has(r.endDate) && hits(0, r.endMin)) return true;
+      return false;
     })
     .map((r) => ({ id: r.id, code: r.code, startAt: r.startAt, endAt: r.endAt, resourceName: r.resourceName, customerName: r.customerName, status: r.status }));
 }

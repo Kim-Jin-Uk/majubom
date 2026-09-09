@@ -40,7 +40,7 @@ export const patternDaySchema = z
   });
 
 export const patternInputSchema = z.object({
-  /** 이 날부터 적용. 과거 날짜도 허용(이미 지난 기간의 기록 정정) */
+  /** 이 날부터 적용. 오늘 이후만 — 과거부터 적용하면 이미 지난 날의 버전이 지워진다(이력 훼손). setPattern 이 400 으로 거부 */
   effectiveFrom: dateSchema,
   /** 비어 있으면 "이 날부터 근무 없음" */
   days: z
@@ -78,6 +78,9 @@ function toRow(r: typeof workSchedules.$inferSelect): PatternRow {
 }
 
 export async function getPatterns(businessId: string, resourceId: string, today: string): Promise<PatternView> {
+  // 타 사업장 자원은 404 — PUT/bulk 와 같은 규칙 (빈 배열 200 으로 존재를 흘리지 않는다)
+  const [r] = await db.select({ id: resources.id }).from(resources).where(and(eq(resources.id, resourceId), eq(resources.businessId, businessId))).limit(1);
+  if (!r) throw new HttpError(404, "NOT_FOUND");
   const rows = await db
     .select()
     .from(workSchedules)

@@ -67,16 +67,19 @@ export async function getScheduleGrid(businessId: string, from: string, to: stri
   const localDate = sql<string>`(${reservations.startAt} at time zone ${b.tz})::date::text`;
   const localEndDate = sql<string>`(${reservations.endAt} at time zone ${b.tz})::date::text`;
   const touched = await db
-    .select({ resourceId: reservations.resourceId, startDate: localDate, endDate: localEndDate })
+    .select({ resourceId: reservations.resourceId, startDate: localDate, endDate: localEndDate, endsAtMidnight: sql<boolean>`(${reservations.endAt} at time zone ${b.tz})::time = '00:00'` })
     .from(reservations)
     .where(and(eq(reservations.businessId, businessId), inArray(reservations.status, ["REQUESTED", "CONFIRMED"]), or(and(gte(localDate, from), lte(localDate, to)), and(gte(localEndDate, from), lte(localEndDate, to)))));
   const countMap = new Map<string, number>();
   const totalMap = new Map<string, number>();
   const bump = (m: Map<string, number>, k: string) => m.set(k, (m.get(k) ?? 0) + 1);
   for (const t of touched) {
+    const inRange = (d: string) => d >= from && d <= to;
+    // 종료일은 다르고 그날 실제로 시간을 차지할 때만 (정확히 00:00 에 끝나면 종료일은 차지하지 않는다)
+    const days = [inRange(t.startDate) ? t.startDate : null, t.endDate !== t.startDate && !t.endsAtMidnight && inRange(t.endDate) ? t.endDate : null].filter((d): d is string => d !== null);
+    if (days.length === 0) continue;
     bump(totalMap, t.resourceId);
-    if (t.startDate >= from && t.startDate <= to) bump(countMap, `${t.resourceId}|${t.startDate}`);
-    if (t.endDate !== t.startDate && t.endDate >= from && t.endDate <= to) bump(countMap, `${t.resourceId}|${t.endDate}`);
+    for (const d of days) bump(countMap, `${t.resourceId}|${d}`);
   }
 
   const rows: ResourceRow[] = staff.map((r) => {
