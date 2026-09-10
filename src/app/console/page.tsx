@@ -21,8 +21,8 @@ export const metadata = { title: "콘솔 — 마주,봄" };
 export default async function ConsoleHome() {
   const v = await consoleViewer("/console");
   const bid = v.membership.businessId;
-  const { settings: b, status, policy } = await loadConsoleBusiness(bid);
-  const steps = wizardSteps(status, { chatEnabled: flags.chat, policyTouched: isPolicyTouched(policy), brandTouched: false });
+  const { settings: b, status, policy, colorScheme } = await loadConsoleBusiness(bid);
+  const steps = wizardSteps(status, { chatEnabled: flags.chat, policyTouched: isPolicyTouched(policy), brandTouched: colorScheme !== "AUTO" });
   const nextStep = nextWizardStep(steps);
   const waitingProduct = !nextStep && steps.some((s) => s.required && !s.done && s.comingSoon);
   // 예약을 받을 수 있는 상태일 때만 대시보드가 뜻이 있다 — 준비 중인 매장에 "가동률 0%" 를 보여줄 이유가 없다

@@ -9,10 +9,10 @@ function currentTheme(): Theme {
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
-function applyTheme(theme: Theme) {
+function applyTheme(theme: Theme, storageKey: string) {
   document.documentElement.setAttribute("data-theme", theme);
   try {
-    localStorage.setItem("theme", theme);
+    localStorage.setItem(storageKey, theme);
   } catch {
     // 사파리 프라이빗 모드 등 — 저장 못 해도 화면은 바뀐다
   }
@@ -21,15 +21,19 @@ function applyTheme(theme: Theme) {
 /**
  * 라이트/다크 토글. 아이콘 전환은 globals.css 의 `.theme-toggle .i-sun/.i-moon` 규칙이
  * 담당하므로 React 상태가 없고, 서버 렌더와 클라이언트 첫 렌더가 항상 같다.
+ *
+ * `storageKey` 가 갈라져 있는 이유: 콘솔(`theme`)과 공개 홈(`site-theme`, features/site/theme.ts)은
+ * 같은 오리진이라 열쇠를 공유하면 사장님이 콘솔을 어둡게 해 둔 것이 자기 가게 홈까지 어둡게 만들고,
+ * 손님이 남의 가게에서 누른 것이 우리 콘솔을 바꾼다.
  */
-export function ThemeToggle({ size = 38 }: { size?: number }) {
+export function ThemeToggle({ size = 38, storageKey = "theme", label = "화면 밝기 바꾸기", className }: { size?: number; storageKey?: string; label?: string; className?: string }) {
   const inner = size - 20;
   return (
     <button
       type="button"
-      className="theme-toggle"
-      aria-label="화면 밝기 바꾸기"
-      onClick={() => applyTheme(currentTheme() === "dark" ? "light" : "dark")}
+      className={className ? `theme-toggle ${className}` : "theme-toggle"}
+      aria-label={label}
+      onClick={() => applyTheme(currentTheme() === "dark" ? "light" : "dark", storageKey)}
       style={{
         width: size,
         height: size,

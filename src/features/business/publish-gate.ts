@@ -1,7 +1,8 @@
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/db/client";
-import { businesses, type BusinessPolicy } from "@/db/schema";
+import { businesses, type BusinessPolicy, type SiteColorScheme } from "@/db/schema";
 import { HttpError } from "@/features/auth/errors";
+import { normalizeColorScheme } from "@/features/site/theme";
 import { mergePolicy } from "./policy";
 import { isInfoComplete, type BusinessSettings } from "./settings";
 
@@ -29,7 +30,7 @@ export type PublishStatus = {
 };
 
 /** 콘솔 화면이 한 번에 필요로 하는 것 — 설정·정책·공개 조건을 businesses 한 행 + 스칼라 서브쿼리로 읽는다 (왕복 1회) */
-export type ConsoleBusiness = { settings: BusinessSettings; policy: BusinessPolicy; status: PublishStatus };
+export type ConsoleBusiness = { settings: BusinessSettings; policy: BusinessPolicy; status: PublishStatus; colorScheme: SiteColorScheme };
 
 export async function loadConsoleBusiness(businessId: string): Promise<ConsoleBusiness> {
   const [row] = await db
@@ -54,18 +55,21 @@ export async function loadConsoleBusiness(businessId: string): Promise<ConsoleBu
       // 행이 없으면 **공개**다 — 승인된 사업장에는 업종별 시작 템플릿이 적용돼 "빌더를 한 번도 열지 않아도
       // 즉시 예약을 받을 수 있다"(기획서). 기본값을 false 로 두면 빌더(에픽 #15)가 오기 전까지 아무도 공개될 수 없다
       sitePublished: sql<boolean>`coalesce((select sp.is_published from site_pages sp where sp.business_id = businesses.id limit 1), true)`,
+      // 위저드 4단계(브랜드)의 완료 판정과 밝기 폼의 초기값 — 같은 한 행에서 가져간다 (왕복을 늘리지 않는다)
+      colorScheme: sql<string | null>`(select sp.theme->>'colorScheme' from site_pages sp where sp.business_id = businesses.id limit 1)`,
     })
     .from(businesses)
     .where(eq(businesses.id, businessId))
     .limit(1);
   if (!row) throw new HttpError(404, "NOT_FOUND");
-  const { policy, activeResources, activeProducts, sitePublished, ...settings } = row;
+  const { policy, activeResources, activeProducts, sitePublished, colorScheme, ...settings } = row;
   const infoComplete = isInfoComplete(settings);
   const approved = settings.status === "APPROVED";
   const readyToPublish = infoComplete && activeResources > 0 && activeProducts > 0;
   const base = (process.env.AUTH_URL ?? "http://localhost:3000").replace(/\/$/, "");
   return {
     settings,
+    colorScheme: normalizeColorScheme(colorScheme),
     policy: mergePolicy(policy),
     status: {
       approved,
@@ -94,7 +98,8 @@ export function wizardSteps(p: PublishStatus, opts: { chatEnabled: boolean; poli
     { n: 1, key: "info", label: "매장 정보 · 영업시간", done: p.infoComplete, required: true, available: true },
     { n: 2, key: "resources", label: "담당자 · 공간 등록", done: p.activeResources > 0, required: true, available: true },
     { n: 3, key: "product", label: "첫 예약 상품", done: p.activeProducts > 0, required: true, available: true },
-    { n: 4, key: "brand", label: "홈페이지 로고 · 색상", done: opts.brandTouched, required: false, available: true, comingSoon: true },
+    // 밝기(#76)는 실제로 고를 수 있다 — 로고·브랜드 색만 빌더(에픽 #15)를 기다린다. 그래서 "준비 중" 이 아니다
+    { n: 4, key: "brand", label: "홈페이지 디자인", done: opts.brandTouched, required: false, available: true },
     { n: 5, key: "policy", label: "예약 정책", done: opts.policyTouched, required: false, available: true },
     { n: 6, key: "chat", label: "고객 상담 설정", done: false, required: false, available: opts.chatEnabled, comingSoon: true },
   ];
