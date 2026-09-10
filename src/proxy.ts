@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { ADMIN_PREFIXES, PROTECTED_API_PREFIXES, PROTECTED_PAGE_PREFIXES } from "@/features/auth/constants";
 import { refreshSession, type RefreshOutcome } from "@/features/auth/refresh";
-import { internalSitePath, isPublicHome, SITE_PREFIX } from "@/features/site/routing";
+import { internalSitePath, isPublicHome, isPublicPath, SITE_PREFIX } from "@/features/site/routing";
 
 /**
  * 프록시 = (1) 1기 게이트 (08 §3.1) + (2) 세션 갱신·접근 제어 (FR-AUTH-030).
@@ -229,8 +229,10 @@ export async function proxy(request: NextRequest) {
   //   · 이 응답이 쿠키를 심을 때 — 세션 갱신으로 붙은 Set-Cookie 가 캐시를 타면 남의 세션이 배달된다
   //   · 1기 Basic Auth 가 켜져 있을 때 — `public` 은 RFC 9111 §3.5 의 "Authorization 요청은 캐시 금지" 를 푸는
   //     지시어라, 한 번 통과한 응답이 인증 없는 요청에 그대로 나간다. 미리보기 게이트가 통째로 뚫린다
-  if (isPublicHome(pathname)) {
-    const shareable = !basicAuth && res.cookies.getAll().length === 0;
+  if (isPublicPath(pathname)) {
+    // 공유 캐시에 올리는 것은 **사업장 홈 한 장뿐**이다. 예약 위젯(`/@{slug}/book`)은 로그인 여부와
+    // 선택 상태에 따라 달라지므로 CDN 에 올리면 남의 화면이 배달된다
+    const shareable = isPublicHome(pathname) && !basicAuth && res.cookies.getAll().length === 0;
     res.headers.set("Cache-Control", shareable ? "public, s-maxage=60, stale-while-revalidate=300" : "private, no-store");
   }
   return res;

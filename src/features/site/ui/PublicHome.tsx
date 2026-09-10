@@ -1,5 +1,7 @@
+import Link from "next/link";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import type { PublicHome } from "../public-home";
+import { bookingHref } from "../routing";
 import { SITE_THEME_KEY } from "../theme";
 import { hourText } from "./hours";
 
@@ -36,6 +38,17 @@ function groupHours(hours: PublicHome["openingHours"]) {
   return out.map((g) => ({ label: g.days.length === 1 ? DOW[g.days[0]] : `${DOW[g.days[0]]}–${DOW[g.days[g.days.length - 1]]}`, text: g.text }));
 }
 
+/** 예약할 수 있는 상품만 링크가 된다. 나머지는 같은 모양의 카드로 그대로 보여 준다 (메뉴판 노릇은 한다) */
+function ProductCard({ href, children }: { href: string | null; children: React.ReactNode }) {
+  return href ? (
+    <Link href={href} className="site-product-link">
+      {children}
+    </Link>
+  ) : (
+    <div className="site-product-link">{children}</div>
+  );
+}
+
 export function PublicHomeView({ home }: { home: PublicHome }) {
   // 같은 사진이 여러 상품에 붙어 있을 수 있다. 커버로 쓴 것은 갤러리에서 뺀다 —
   // 안 그러면 사진 두 장짜리 가게에서 같은 사진이 커버·상품 썸네일·갤러리로 세 번 나온다
@@ -43,6 +56,8 @@ export function PublicHomeView({ home }: { home: PublicHome }) {
   const cover = photos[0] ?? null;
   const gallery = photos.slice(1, 9);
   const hours = groupHours(home.openingHours);
+  // 받을 사람이 없는 상품은 예약 링크를 걸지 않는다 — 위젯이 404 라 눌러도 없는 페이지에 도착한다
+  const bookable = home.products.some((p) => p.bookable);
   const fullAddress = [home.address, home.addressDetail].filter(Boolean).join(" ");
   const tel = home.phone ? `tel:${home.phone.replace(/[^0-9+]/g, "")}` : null;
   const mapHref =
@@ -65,7 +80,7 @@ export function PublicHomeView({ home }: { home: PublicHome }) {
         <ThemeToggle size={34} storageKey={SITE_THEME_KEY} label="화면 밝기 바꾸기" />
       </div>
 
-      <main className={`site${tel || mapHref ? " site--bar" : ""}`}>
+      <main className="site site--bar">
         <header className="site-cover">
           {cover ? (
             // eslint-disable-next-line @next/next/no-img-element -- 외부(R2) URL
@@ -83,6 +98,12 @@ export function PublicHomeView({ home }: { home: PublicHome }) {
                 <span>리뷰 {home.reviews.count}개</span>
               </p>
             )}
+            {/* 넓은 화면에는 하단 바가 없다 — 예약 입구는 여기 하나로 늘 보인다 */}
+            {bookable && (
+              <Link href={bookingHref(home.slug)} className="btn btn--primary site-cta">
+                예약하기
+              </Link>
+            )}
           </div>
         </header>
 
@@ -91,21 +112,29 @@ export function PublicHomeView({ home }: { home: PublicHome }) {
           <ul className="site-products">
             {home.products.map((p) => (
               <li key={p.id}>
-                {p.images[0] ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- 외부(R2) URL
-                  <img src={p.images[0]} alt="" />
-                ) : (
-                  <div className="ph" aria-hidden="true" />
-                )}
-                <div className="body">
-                  <h3>{p.name}</h3>
-                  <p className="meta">
-                    {dur(p)}
-                    {p.maxPartySize > 1 ? ` · 최대 ${p.maxPartySize}명` : ""}
-                    {p.priceDisplay ? ` · ${p.priceDisplay}` : ""}
-                  </p>
-                  {p.description && <p className="desc">{p.description}</p>}
-                </div>
+                {/* 카드 전체가 예약 링크다 — 폰에서 작은 버튼을 겨냥하게 만들지 않는다 (#79) */}
+                <ProductCard href={p.bookable ? bookingHref(home.slug, p.id) : null}>
+                  {p.images[0] ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- 외부(R2) URL
+                    <img src={p.images[0]} alt="" />
+                  ) : (
+                    <div className="ph" aria-hidden="true" />
+                  )}
+                  <div className="body">
+                    <h3>{p.name}</h3>
+                    <p className="meta">
+                      {dur(p)}
+                      {p.maxPartySize > 1 ? ` · 최대 ${p.maxPartySize}명` : ""}
+                      {p.priceDisplay ? ` · ${p.priceDisplay}` : ""}
+                    </p>
+                    {p.description && <p className="desc">{p.description}</p>}
+                  </div>
+                  {p.bookable && (
+                    <span className="go" aria-hidden="true">
+                      ›
+                    </span>
+                  )}
+                </ProductCard>
               </li>
             ))}
           </ul>
@@ -200,14 +229,13 @@ export function PublicHomeView({ home }: { home: PublicHome }) {
         <footer className="site-foot">
           <p>{home.name}</p>
         </footer>
-
       </main>
 
       {/*
-        폰 전용 하단 바 (#77). 예약 버튼은 위젯(에픽 #11)이 와야 진짜가 되므로 아직 두지 않는다 —
-        지금 있는 것은 데이터가 이미 있는 두 가지뿐이다. 넓은 화면에서는 본문에 같은 링크가 보여 숨긴다
+        폰 전용 하단 바 (#77). 예약이 주인공이라 오른쪽에 크게 둔다 — 전화·길찾기는 있는 것만 나온다.
+        넓은 화면에서는 본문에 같은 링크가 보여 숨긴다
       */}
-      {(tel || mapHref) && (
+      {(tel || mapHref || bookable) && (
         <div className="site-bar">
           {tel && (
             <a className="btn" href={tel}>
@@ -218,6 +246,12 @@ export function PublicHomeView({ home }: { home: PublicHome }) {
             <a className="btn" href={mapHref} target="_blank" rel="noreferrer">
               길찾기
             </a>
+          )}
+          {/* 위젯(#11)이 생겨서 이제 죽은 버튼이 아니다 */}
+          {bookable && (
+            <Link className="btn btn--primary bw-cta" href={bookingHref(home.slug)}>
+              예약하기
+            </Link>
           )}
         </div>
       )}

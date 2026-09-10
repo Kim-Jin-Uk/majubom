@@ -7,6 +7,11 @@
 export type ApiIssue = { path: (string | number)[]; message: string };
 export type ApiResult<T> = { ok: true; data: T; status: number } | { ok: false; status: number; error: string; message?: string; issues?: ApiIssue[]; retryAfterSec?: number; data?: Record<string, unknown> };
 
+/** 읽기. `signal` 은 손님이 달을 빨리 넘길 때 앞선 요청을 버리기 위한 것 */
+export async function apiGet<T = Record<string, unknown>>(url: string, signal?: AbortSignal): Promise<ApiResult<T>> {
+  return apiCall<T>(url, { method: "GET", signal });
+}
+
 export async function apiPost<T = Record<string, unknown>>(url: string, body: unknown): Promise<ApiResult<T>> {
   return apiCall<T>(url, { method: "POST", body: JSON.stringify(body) });
 }
@@ -27,7 +32,9 @@ async function apiCall<T>(url: string, init: RequestInit): Promise<ApiResult<T>>
   let res: Response;
   try {
     res = await fetch(url, { ...init, headers: { "content-type": "application/json", ...(init.headers ?? {}) }, credentials: "same-origin" });
-  } catch {
+  } catch (e) {
+    // 앞선 요청을 우리가 버린 것은 오류가 아니다 — 이걸 NETWORK 로 뭉개면 화면에 "연결을 확인해 주세요" 가 뜬다
+    if ((e as Error)?.name === "AbortError") return { ok: false, status: 0, error: "ABORTED" };
     return { ok: false, status: 0, error: "NETWORK", message: "네트워크 연결을 확인해 주세요" };
   }
   const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
