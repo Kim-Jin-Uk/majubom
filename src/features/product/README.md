@@ -11,7 +11,8 @@ features/product/products.ts  DB 에 기대는 규칙: 자원 소속·활성, ST
 features/product/ui/          ProductForm(등록·수정·매니저 제한 편집) · ProductsPanel(목록·상태·순서·삭제)
 app/api/console/products/*    GET/POST · [id] GET/PUT/DELETE · [id]/status · reorder
 app/console/products/*        목록 · new · [id]. 위저드 3단계는 상품이 없으면 폼, 있으면 목록
-lib/upload-client.ts          presign → 브라우저가 R2 에 직접 PUT. R2 미설정(로컬)이면 URL 직접 입력으로 안내
+lib/upload-client.ts          파일 → /api/uploads/image → 서버가 sharp 로 여러 폭 생성 → R2. R2 미설정(로컬)이면 URL 직접 입력으로 안내
+components/Img.tsx            저장된 URL 하나에서 형제 폭을 되찾아 srcSet 으로 (lib/storage/variants.ts)
 ```
 
 ## 결정한 것

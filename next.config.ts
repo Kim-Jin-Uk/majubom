@@ -2,11 +2,10 @@ import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs/config";
 
 /**
- * 이미지: 1기에는 next/image 옵티마이저가 R2 공개 URL 을 리사이즈한다.
- * 커스텀 도메인(media.majubom.kr)이 붙으면 Cloudflare Image Transformations 로 교체 (#9).
- * R2_PUBLIC_BASE_URL 이 없으면(빌드 시점) 패턴을 비워 둔다 — 로컬 개발은 /public 만 쓴다.
+ * 이미지 리사이즈는 **업로드 시점에 끝난다** (#9 · L-40). sharp 가 만든 여러 폭을 R2 에 같이 올리고,
+ * 화면은 `components/Img` 가 `srcSet` 으로 고른다. 그래서 `next/image` 옵티마이저 설정이 없다 —
+ * 옵티마이저는 요청마다 우리 Cloud Run CPU 를 태우는데, R2 는 정적 파일을 이그레스 무료로 뱉는다.
  */
-const r2Public = process.env.R2_PUBLIC_BASE_URL ? new URL(process.env.R2_PUBLIC_BASE_URL) : null;
 
 /**
  * 보안 헤더 (08 §2 보안). CSP 는 프레임 삽입만 막는 최소형 — 스크립트 CSP 는 Next 인라인 스크립트(테마 초기화)와 nonce 배선이
@@ -25,12 +24,6 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   async headers() {
     return [{ source: "/(.*)", headers: securityHeaders }];
-  },
-  images: {
-    formats: ["image/avif", "image/webp"],
-    remotePatterns: r2Public
-      ? [{ protocol: r2Public.protocol.replace(":", "") as "https" | "http", hostname: r2Public.hostname, pathname: "/**" }]
-      : [],
   },
 };
 

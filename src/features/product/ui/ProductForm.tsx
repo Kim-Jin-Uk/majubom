@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState, type FormEvent } from "react";
+import { Img } from "@/components/Img";
 import { Alert, Button, Field, Input } from "@/components/ui";
 import type { ResourceItem } from "@/features/business/resources";
 import { guessPreset, PRESETS, type PresetKey } from "@/features/product/presets";
@@ -306,8 +307,7 @@ export function ProductForm({ businessId, resources, initial, mode, limited, rea
           <div className="img-grid">
             {d.images.map((u, i) => (
               <div key={u + i} className="img">
-                {/* eslint-disable-next-line @next/next/no-img-element -- 외부(R2) URL, 크기 미지 */}
-                <img src={u} alt={`상품 사진 ${i + 1}`} />
+                <Img src={u} alt={`상품 사진 ${i + 1}`} sizes="120px" />
                 {i === 0 && <span className="badge">대표</span>}
                 {!readOnly && (
                   <button type="button" className="rm" aria-label={`사진 ${i + 1} 삭제`} onClick={() => set("images", d.images.filter((_, k) => k !== i))}>
