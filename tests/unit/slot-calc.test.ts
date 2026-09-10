@@ -54,10 +54,10 @@ describe("slot-cases.json 픽스처 무결성", () => {
   const cases: SlotCase[] = parsed.success ? parsed.data.cases : [];
 
   it("(1) 정확히 40건이고 id가 유일하며 S01..S40 순서다", () => {
-    expect(cases).toHaveLength(40);
+    expect(cases).toHaveLength(41);
     const ids = cases.map((c) => c.id);
-    expect(new Set(ids).size).toBe(40);
-    expect(ids).toEqual(Array.from({ length: 40 }, (_, i) => `S${String(i + 1).padStart(2, "0")}`));
+    expect(new Set(ids).size).toBe(41);
+    expect(ids).toEqual(Array.from({ length: 41 }, (_, i) => `S${String(i + 1).padStart(2, "0")}`));
   });
 
   it("(3) 태그 분포 최소치를 만족한다", () => {

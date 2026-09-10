@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { computeSlots } from "./slots";
+import { computeSlots, dateInRange, stillRunning } from "./slots";
 import type { SlotContext, SlotQuery, SlotSuccess } from "./slot-types";
 
 /**
- * 픽스처 40건(`tests/fixtures/slot-cases.json`)이 다루지 않는 가장자리 — 잘못된 입력과 깨진 상품 데이터.
+ * 픽스처 41건(`tests/fixtures/slot-cases.json`)이 다루지 않는 가장자리 — 잘못된 입력과 깨진 상품 데이터.
  * 픽스처는 "명세를 손으로 계산한 기대값" 이라 건드리지 않고, 방어적 동작은 여기서 본다.
  */
 
@@ -96,5 +96,60 @@ describe("빈 결과로 조용히 끝나는 것들", () => {
     ["FIXED 인데 회차 정의가 없다", ctxWith({ product: { ...base.product, startMode: "FIXED", fixedStartTimes: null, slotIntervalMin: null } })],
   ])("%s", (_name, ctx) => {
     expect(ok(computeSlots(ctx, q)).slots).toEqual([]);
+  });
+});
+
+/**
+ * 가정 A7 — "지금 영업 중인 영업일은 어제여도 연다". 픽스처는 심야 영업 한 모양(20:00~02:00)만 보므로
+ * 여기서 경계를 마저 본다: 자정을 안 넘기는 날 · 휴무일 · 24시간 영업 · 딱 끝나는 순간.
+ */
+describe("dateInRange · stillRunning (가정 A7)", () => {
+  const night = (over: Partial<SlotContext["business"]> = {}): SlotContext =>
+    ctxWith({ business: { ...base.business, openingHours: [{ dow: 4, open: "20:00", close: "02:00" }], ...over } });
+  const at = (iso: string) => new Date(iso).getTime();
+  // 2026-10-01 은 목요일(dow 4)
+  const D = "2026-10-01";
+
+  it("자정을 넘겨 영업하는 날은 그날이 끝날 때까지 열려 있다", () => {
+    expect(stillRunning(night(), D, at("2026-10-02T00:10:00+09:00"))).toBe(true);
+    expect(dateInRange(night(), D, at("2026-10-02T00:10:00+09:00"))).toBe(true);
+  });
+
+  it("끝나는 순간부터는 닫힌다 — 02:00 은 반열림 구간의 밖이다", () => {
+    expect(stillRunning(night(), D, at("2026-10-02T01:59:59+09:00"))).toBe(true);
+    expect(stillRunning(night(), D, at("2026-10-02T02:00:00+09:00"))).toBe(false);
+    expect(dateInRange(night(), D, at("2026-10-02T02:00:00+09:00"))).toBe(false);
+  });
+
+  it("자정을 넘기지 않는 날은 어제가 되는 순간 닫힌다 — 이 규칙으로 과거가 열리지 않는다", () => {
+    expect(stillRunning(base, D, at("2026-10-02T00:10:00+09:00"))).toBe(false);
+    expect(dateInRange(base, D, at("2026-10-02T00:10:00+09:00"))).toBe(false);
+  });
+
+  it("그날이 휴무면 이어질 영업이 없다", () => {
+    const closed = night({ openingHours: [{ dow: 5, open: "20:00", close: "02:00" }] });
+    expect(stillRunning(closed, D, at("2026-10-02T00:10:00+09:00")), "목요일이 영업시간 목록에 없다").toBe(false);
+  });
+
+  it("24시간 영업(open === close)", () => {
+    // 00:00~00:00 은 자정에 딱 끝난다 — 어제로 넘어가는 순간 닫힌다
+    const midnight = night({ openingHours: [{ dow: 4, open: "00:00", close: "00:00" }] });
+    expect(stillRunning(midnight, D, at("2026-10-02T00:10:00+09:00"))).toBe(false);
+    // 10:00 시작 24시간 영업은 다음 날 10:00 까지가 그 영업일이다
+    const from10 = night({ openingHours: [{ dow: 4, open: "10:00", close: "10:00" }] });
+    expect(stillRunning(from10, D, at("2026-10-02T09:00:00+09:00"))).toBe(true);
+    expect(stillRunning(from10, D, at("2026-10-02T10:00:00+09:00"))).toBe(false);
+  });
+
+  it("앞쪽 상한(maxAdvanceDays)은 그대로다 — A7 은 뒤쪽만 연다", () => {
+    expect(dateInRange(base, "2026-10-30", at("2026-09-30T09:00:00+09:00"))).toBe(true);
+    expect(dateInRange(base, "2026-10-31", at("2026-09-30T09:00:00+09:00")), "9-30 + 30일 = 10-30").toBe(false);
+  });
+
+  it("열린 영업일이어도 지난 시각은 선행시간이 걸러낸다 — 여는 것은 '남은 새벽' 이지 과거가 아니다", () => {
+    const ctx = { ...night(), now: "2026-10-02T00:10:00+09:00", product: { ...base.product, slotIntervalMin: 60 as const, capacityPerSlot: 1 }, resources: [{ id: "desk", type: "SPACE" as const, capacity: 1, isActive: true, sortOrder: 1 }] };
+    const slots = ok(computeSlots(ctx, { date: D, partySize: 1 })).slots;
+    // 컷오프는 01:10 — 후보(20:00~01:00) 가 전부 그보다 이르다
+    expect(slots).toEqual([]);
   });
 });
