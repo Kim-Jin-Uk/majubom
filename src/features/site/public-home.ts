@@ -31,6 +31,11 @@ export type PublicProduct = {
   durationOptions: number[] | null;
   capacityPerSlot: number;
   maxPartySize: number;
+  /**
+   * 지금 예약을 받을 수 있는가 — 활성 자원이 하나라도 연결돼 있는가. 아니면 예약 링크를 걸지 않는다.
+   * 걸어 두면 위젯이 404 를 내고(`loadBookingWidget`), 손님은 멀쩡해 보이는 카드를 눌러 없는 페이지에 도착한다.
+   */
+  bookable: boolean;
 };
 
 export type PublicReviewSummary = {
@@ -130,7 +135,19 @@ export const loadPublicHome = cache(async (businessId: string): Promise<PublicHo
   if (!isInfoComplete({ name: b.name, phone: b.phoneForGate, address: b.address, openingHours: b.openingHours, slug: b.slug })) return null;
 
   const rows = await db
-    .select({ id: products.id, name: products.name, description: products.description, images: products.images, priceDisplay: products.priceDisplay, durationMin: products.durationMin, durationOptions: products.durationOptions, capacityPerSlot: products.capacityPerSlot, maxPartySize: products.maxPartySize })
+    .select({
+      id: products.id,
+      name: products.name,
+      description: products.description,
+      images: products.images,
+      priceDisplay: products.priceDisplay,
+      durationMin: products.durationMin,
+      durationOptions: products.durationOptions,
+      capacityPerSlot: products.capacityPerSlot,
+      maxPartySize: products.maxPartySize,
+      // 주의: 단일 테이블 select 라 `${products.id}` 는 `"id"` 로만 렌더링돼 서브쿼리 안에서 r2.id 로 잡힌다 — 테이블명을 글자로 쓴다
+      bookable: sql<boolean>`exists (select 1 from product_resources pr join resources r2 on r2.id = pr.resource_id where pr.product_id = products.id and r2.is_active)`,
+    })
     .from(products)
     .where(and(eq(products.businessId, businessId), eq(products.status, "ACTIVE")))
     .orderBy(asc(products.sortOrder), asc(products.createdAt));
