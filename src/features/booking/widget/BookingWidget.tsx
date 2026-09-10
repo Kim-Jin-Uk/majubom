@@ -36,7 +36,10 @@ const PLACE_ERROR: Record<string, string> = {
   UNAUTHENTICATED: "로그인이 풀렸어요. 다시 로그인해 주세요",
 };
 
-export function BookingWidget({ data, today, signedIn }: { data: BookingWidgetData; today: string; signedIn: boolean }) {
+export function BookingWidget({ data, signedIn }: { data: BookingWidgetData; signedIn: boolean }) {
+  // 날짜 경계는 서버가 정해서 내려보낸다 — 위젯이 다시 계산하면 백엔드 규칙과 갈라진다 (가정 A7)
+  const { today, firstDate } = data;
+  const lastDate = addDays(today, data.policy.maxAdvanceDays);
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -48,10 +51,11 @@ export function BookingWidget({ data, today, signedIn }: { data: BookingWidgetDa
   // 보고 있는 달은 **유도한다** — 손님이 달을 넘겼을 때만 그 값이 이긴다.
   // 상태로 들고 effect 로 맞추면 선택과 달이 어긋난 프레임이 한 번 생긴다
   const [browsing, setBrowsing] = useState<string | null>(null);
-  const month = browsing ?? monthOf(sel.date ?? today);
+  // 기본 달은 **가장 이른 영업일**의 달이다. 새벽에 열었는데 어제가 아직 영업 중이면 그 날짜가 보여야 한다
+  const month = browsing ?? monthOf(sel.date ?? firstDate);
 
   // 1단계에서는 아직 조회 조건(이용 시간·인원·공간)이 안 정해졌다 — 그때 부르면 엉뚱한 슬롯을 읽는다
-  const range = product && step >= 2 ? windowFor(month, today, data.policy.maxAdvanceDays, monthGrid(month).days.length) : null;
+  const range = product && step >= 2 ? windowFor(month, { firstDate, lastDate }, monthGrid(month).days.length) : null;
   const url = product && range ? slotsUrl(product, sel, range.from, range.to) : null;
   const [retry, setRetry] = useState(0);
   const key = url === null ? null : `${url}#${retry}`;
@@ -228,7 +232,8 @@ export function BookingWidget({ data, today, signedIn }: { data: BookingWidgetDa
           sel={sel}
           tz={data.timezone}
           today={today}
-          lastDate={addDays(today, data.policy.maxAdvanceDays)}
+          firstDate={firstDate}
+          lastDate={lastDate}
           month={month}
           onMonth={(n) => setBrowsing(shiftMonth(month, n))}
           monthLabel={monthTitle(month)}

@@ -1,13 +1,13 @@
-import { addDays, dowOf, span, toMin, type Interval } from "@/features/schedule/resolve";
+import { addDays, dowOf, span, toMin, type Interval, type OpeningLike } from "@/features/schedule/resolve";
 import { openingWindows, operatingWindows } from "@/features/schedule/operating";
 import { countsTowardOccupancy, peakOccupancy } from "./peak-occupancy";
-import type { ExcludedSlot, FixedExclusionReason, ISODate, Slot, SlotContext, SlotQuery, SlotResource, SlotResult } from "./slot-types";
+import type { ExcludedSlot, FixedExclusionReason, ISODate, Slot, SlotBusiness, SlotContext, SlotQuery, SlotResource, SlotResult } from "./slot-types";
 import { todayIn } from "@/lib/dates";
 import { formatInstant, localToInstant, toMs } from "./time";
 
 /**
  * FR-BOOK-010 가용 슬롯 조회 — 순수 함수. 정본은 `majubom-docs/02_기능명세서.md` §3.7 의 의사코드,
- * 명세가 정하지 않은 지점의 해석은 `tests/fixtures/README.md` 의 가정 A1~A11 이고 40건이 그 기대값이다.
+ * 명세가 정하지 않은 지점의 해석은 `tests/fixtures/README.md` 의 가정 A1~A12 이고 40건이 그 기대값이다.
  *
  * 계산 순서(명세 그대로):
  *   0 입력 검증 · 날짜 범위 → 1 영업시간 → 2 STAFF 근무 교집합 → 3 휴무 차감 → 4 개인 차단 차감
@@ -20,6 +20,46 @@ import { formatInstant, localToInstant, toMs } from "./time";
 
 /** 정원 1 은 한 팀이 슬롯을 통째로 쓴다 — 인원과 비교하지 않는다 (가정 A1) */
 const isTeamUnit = (cap: number) => cap === 1;
+
+/**
+ * 그 영업일이 지금도 **영업 중**인가 (가정 A7).
+ *
+ * 명세 0단계를 문자 그대로 읽으면 `today = (now AT TIME ZONE tz)::date` 라, 20:00~02:00 영업인 가게에서
+ * 00:10 이 되는 순간 그 영업일(어제)이 `date < today` 로 떨어져 슬롯이 통째로 사라졌다.
+ * **손님이 가게 안에 있는데 01:00 자리를 앱으로 못 잡는다** — 전화로는 되고 앱으로는 안 되는 상태였다.
+ *
+ * 영업일 하나는 최대 24시간이라 이 판정으로 열리는 것은 **어제 하루뿐**이고, 이미 지난 시각은
+ * 6단계 최소 선행시간이 그대로 걸러낸다 — 여는 것은 "아직 남은 오늘 새벽" 이지 과거가 아니다.
+ */
+type OpeningOwner = { openingHours: OpeningLike[]; timezone: string };
+
+export function stillRunning(biz: OpeningOwner, date: ISODate, nowMs: number): boolean {
+  const o = biz.openingHours.find((x) => x.dow === dowOf(date));
+  if (!o) return false; // 그날은 휴무 — 이어질 영업이 없다
+  const end = span(o.open, o.close).end;
+  if (end <= 1440) return false; // 자정을 넘기지 않는 날은 어제일 수 없다
+  return nowMs < localToInstant(date, end, biz.timezone);
+}
+
+/**
+ * 지금 예약을 받을 수 있는 **가장 이른 영업일**. 오늘이거나, 어제가 아직 영업 중이면 어제다.
+ * 위젯 달력의 하한도 이 값이어야 한다 — 백엔드만 열어 두면 손님은 그 날짜 칸을 누를 수조차 없다.
+ */
+export function firstBookableDate(biz: OpeningOwner, nowMs: number): ISODate {
+  const today = todayIn(biz.timezone, new Date(nowMs));
+  const yesterday = addDays(today, -1);
+  return stillRunning(biz, yesterday, nowMs) ? yesterday : today;
+}
+
+/**
+ * 조회·생성이 **같은 규칙**을 쓰게 한 날짜 범위 판정. 두 곳에 따로 적어 두면 언젠가 한쪽만 고쳐져
+ * "위젯에는 보이는데 예약은 안 되는 시각" 이 생긴다.
+ */
+export function dateInRange(biz: SlotBusiness, date: ISODate, nowMs: number): boolean {
+  const today = todayIn(biz.timezone, new Date(nowMs));
+  if (date > addDays(today, biz.policy.maxAdvanceDays)) return false;
+  return date >= today || stillRunning(biz, date, nowMs);
+}
 
 /**
  * 그 자원이 그날 예약을 받을 수 있는 구간 (1~4단계). 구현은 `schedule/operating.ts` 하나다 —
@@ -82,8 +122,7 @@ export function computeSlots(ctx: SlotContext, q: SlotQuery): SlotResult {
   const isFixed = p.startMode === "FIXED";
   // 0) 날짜 범위 정책 — 범위 밖은 오류가 아니라 빈 결과. FIXED 는 응답 형태를 지키려고 빈 excluded 를 함께 준다
   const nowMs = toMs(ctx.now);
-  const today = todayIn(tz, new Date(nowMs));
-  if (q.date < today || q.date > addDays(today, biz.policy.maxAdvanceDays)) return isFixed ? { slots: [], excluded: [] } : { slots: [] };
+  if (!dateInRange(biz, q.date, nowMs)) return isFixed ? { slots: [], excluded: [] } : { slots: [] };
 
   // FIXED 는 영업시간 브레이크를 차감하지 않는다(fixedIgnoreBreaks 기본 true). 근무표 휴게는 늘 차감된다 (가정 A4)
   const opening = openingWindows(ctx.business.openingHours, q.date, !(isFixed && (p.fixedIgnoreBreaks ?? true)));

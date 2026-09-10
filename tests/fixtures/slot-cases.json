@@ -4895,13 +4895,13 @@
     },
     {
       "id": "S28",
-      "title": "자정 이후(now 10-02 00:10)에 전날 영업일 10-01 을 조회하면 date < today 라 빈 결과 [가정 A7]",
+      "title": "자정 이후(now 10-02 00:10) 전날 영업일 10-01 — 아직 영업 중이지만 남은 회차가 선행시간에 걸려 빈 결과 [가정 A7]",
       "tags": [
         "midnight",
         "boundary",
         "space"
       ],
-      "rationale": "명세 0단계 문자 그대로: today = (now AT TIME ZONE Asia/Seoul)::date = 10-02, date 10-01 < today → []. 영업은 02:00까지 계속되고 01:00–02:00 슬롯은 선행 60분도 만족하지만 노출되지 않는다. 명세 해석이 갈릴 수 있는 지점 — 보고서 A7 참조.",
+      "rationale": "영업일 10-01 은 10-02 02:00 까지라 now 00:10 시점에 아직 영업 중이다(A7 로 날짜 범위는 통과). 후보는 20:00~01:00 중 t+60 ≤ 02:00 인 것들 = …·00:00·01:00. 선행 60분 컷오프 01:10 보다 이른 것이 전부라 6단계에서 모두 제외 → []. 날짜 범위가 아니라 선행시간이 이유다.",
       "ctx": {
         "now": "2026-10-02T00:10:00+09:00",
         "workSchedules": [],
@@ -7443,6 +7443,98 @@
             "end": "2026-10-01T20:00:00+09:00",
             "resourceIds": [
               "room-2"
+            ],
+            "remaining": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "S41",
+      "title": "자정 이후에도 그 영업일이 영업 중이면 남은 시각이 보인다 [가정 A7]",
+      "tags": [
+        "midnight",
+        "boundary",
+        "space"
+      ],
+      "rationale": "S28 과 같은 심야 영업(10-01 20:00~10-02 02:00). now 10-02 00:05, 선행 30분 → 컷오프 00:35. 후보 …·00:00·01:00 중 00:00 은 컷오프 이전이라 제외, 01:00(+60 = 02:00 ≤ 02:00)만 남는다 → 1개. 손님이 가게 안에 있는 시각에 앱으로도 잡을 수 있어야 한다.",
+      "ctx": {
+        "now": "2026-10-02T00:05:00+09:00",
+        "workSchedules": [],
+        "workExceptions": [],
+        "holidays": [],
+        "existingReservations": [],
+        "business": {
+          "timezone": "Asia/Seoul",
+          "openingHours": [
+            {
+              "dow": 2,
+              "open": "20:00",
+              "close": "02:00"
+            },
+            {
+              "dow": 3,
+              "open": "20:00",
+              "close": "02:00"
+            },
+            {
+              "dow": 4,
+              "open": "20:00",
+              "close": "02:00"
+            },
+            {
+              "dow": 5,
+              "open": "20:00",
+              "close": "02:00"
+            },
+            {
+              "dow": 6,
+              "open": "20:00",
+              "close": "02:00"
+            }
+          ],
+          "policy": {
+            "minLeadTimeMin": 30,
+            "maxAdvanceDays": 30
+          }
+        },
+        "product": {
+          "id": "prd-room",
+          "startMode": "FREE",
+          "fixedStartTimes": null,
+          "slotIntervalMin": 60,
+          "durationMin": 60,
+          "durationOptions": null,
+          "bufferBeforeMin": 0,
+          "bufferAfterMin": 0,
+          "capacityPerSlot": 1,
+          "maxPartySize": 4,
+          "resourceSelectMode": "NONE",
+          "resourceIds": [
+            "room-1"
+          ]
+        },
+        "resources": [
+          {
+            "id": "room-1",
+            "type": "SPACE",
+            "capacity": 1,
+            "isActive": true,
+            "sortOrder": 1
+          }
+        ]
+      },
+      "query": {
+        "date": "2026-10-01",
+        "partySize": 1
+      },
+      "expected": {
+        "slots": [
+          {
+            "start": "2026-10-02T01:00:00+09:00",
+            "end": "2026-10-02T02:00:00+09:00",
+            "resourceIds": [
+              "room-1"
             ],
             "remaining": 1
           }
