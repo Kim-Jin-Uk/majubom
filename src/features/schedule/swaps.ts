@@ -406,8 +406,8 @@ export async function createSwap(businessId: string, input: SwapInput, actor: Sw
       .select({ a: shiftSwapRequests.requesterResourceId, b: shiftSwapRequests.targetResourceId })
       .from(shiftSwapRequests)
       .where(and(eq(shiftSwapRequests.businessId, businessId), eq(shiftSwapRequests.requestDate, input.requestDate), inArray(shiftSwapRequests.status, ["PENDING", "ACCEPTED"])));
-    const pair = new Set([mine, shape.targetResourceId].sort().join("|"));
-    if (open.some((o) => pair.has([o.a, o.b].sort().join("|")))) throw new HttpError(409, "SWAP_EXISTS");
+    const pair = [mine, shape.targetResourceId].sort().join("|");
+    if (open.some((o) => [o.a, o.b].sort().join("|") === pair)) throw new HttpError(409, "SWAP_EXISTS");
 
     // 요청 시점에 이미 막힌 것(넘길 근무가 없다 · GIVE 인데 대상이 그날 이미 근무 중)은 여기서 거른다.
     // 이관 가능 여부까지 여기서 확정하지는 않는다 — 승인까지 최대 72시간이 비므로 그건 승인 직전에 다시 본다
