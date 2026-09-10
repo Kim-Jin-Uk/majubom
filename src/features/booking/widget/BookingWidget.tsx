@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert } from "@/components/ui";
 import { hardNavigate } from "@/features/auth/ui/safe-next";
 import { apiGet, apiPost, describeError } from "@/lib/client-api";
@@ -48,6 +48,19 @@ export function BookingWidget({ data, signedIn }: { data: BookingWidgetData; sig
   const product = useMemo(() => data.products.find((p) => p.id === sel.productId) ?? null, [data.products, sel.productId]);
   const step = stepOf(sel, product);
 
+  /**
+   * 단계가 바뀌어도 **페이지는 바뀌지 않는다** — 주소만 바뀐다. 그대로 두면 스크린리더는 아무 일도
+   * 없었다고 여기고, 키보드 사용자는 초점이 방금 누른(이제 사라진) 버튼 자리에 남는다.
+   * 그래서 새 단계의 제목으로 초점을 옮긴다.
+   *
+   * **손님이 이 화면에서 뭔가 눌렀을 때만 옮긴다.** "첫 렌더가 아니면" 으로는 부족했다 —
+   * 로그인하고 돌아오면 `?sel=` 복원이 1단계 → 5단계로 바꾸는데, 그건 손님이 누른 것이 아니라
+   * **막 도착한 것**이다. 도착하자마자 초점을 채가면 그 위의 "가게로 돌아가기" 와 단계 표시를
+   * 탭으로 만나지 못한다. 복원은 마운트 때만 돌므로 그 시점의 `acted` 는 언제나 false 다.
+   */
+  const headingRef = useRef<HTMLDivElement>(null);
+  const acted = useRef(false);
+
   // 보고 있는 달은 **유도한다** — 손님이 달을 넘겼을 때만 그 값이 이긴다.
   // 상태로 들고 effect 로 맞추면 선택과 달이 어긋난 프레임이 한 번 생긴다
   const [browsing, setBrowsing] = useState<string | null>(null);
@@ -82,6 +95,7 @@ export function BookingWidget({ data, signedIn }: { data: BookingWidgetData; sig
   const loading = key !== null && !fresh;
 
   const apply = (patch: Partial<Selection>) => {
+    acted.current = true;
     const next = change(sel, patch, product);
     const nextProduct = data.products.find((p) => p.id === next.productId) ?? null;
     const q = selectionQuery(next, nextProduct);
@@ -142,6 +156,7 @@ export function BookingWidget({ data, signedIn }: { data: BookingWidgetData; sig
 
   async function submit() {
     if (!product || !sel.startAt || !sel.date) return;
+    acted.current = true;
     setBusy(true);
     setPlaceError(null);
     const payload = {
@@ -187,6 +202,22 @@ export function BookingWidget({ data, signedIn }: { data: BookingWidgetData; sig
 
   const doneCode = params.get("done");
 
+  useEffect(() => {
+    if (!acted.current) return;
+    acted.current = false;
+    headingRef.current?.querySelector<HTMLElement>("h2")?.focus();
+  }, [step, placed, doneCode]);
+
+  /**
+   * 조작 표시는 **그 조작이 만든 화면까지만** 유효하다. 칩 하나 눌러 단계가 그대로면 위 effect 는
+   * 아예 돌지 않아 표시가 켜진 채 남고, 그다음 **뒤로가기가 그 표시를 물려받아** 초점을 채간다.
+   * 주소가 바뀔 때마다 끈다 — 위 effect 보다 뒤에 선언돼 있어 초점을 옮긴 뒤에 돈다.
+   */
+  const urlKey = params.toString();
+  useEffect(() => {
+    acted.current = false;
+  }, [urlKey]);
+
   return (
     <main className="bw">
       <header className="bw-top">
@@ -203,7 +234,8 @@ export function BookingWidget({ data, signedIn }: { data: BookingWidgetData; sig
           .map((n) => (
             <li key={n} className={n === step ? "now" : n < step ? "done" : undefined} aria-current={n === step ? "step" : undefined}>
               <span className="n">{n}</span>
-              {LABELS[n]}
+              {/* 좁은 화면에서 접기 위해 텍스트 노드가 아니라 요소로 감싼다 (#86) */}
+              <span className="t">{LABELS[n]}</span>
             </li>
           ))}
       </ol>
@@ -218,6 +250,7 @@ export function BookingWidget({ data, signedIn }: { data: BookingWidgetData; sig
         </Alert>
       )}
 
+      <div ref={headingRef}>
       {/* 복원 중에는 1단계가 잠깐 비치지 않게 한다 — 고른 것이 사라진 줄 알고 뒤로 누른다 */}
       {selectionId ? (
         <section className="bw-panel">
@@ -270,7 +303,7 @@ export function BookingWidget({ data, signedIn }: { data: BookingWidgetData; sig
           <p className="bw-done-mark ok" aria-hidden="true">
             ✓
           </p>
-          <h2>예약이 접수됐어요</h2>
+          <h2 tabIndex={-1}>예약이 접수됐어요</h2>
           <p className="bw-sub">
             예약번호 <b>{doneCode}</b> · 자세한 내용은 메일로 보내 드렸어요.
           </p>
@@ -281,6 +314,7 @@ export function BookingWidget({ data, signedIn }: { data: BookingWidgetData; sig
       )}
         </>
       )}
+      </div>
     </main>
   );
 }
