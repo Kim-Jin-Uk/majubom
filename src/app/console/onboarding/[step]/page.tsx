@@ -14,6 +14,7 @@ import { listProducts } from "@/features/product/products";
 import { ProductForm } from "@/features/product/ui/ProductForm";
 import { ProductsPanel } from "@/features/product/ui/ProductsPanel";
 import { consoleViewer, publicBase } from "@/features/business/ui/console-viewer";
+import { SiteThemeForm } from "@/features/site/ui/SiteThemeForm";
 import { flags } from "@/lib/flags";
 
 
@@ -21,7 +22,7 @@ const TITLES: Record<number, [string, string]> = {
   1: ["매장 정보와 영업시간을 알려주세요", "예약 페이지 상단과 예약 가능 시간의 기준이 됩니다. 언제든 설정에서 바꿀 수 있어요."],
   2: ["누가, 어디서 예약을 받나요?", "예약이 점유하는 것을 등록합니다 — 담당자(사람), 공간, 공용 장비. 하나만 있어도 시작할 수 있어요."],
   3: ["첫 예약 상품", "고객이 실제로 고르는 메뉴입니다. 담당자형·공간형·수업형 중에서 고르면 값이 알맞게 채워져요."],
-  4: ["홈페이지 로고 · 색상", "예약 페이지의 첫인상을 정합니다. 건너뛰어도 기본 디자인으로 공개됩니다."],
+  4: ["홈페이지 디자인", "손님이 보는 예약 페이지의 첫인상입니다. 지금은 밝기를 고를 수 있어요 — 건너뛰어도 기본 디자인으로 공개됩니다."],
   5: ["예약 정책", "자동 확정, 취소 마감, 선행 시간 같은 운영 규칙입니다. 기본값도 대부분의 매장에 잘 맞아요."],
   6: ["고객 상담 설정", "예약 페이지에서 고객이 바로 말을 걸 수 있는 채팅 창구입니다."],
 };
@@ -38,12 +39,25 @@ export default async function OnboardingStep({ params }: { params: Promise<{ ste
   if (!Number.isInteger(n) || n < 1 || n > 6) notFound();
   const v = await consoleViewer(`/console/onboarding/${n}`);
   const bid = v.membership.businessId;
-  const { settings: b, policy, status } = await loadConsoleBusiness(bid);
-  const steps = wizardSteps(status, { chatEnabled: flags.chat, policyTouched: isPolicyTouched(policy), brandTouched: false });
+  const { settings: b, policy, status, colorScheme } = await loadConsoleBusiness(bid);
+  const steps = wizardSteps(status, { chatEnabled: flags.chat, policyTouched: isPolicyTouched(policy), brandTouched: colorScheme !== "AUTO" });
   if (!steps[n - 1].available) notFound();
   const done = steps.filter((s) => s.done && s.available).length;
   const total = steps.filter((s) => s.available).length;
   const [title, lead] = TITLES[n];
+
+  const next = (
+    <div className="actions">
+      {n < 6 && steps[n].available && (
+        <Link href={`/console/onboarding/${n + 1}`} className="btn btn--primary">
+          다음 단계
+        </Link>
+      )}
+      <Link href="/console" className="btn">
+        콘솔 홈
+      </Link>
+    </div>
+  );
 
   let body: React.ReactNode;
   if (n === 1) {
@@ -73,23 +87,22 @@ export default async function OnboardingStep({ params }: { params: Promise<{ ste
       ) : (
         <ProductForm businessId={bid} resources={resources} initial={null} mode="wizard" limited={false} readOnly={!v.isOwner || v.readOnly} />
       );
+  } else if (n === 4) {
+    // 밝기(#76)는 지금 고를 수 있다. 로고·색상은 빌더(에픽 #15)와 함께 열린다
+    body = (
+      <>
+        <SiteThemeForm initial={colorScheme} publicUrl={status.publicUrl} live={status.live} readOnly={!v.isOwner || v.readOnly} />
+        <Alert kind="info">로고와 브랜드 색은 홈페이지 빌더와 함께 열립니다. 그때까지는 기본 디자인으로 공개됩니다.</Alert>
+        {next}
+      </>
+    );
   } else if (n === 5) {
     body = <PolicyForm initial={policy} mode="wizard" readOnly={!v.isOwner || v.readOnly} />;
   } else {
-    const text = n === 4 ? "로고 · 색상은 홈페이지 빌더와 함께 열립니다. 그때까지는 기본 디자인으로 공개됩니다." : "고객 상담(채팅)은 곧 열립니다.";
     body = (
       <>
-        <Alert kind="info">{text}</Alert>
-        <div className="actions">
-          {n < 6 && steps[n].available && (
-            <Link href={`/console/onboarding/${n + 1}`} className="btn btn--primary">
-              다음 단계
-            </Link>
-          )}
-          <Link href="/console" className="btn">
-            콘솔 홈
-          </Link>
-        </div>
+        <Alert kind="info">고객 상담(채팅)은 곧 열립니다.</Alert>
+        {next}
       </>
     );
   }
@@ -114,7 +127,7 @@ export default async function OnboardingStep({ params }: { params: Promise<{ ste
             <h1>{title}</h1>
             <p className="lead">{lead}</p>
           </div>
-          {!v.isOwner && !steps[n - 1].comingSoon && <Alert kind="warn">{n === 2 ? "담당자·공간 등록은 사업자 계정만 할 수 있어요. 목록은 볼 수 있습니다." : "매장 정보와 정책은 사업자 계정만 바꿀 수 있어요. 내용은 볼 수 있습니다."}</Alert>}
+          {!v.isOwner && !steps[n - 1].comingSoon && <Alert kind="warn">{n === 2 ? "담당자·공간 등록은 사업자 계정만 할 수 있어요. 목록은 볼 수 있습니다." : n === 4 ? "홈페이지 디자인은 사업자 계정만 바꿀 수 있어요. 지금 설정은 볼 수 있습니다." : "매장 정보와 정책은 사업자 계정만 바꿀 수 있어요. 내용은 볼 수 있습니다."}</Alert>}
           {body}
         </main>
       </div>

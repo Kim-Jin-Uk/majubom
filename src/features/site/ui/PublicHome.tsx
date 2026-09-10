@@ -1,4 +1,6 @@
+import { ThemeToggle } from "@/components/ThemeToggle";
 import type { PublicHome } from "../public-home";
+import { SITE_THEME_KEY } from "../theme";
 import { hourText } from "./hours";
 
 /**
@@ -42,143 +44,183 @@ export function PublicHomeView({ home }: { home: PublicHome }) {
   const gallery = photos.slice(1, 9);
   const hours = groupHours(home.openingHours);
   const fullAddress = [home.address, home.addressDetail].filter(Boolean).join(" ");
+  const tel = home.phone ? `tel:${home.phone.replace(/[^0-9+]/g, "")}` : null;
+  const mapHref =
+    home.lat !== null && home.lng !== null
+      ? `https://map.kakao.com/link/map/${encodeURIComponent(home.name)},${home.lat},${home.lng}`
+      : fullAddress
+        ? `https://map.kakao.com/link/search/${encodeURIComponent(fullAddress)}`
+        : null;
 
   return (
-    <main className="site">
-      <header className="site-cover">
-        {cover ? (
-          // eslint-disable-next-line @next/next/no-img-element -- 외부(R2) URL
-          <img src={cover} alt="" className="site-cover-img" />
-        ) : (
-          <div className="site-cover-img site-cover-ph" />
-        )}
-        <div className="site-cover-body">
-          <p className="site-cat">{home.category}</p>
-          <h1>{home.name}</h1>
-          {home.reviews.count > 0 && (
-            <p className="site-rating">
-              <b aria-hidden="true">★ {home.reviews.average?.toFixed(1)}</b>
-              <span className="sr-only">5점 만점에 {home.reviews.average?.toFixed(1)}점, </span>
-              <span>리뷰 {home.reviews.count}개</span>
-            </p>
+    <>
+      {/*
+        상호와 밝기 버튼이 스크롤을 따라온다 (#76·#77). `.site` 안에 두면 flex gap 이 사이에 끼므로
+        본문 바깥에 둔다 — 본문(main)도 아니다. 커버 사진 위에 투명하게 띄우지 않는 이유는,
+        사진이 밝으면 글자가 사라지기 때문. 자바스크립트 없이 sticky 하나로 끝난다
+      */}
+      <div className="site-top">
+        <span className="site-top-name">{home.name}</span>
+        {/* 사업자가 고른 밝기를 손님이 되돌릴 수 있는 자리 (#76 · 01 §10) */}
+        <ThemeToggle size={34} storageKey={SITE_THEME_KEY} label="화면 밝기 바꾸기" />
+      </div>
+
+      <main className={`site${tel || mapHref ? " site--bar" : ""}`}>
+        <header className="site-cover">
+          {cover ? (
+            // eslint-disable-next-line @next/next/no-img-element -- 외부(R2) URL
+            <img src={cover} alt="" className="site-cover-img" />
+          ) : (
+            <div className="site-cover-img site-cover-ph" />
           )}
-        </div>
-      </header>
-
-      <section className="site-sec">
-        <h2>예약 상품</h2>
-        <ul className="site-products">
-          {home.products.map((p) => (
-            <li key={p.id}>
-              {p.images[0] ? (
-                // eslint-disable-next-line @next/next/no-img-element -- 외부(R2) URL
-                <img src={p.images[0]} alt="" />
-              ) : (
-                <div className="ph" aria-hidden="true" />
-              )}
-              <div className="body">
-                <h3>{p.name}</h3>
-                <p className="meta">
-                  {dur(p)}
-                  {p.maxPartySize > 1 ? ` · 최대 ${p.maxPartySize}명` : ""}
-                  {p.priceDisplay ? ` · ${p.priceDisplay}` : ""}
-                </p>
-                {p.description && <p className="desc">{p.description}</p>}
-              </div>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      {home.description && (
-        <section className="site-sec">
-          <h2>소개</h2>
-          <p className="site-desc">{home.description}</p>
-        </section>
-      )}
-
-      {gallery.length > 0 && (
-        <section className="site-sec">
-          <h2>사진</h2>
-          <div className="site-gallery">
-            {gallery.map((src, i) => (
-              // eslint-disable-next-line @next/next/no-img-element -- 외부(R2) URL
-              <img key={i} src={src} alt="" loading="lazy" />
-            ))}
+          <div className="site-cover-body">
+            <p className="site-cat">{home.category}</p>
+            <h1>{home.name}</h1>
+            {home.reviews.count > 0 && (
+              <p className="site-rating">
+                <b aria-hidden="true">★ {home.reviews.average?.toFixed(1)}</b>
+                <span className="sr-only">5점 만점에 {home.reviews.average?.toFixed(1)}점, </span>
+                <span>리뷰 {home.reviews.count}개</span>
+              </p>
+            )}
           </div>
-        </section>
-      )}
+        </header>
 
-      {home.reviews.recent.length > 0 && (
         <section className="site-sec">
-          <h2>리뷰</h2>
-          <ul className="site-reviews">
-            {home.reviews.recent.map((r) => (
-              <li key={r.id}>
-                <p className="head">
-                  <b aria-hidden="true">{"★".repeat(r.rating)}</b>
-                  <span className="sr-only">5점 만점에 {r.rating}점.</span>
-                  <span className="who">{r.author}</span>
-                </p>
-                <p>{r.content}</p>
+          <h2>예약 상품</h2>
+          <ul className="site-products">
+            {home.products.map((p) => (
+              <li key={p.id}>
+                {p.images[0] ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- 외부(R2) URL
+                  <img src={p.images[0]} alt="" />
+                ) : (
+                  <div className="ph" aria-hidden="true" />
+                )}
+                <div className="body">
+                  <h3>{p.name}</h3>
+                  <p className="meta">
+                    {dur(p)}
+                    {p.maxPartySize > 1 ? ` · 최대 ${p.maxPartySize}명` : ""}
+                    {p.priceDisplay ? ` · ${p.priceDisplay}` : ""}
+                  </p>
+                  {p.description && <p className="desc">{p.description}</p>}
+                </div>
               </li>
             ))}
           </ul>
         </section>
-      )}
 
-      <section className="site-sec">
-        <h2>영업시간</h2>
-        <dl className="site-hours">
-          {hours.map((h) => (
-            <div key={h.label}>
-              <dt>{h.label}</dt>
-              <dd className={h.text === "휴무" ? "muted" : undefined}>{h.text}</dd>
+        {home.description && (
+          <section className="site-sec">
+            <h2>소개</h2>
+            <p className="site-desc">{home.description}</p>
+          </section>
+        )}
+
+        {gallery.length > 0 && (
+          <section className="site-sec">
+            <h2>사진</h2>
+            <div className="site-gallery">
+              {gallery.map((src, i) => (
+                // eslint-disable-next-line @next/next/no-img-element -- 외부(R2) URL
+                <img key={i} src={src} alt="" loading="lazy" />
+              ))}
             </div>
-          ))}
-        </dl>
-        {home.closedDays.length > 0 && (
-          <>
-            <h3 className="site-sub">휴무 안내</h3>
-            <ul className="site-closed">
-              {home.closedDays.map((c) => (
-                <li key={c.date}>
-                  <b>{dayLabel(c.date)}</b>
-                  {c.partial ? ` ${c.partial.start}–${c.partial.end} 휴무` : " 휴무"}
+          </section>
+        )}
+
+        {home.reviews.recent.length > 0 && (
+          <section className="site-sec">
+            <h2>리뷰</h2>
+            <ul className="site-reviews">
+              {home.reviews.recent.map((r) => (
+                <li key={r.id}>
+                  <p className="head">
+                    <b aria-hidden="true">{"★".repeat(r.rating)}</b>
+                    <span className="sr-only">5점 만점에 {r.rating}점.</span>
+                    <span className="who">{r.author}</span>
+                  </p>
+                  <p>{r.content}</p>
                 </li>
               ))}
             </ul>
-          </>
+          </section>
         )}
-      </section>
 
-      {(fullAddress || home.phone) && (
         <section className="site-sec">
-          <h2>찾아오시는 길</h2>
-          {fullAddress && <p className="site-addr">{fullAddress}</p>}
-          {home.phone && (
-            <p>
-              <a href={`tel:${home.phone.replace(/[^0-9+]/g, "")}`}>{home.phone}</a>
-            </p>
-          )}
-          {/*
-            지도는 **링크**다. `map.kakao.com/link/…` 은 카카오맵을 여는 주소지 임베드 엔드포인트가 아니라
-            X-Frame-Options 로 프레임이 거부된다 — iframe 으로 넣으면 조용히 빈 상자가 남는다.
-            제대로 심으려면 Maps JS SDK(appkey 필요)를 써야 하고, 그건 좌표 입력 UI(#12 주소 검색)와 함께 온다.
-          */}
-          {(fullAddress || (home.lat !== null && home.lng !== null)) && (
-            <p>
-              <a href={home.lat !== null && home.lng !== null ? `https://map.kakao.com/link/map/${encodeURIComponent(home.name)},${home.lat},${home.lng}` : `https://map.kakao.com/link/search/${encodeURIComponent(fullAddress)}`} target="_blank" rel="noreferrer">
-                카카오맵에서 보기 →
-              </a>
-            </p>
+          <h2>영업시간</h2>
+          <dl className="site-hours">
+            {hours.map((h) => (
+              <div key={h.label}>
+                <dt>{h.label}</dt>
+                <dd className={h.text === "휴무" ? "muted" : undefined}>{h.text}</dd>
+              </div>
+            ))}
+          </dl>
+          {home.closedDays.length > 0 && (
+            <>
+              <h3 className="site-sub">휴무 안내</h3>
+              <ul className="site-closed">
+                {home.closedDays.map((c) => (
+                  <li key={c.date}>
+                    <b>{dayLabel(c.date)}</b>
+                    {c.partial ? ` ${c.partial.start}–${c.partial.end} 휴무` : " 휴무"}
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
         </section>
-      )}
 
-      <footer className="site-foot">
-        <p>{home.name}</p>
-      </footer>
-    </main>
+        {(fullAddress || home.phone) && (
+          <section className="site-sec">
+            <h2>찾아오시는 길</h2>
+            {fullAddress && <p className="site-addr">{fullAddress}</p>}
+            {tel && (
+              <p>
+                <a href={tel}>{home.phone}</a>
+              </p>
+            )}
+            {/*
+              지도는 **링크**다. `map.kakao.com/link/…` 은 카카오맵을 여는 주소지 임베드 엔드포인트가 아니라
+              X-Frame-Options 로 프레임이 거부된다 — iframe 으로 넣으면 조용히 빈 상자가 남는다.
+              제대로 심으려면 Maps JS SDK(appkey 필요)를 써야 하고, 그건 좌표 입력 UI(#12 주소 검색)와 함께 온다.
+            */}
+            {mapHref && (
+              <p>
+                <a href={mapHref} target="_blank" rel="noreferrer">
+                  카카오맵에서 보기 →
+                </a>
+              </p>
+            )}
+          </section>
+        )}
+
+        <footer className="site-foot">
+          <p>{home.name}</p>
+        </footer>
+
+      </main>
+
+      {/*
+        폰 전용 하단 바 (#77). 예약 버튼은 위젯(에픽 #11)이 와야 진짜가 되므로 아직 두지 않는다 —
+        지금 있는 것은 데이터가 이미 있는 두 가지뿐이다. 넓은 화면에서는 본문에 같은 링크가 보여 숨긴다
+      */}
+      {(tel || mapHref) && (
+        <div className="site-bar">
+          {tel && (
+            <a className="btn" href={tel}>
+              전화
+            </a>
+          )}
+          {mapHref && (
+            <a className="btn" href={mapHref} target="_blank" rel="noreferrer">
+              길찾기
+            </a>
+          )}
+        </div>
+      )}
+    </>
   );
 }

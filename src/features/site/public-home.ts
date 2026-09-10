@@ -7,7 +7,8 @@ import { addDays } from "@/features/schedule/resolve";
 import { todayIn } from "@/lib/dates";
 import { isInfoComplete } from "@/features/business/settings";
 import { categoryLabel } from "@/features/business/policy-defaults";
-import type { OpeningHour } from "@/db/schema";
+import { normalizeColorScheme } from "./theme";
+import type { OpeningHour, SiteColorScheme } from "@/db/schema";
 
 /**
  * 공개 사업장 홈 (FR-SITE-010, #71) 의 읽기 계층.
@@ -52,6 +53,8 @@ export type PublicHome = {
   lng: number | null;
   timezone: string;
   openingHours: OpeningHour[];
+  /** 사업자가 고른 밝기 (#76). AUTO 면 손님 기기 설정을 따른다 */
+  colorScheme: SiteColorScheme;
   products: PublicProduct[];
   /**
    * 앞으로 60일 안의 휴무일. 사업장 전체 휴무만 — 담당자 개인 휴무는 손님이 알 필요가 없다.
@@ -112,6 +115,8 @@ export const loadPublicHome = cache(async (businessId: string): Promise<PublicHo
       activeResources: sql<number>`(select count(*)::int from resources r where r.business_id = businesses.id and r.is_active)`,
       // 행이 없으면 시작 템플릿으로 공개다 (위 주석) — coalesce 의 기본값이 true 인 이유
       published: sql<boolean>`coalesce((select sp.is_published from site_pages sp where sp.business_id = businesses.id limit 1), true)`,
+      // 행도 키도 없을 수 있다 — 둘 다 AUTO 로 떨어진다 (`normalizeColorScheme`)
+      colorScheme: sql<string | null>`(select sp.theme->>'colorScheme' from site_pages sp where sp.business_id = businesses.id limit 1)`,
     })
     .from(businesses)
     .where(eq(businesses.id, businessId))
@@ -172,6 +177,7 @@ export const loadPublicHome = cache(async (businessId: string): Promise<PublicHo
     lng: b.lng,
     timezone: b.timezone,
     openingHours: b.openingHours,
+    colorScheme: normalizeColorScheme(b.colorScheme),
     products: rows,
     closedDays,
     reviews: { count: agg?.count ?? 0, average: agg?.average ?? null, recent: recent.map((r) => ({ ...r, author: maskName(r.author) })) },

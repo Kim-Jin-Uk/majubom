@@ -31,11 +31,22 @@ export type SiteSection = {
 
 export type SitePageData = { sections: SiteSection[] };
 
+/**
+ * 공개 홈의 밝기 (01 §10 "공개 페이지는 사업자가 라이트/다크/자동 중 선택").
+ * `AUTO` 는 손님의 OS 설정(prefers-color-scheme)을 따른다.
+ */
+export type SiteColorScheme = "AUTO" | "LIGHT" | "DARK";
+
 export type SiteTheme = {
   primaryColor: string;
   fontScale: number;
   radius: number;
   containerWidth: number;
+  /**
+   * 이 키가 생기기 전에 쓰인 행에는 없다 — 그래서 선택이다. 읽는 쪽은 반드시
+   * `features/site/theme.ts` 의 `normalizeColorScheme` 을 거쳐 기본값(AUTO)으로 메운다.
+   */
+  colorScheme?: SiteColorScheme;
 };
 
 export const sitePages = pgTable("site_pages", {
