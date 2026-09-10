@@ -3,9 +3,19 @@ import { Client } from "pg";
 
 loadEnv({ path: [".env.local", ".env"], quiet: true });
 
+/**
+ * 어느 주소를 쓰는가 — **여기 한 곳에서만 정한다.**
+ * 진단 메시지가 실제로 연결한 것과 다른 주소를 가리키면, 고치라는 곳과 고쳐야 할 곳이 어긋난다.
+ *
+ * - 런타임 풀(`src/db/client.ts`)은 `DATABASE_URL` **하나만** 본다. pooled 주소다
+ * - DDL 직결은 `DATABASE_URL_UNPOOLED` 를 먼저 본다 (Neon PgBouncer 는 `SET` 을 못 받는다)
+ */
+export const runtimeDbUrl = (): string => process.env.DATABASE_URL ?? "";
+export const ddlDbUrl = (): string => process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL ?? "";
+
 /** DDL 전용 직결 클라이언트. lock_timeout 을 세션에 강제한다 (08 §5.5). */
 export async function ddlClient() {
-  const url = process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL;
+  const url = ddlDbUrl();
   if (!url) throw new Error("DATABASE_URL_UNPOOLED (또는 DATABASE_URL) 가 없다");
   if (/pooler\./.test(url)) {
     throw new Error("마이그레이션은 pooled 엔드포인트로 돌리지 않는다. DATABASE_URL_UNPOOLED 를 쓸 것 (Neon PgBouncer 는 SET 을 지원하지 않는다)");
@@ -51,12 +61,15 @@ export function describeConnError(e: unknown, url: string): string {
  *
  * drizzle 은 pg 오류를 `DrizzleQueryError` 로 감싸고 원인을 `cause` 에만 담는다. 그래서 사슬을
  * 벗겨 보고, **연결·DB 상태로 판정되는 것만** 그 문장을 쓴다. 나머지는 원인 사슬을 그대로 보여 준다.
+ *
+ * **주소는 호출자가 준다.** 여기서 골라 버리면 런타임 풀(`DATABASE_URL`)로 실패했는데 메시지는
+ * 직결 주소(`DATABASE_URL_UNPOOLED`)의 호스트를 가리키는 일이 생긴다 — 그게 바로 이 함수가 없애려던
+ * 오진단이다. `runtimeDbUrl()` / `ddlDbUrl()` 중 그 스크립트가 실제로 연결한 쪽을 넘긴다.
  */
-export function explainDbError(e: unknown): string {
+export function explainDbError(e: unknown, url: string, envName = "DATABASE_URL"): string {
   const chain: unknown[] = [];
   for (let cur: unknown = e; cur && chain.length < 5; cur = (cur as { cause?: unknown }).cause) chain.push(cur);
-  const url = process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL ?? "";
-  if (!url) return "DATABASE_URL 이 없다 — .env.local 에 넣거나 명령 앞에 붙여서 실행할 것";
+  if (!url) return `${envName} 이 없다 — .env.local 에 넣거나 명령 앞에 붙여서 실행할 것`;
 
   const CONN = ["ECONNREFUSED", "ENOTFOUND", "ETIMEDOUT", "EHOSTUNREACH", "ECONNRESET", "28P01", "28000"];
   const net = chain.find((x) => x instanceof AggregateError || CONN.includes((x as { code?: string }).code ?? ""));
@@ -64,7 +77,7 @@ export function explainDbError(e: unknown): string {
 
   const pg = chain.find((x) => /^[0-9A-Z]{5}$/.test((x as { code?: string }).code ?? "")) as { code?: string; message?: string } | undefined;
   if (pg?.code === "42P01") return `표가 없다 (42P01) — 이 DB 에 마이그레이션이 안 돌았다. \`npm run db:migrate\` 뒤 다시\n  ${pg.message ?? ""}`;
-  if (pg?.code === "3D000") return `그런 이름의 데이터베이스가 없다 (3D000) — DATABASE_URL 의 마지막 경로를 확인\n  ${pg.message ?? ""}`;
+  if (pg?.code === "3D000") return `그런 이름의 데이터베이스가 없다 (3D000) — ${envName} 의 마지막 경로를 확인\n  ${pg.message ?? ""}`;
   if (pg) return `Postgres 오류 ${pg.code}: ${pg.message ?? ""}`;
 
   // 연결·DB 문제가 아니다. 지어내지 말고 원인 사슬을 그대로 보여 준다
