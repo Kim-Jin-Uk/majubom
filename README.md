@@ -39,7 +39,8 @@ npm run dev
 | `npm run db:migrate` | 마이그레이션 적용 (직결 연결 · `lock_timeout 3s` · 재시도) |
 | `npm run db:check` | 불변 제약 검사 — CI `verify` 잡에서도 돈다 |
 | `npm run db:status` | 배포된 DB 가 이 브랜치와 같은 자리인지 (읽기 전용 — 프로덕션에 그대로 돌린다) |
-| `npm run admin:promote -- <email>` | 사용자를 ADMIN 으로 승격 (첫 `/admin` 진입에서 TOTP 등록 강제) |
+| `npm run admin:promote -- <email>` | 있는 사용자를 ADMIN 으로 승격 |
+| `ADMIN_PASSWORD='…' npm run admin:create -- <email> ["이름"]` | ADMIN 계정 생성(없으면) 또는 승격(있으면). 비밀번호는 **환경변수로만** 받는다 — 명령행 인자는 셸 히스토리와 `ps` 에 남는다. 둘 다 첫 `/admin` 진입에서 TOTP 등록이 강제된다 |
 | `npm run job:cleanup-unverified` | 7일 지난 미검증 사업자 신청 삭제 (프로덕션은 Cloud Scheduler → `/api/cron/cleanup-unverified`) |
 | `npm run job:reservations` | 예약 배치 둘(만료·자동 노쇼)을 로컬에서 한 번 돌린다 |
 
