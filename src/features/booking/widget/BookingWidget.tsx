@@ -203,8 +203,20 @@ export function BookingWidget({ data, signedIn }: { data: BookingWidgetData; sig
   const doneCode = params.get("done");
 
   useEffect(() => {
-    if (acted.current) headingRef.current?.querySelector<HTMLElement>("h2")?.focus();
+    if (!acted.current) return;
+    acted.current = false;
+    headingRef.current?.querySelector<HTMLElement>("h2")?.focus();
   }, [step, placed, doneCode]);
+
+  /**
+   * 조작 표시는 **그 조작이 만든 화면까지만** 유효하다. 칩 하나 눌러 단계가 그대로면 위 effect 는
+   * 아예 돌지 않아 표시가 켜진 채 남고, 그다음 **뒤로가기가 그 표시를 물려받아** 초점을 채간다.
+   * 주소가 바뀔 때마다 끈다 — 위 effect 보다 뒤에 선언돼 있어 초점을 옮긴 뒤에 돈다.
+   */
+  const urlKey = params.toString();
+  useEffect(() => {
+    acted.current = false;
+  }, [urlKey]);
 
   return (
     <main className="bw">
