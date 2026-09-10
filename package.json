@@ -26,6 +26,7 @@
     "job:cleanup-unverified": "tsx scripts/jobs/cleanup-unverified.ts",
     "job:reservations": "tsx scripts/jobs/reservation-batches.ts",
     "admin:promote": "tsx scripts/db/promote-admin.ts",
+    "admin:create": "tsx scripts/db/create-admin.ts",
     "r2:cors": "node scripts/dev/r2-cors.mjs",
     "r2:verify": "tsx scripts/dev/verify-r2.mts"
   },
