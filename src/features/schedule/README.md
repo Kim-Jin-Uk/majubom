@@ -10,9 +10,10 @@ features/schedule/holidays.ts        휴무 규칙 CRUD · 발생일 전개 · �
 features/schedule/work-schedules.ts  주간 패턴 — 버전(effectiveFrom/To) · 일괄 적용 · EXCLUDE 제약과의 순서
 features/schedule/work-exceptions.ts 일자별 예외 — 사라지는 근무 구간의 예약 충돌 · 매니저 BLOCK 권한 · 휴가 신청(PENDING) 승인·반려
 features/schedule/calendar.ts        자원 × 날짜 그리드 + 요약 지표 (화면은 계산하지 않는다)
-features/schedule/ui/                ScheduleGrid(주간 그리드·예외 등록) · PatternEditor · HolidaysPanel
-app/api/console/{holidays,work-schedules,work-exceptions(+[id]/decide),schedule}
-app/console/{schedule, schedule/pattern, holidays}
+features/schedule/ui/                ScheduleGrid(주간 그리드·예외 등록) · PatternEditor · HolidaysPanel · SwapsPanel
+app/api/console/{holidays,work-schedules,work-exceptions(+[id]/decide),schedule,swaps(+[id])}
+app/api/cron/expire-swaps          C8 — 72시간 무응답 만료
+app/console/{schedule, schedule/pattern, schedule/swaps, holidays}
 ```
 
 ## 결정한 것
@@ -48,6 +49,31 @@ from 이후에 시작하는 행은 지운다(닫으면 뒤집힌 기간이 된�
 행을 받아 JS 에서 센다 — 같은 식이 SELECT 와 GROUP BY 에 다른 `$n` 으로 바인딩되면 PG 가 같은 식으로 보지 않는 함정도 피한다.
 
 **요약 지표.** 근무일 수·총 근무시간(휴게·BLOCK·휴무 차감 후)·휴무일 수(영업일인데 근무 0)·예정 예약 건수(시작일 또는 종료일이 기간에 드는 예약, 중복 없이) — 요청 기간(주) 기준. 월간은 기간을 넘겨 부르면 된다(최대 62일).
+
+## 근무 교대 (FR-SHIFT-010~030, #43~#46)
+
+**근무표를 바꾸기 전에 예약을 전부 판정한다.** 이 에픽의 위험은 하나뿐이다 — 근무만 넘어가고 예약은 원래 사람에게 남으면
+그날 손님이 빈 가게에 온다(기획서 리스크 R4). 그래서 `planSwap` 이 **트랜잭션 밖에서** 만들 예외·옮길 예약·막는 이유를 다 구하고,
+하나라도 막히면 상태를 건드리지 않는다. 트랜잭션 안에서도 이관 UPDATE 가 0행이면(그 사이 취소됐다) 통째로 되돌린다.
+
+**방향은 `swap-rules.ts` 가 푼다.** GIVE 는 한 방향, EXCHANGE 는 두 방향이고 이관 여부는 방향마다 따로다(`reassignRequester`/`reassignTarget`).
+분해를 승인 로직 안에 풀어 두면 맞교대의 반대 방향이 조용히 빠진다. 전이 표도 같은 파일에 있다 — 라우트가 각자 조건을 들면 곧 어긋난다.
+
+**EXTRA 는 대신 서는 쪽의 그 날짜에 만든다.** 명세 3단계 주석 그대로다. 넘기는 쪽에는 OFF 를 두고, "유지" 를 고르면 그 위에
+예약 시간만 EXTRA 를 얹는다 — `resolve.ts` 의 4·5순위(EXTRA 가 OFF 를 이긴다)가 바로 이 조합을 위한 것이다.
+
+**요청은 본인 자원에서만 낸다 — 사장님도.** 교대의 전제가 당사자 간 동의인데 사장님이 남의 이름으로 요청을 내면 "수락" 이 동의가 아니게 되고,
+사장님은 근무 예외로 근무표를 직접 고칠 수 있다. 대신 사장님은 모든 요청을 보고 승인·거부한다(`shiftAutoApprove=false` 일 때).
+
+**같은 두 사람·같은 날은 진행 중인 요청 하나뿐.** 방향은 따지지 않는다 — "가→나" 와 "나→가" 가 같은 날 함께 열려 있으면
+둘 다 승인됐을 때 근무표가 제자리로 돌아온다.
+
+**승인 직전에 다시 본다.** 요청부터 승인까지 최대 72시간이 비어 있어 그 사이 새 예약이 들어올 수 있다.
+`reservationIdsAtRequest` 스냅샷과 재조회 결과가 다르면 409 `SWAP_RESERVATIONS_CHANGED` — 사람이 다시 보기 전에는 반영하지 않는다.
+고객이 담당자를 직접 고른 상품(`resourceSelectMode=REQUIRED`)의 예약을 옮길 때는 409 `SWAP_DIRECT_PICKS` 로 확인을 한 번 더 받는다.
+
+**자정을 넘긴 근무는 아직 교대할 수 없다** (409 `SHIFT_CROSSES_MIDNIGHT`). `work_exceptions` 의 CHECK 가 `start < end` 인 하루 안의
+구간만 담아서, 넘겨줄 근무 시간을 적을 자리가 없다. 주간 패턴이 자정 넘김을 받게 되는 날 같이 푼다 (L-12).
 
 ## 아직 안 한 것 (의도적으로)
 

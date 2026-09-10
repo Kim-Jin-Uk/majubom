@@ -144,3 +144,15 @@ export function reservationExpiredMail(to: string, i: ReservationMailInfo): Mail
     `매장이 확인하지 못해 예약 신청이 자동으로 만료되었습니다. 이 시간은 다시 열려 있습니다.\n\n${block(i)}\n\n다시 예약하기: ${i.url}`,
   );
 }
+
+/**
+ * 담당자 변경 — 근무 교대로 담당자만 바뀐 것 (FR-SHIFT-030). 예약 자체는 그대로다.
+ * 제목에 "변경" 만 쓰면 시간이 바뀐 줄 안다 — 무엇이 바뀌었는지 제목에서 못 박는다.
+ */
+export function reservationReassignedMail(to: string, i: ReservationMailInfo, staffName: string): Mail {
+  return mail(
+    to,
+    `담당자가 바뀌었습니다 — ${i.businessName}`,
+    `예약 시간과 내용은 그대로이고, 담당자만 ${staffName} 님으로 바뀌었습니다.\n\n${block(i)}\n· 담당자: ${staffName}\n\n예약 확인: ${i.url}`,
+  );
+}

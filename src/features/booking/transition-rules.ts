@@ -56,8 +56,11 @@ export const CUSTOMER_MAIL_ON = {
   EXPIRED: "EXPIRED",
 } as const satisfies Partial<Record<ReservationStatus, string>>;
 
-/** 생성(`REQUESTED`)을 포함한 손님 메일 갈래 */
-export type ReservationMailEvent = "REQUESTED" | (typeof CUSTOMER_MAIL_ON)[keyof typeof CUSTOMER_MAIL_ON];
+/**
+ * 손님 메일 갈래. 전이가 아닌 둘이 섞여 있다 — `REQUESTED` 는 생성(`create.ts`),
+ * `REASSIGNED` 는 상태가 그대로인 채 담당자만 바뀌는 근무 교대(`schedule/swaps.ts`)다.
+ */
+export type ReservationMailEvent = "REQUESTED" | "REASSIGNED" | (typeof CUSTOMER_MAIL_ON)[keyof typeof CUSTOMER_MAIL_ON];
 
 export function customerMailFor(to: ReservationStatus): ReservationMailEvent | null {
   return CUSTOMER_MAIL_ON[to as keyof typeof CUSTOMER_MAIL_ON] ?? null;

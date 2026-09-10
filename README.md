@@ -52,7 +52,7 @@ npm run dev
 둘이 겹치지 않는다: enum 값이 빠져 있으면 제약은 멀쩡한데 감사 로그 쓰기만 런타임에 죽어서 `db:check` 로는 안 잡힌다.
 직결(unpooled) 주소가 필요하다 — 러너가 pooled 주소를 거부한다(Neon PgBouncer 는 `SET lock_timeout` 을 못 받는다).
 
-**배치 셋은 Cloud Scheduler 가 친다.** 인증은 헤더 `X-Cron-Secret: $CRON_SECRET` 하나뿐이고, 틀리면 404 다(엔드포인트 존재를 숨긴다).
+**배치 넷은 Cloud Scheduler 가 친다.** 인증은 헤더 `X-Cron-Secret: $CRON_SECRET` 하나뿐이고, 틀리면 404 다(엔드포인트 존재를 숨긴다).
 `Authorization: Bearer` 가 아니다. 프록시의 Basic Auth 게이트는 `/api/cron/*` 를 비켜 간다 — 자체 인증이 있어서다.
 
 | 잡 | 경로 | 주기 | 왜 그 주기인가 |
@@ -60,8 +60,9 @@ npm run dev
 | C1 | `POST /api/cron/cleanup-unverified` | 일 1회 | 7일 경과 미검증 신청 삭제 — 급하지 않다 |
 | C2 | `POST /api/cron/expire-requests` | 5분 | `REQUESTED` 가 슬롯을 묶고 있다. 늦으면 팔 수 있는 자리가 잠긴다 |
 | C3 | `POST /api/cron/auto-no-show` | 일 1회 04:00 | 종료 후 `autoNoShowAfterHours`(기본 24h)를 넘긴 `CONFIRMED` 정리 |
+| C8 | `POST /api/cron/expire-swaps` | 매시 | 근무 교대 요청 72시간 무응답 만료 — 72시간짜리 시한에 분 단위는 의미가 없다 |
 
-셋 다 조건부 UPDATE 라 재실행이 무해하고, 한 번에 최대 500건씩 처리한다. C2 가 멈추면 콘솔 요약의 "승인 대기" 가 계속 늘어난다 — 그게 신호다.
+넷 다 조건부 UPDATE 라 재실행이 무해하고, 한 번에 최대 500건씩 처리한다. C2 가 멈추면 콘솔 요약의 "승인 대기" 가 계속 늘어난다 — 그게 신호다.
 
 ```bash
 gcloud scheduler jobs create http majubom-expire-requests \

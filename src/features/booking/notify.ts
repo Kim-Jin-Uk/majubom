@@ -1,8 +1,8 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
-import { businesses, products, reservations, users } from "@/db/schema";
+import { businesses, products, reservations, resources, users } from "@/db/schema";
 import { sendMail } from "@/lib/mail";
-import { reservationCanceledByBizMail, reservationConfirmedMail, reservationExpiredMail, reservationRejectedMail, reservationRequestedMail, type ReservationMailInfo } from "@/lib/mail/templates";
+import { reservationCanceledByBizMail, reservationConfirmedMail, reservationExpiredMail, reservationReassignedMail, reservationRejectedMail, reservationRequestedMail, type ReservationMailInfo } from "@/lib/mail/templates";
 import { whenText } from "./notify-text";
 import type { ReservationMailEvent } from "./transition-rules";
 
@@ -32,11 +32,13 @@ export async function notifyReservation(id: string, event: ReservationMailEvent,
         businessName: businesses.name,
         timezone: businesses.timezone,
         productName: products.name,
+        staffName: resources.name,
         email: users.email,
       })
       .from(reservations)
       .innerJoin(businesses, eq(businesses.id, reservations.businessId))
       .innerJoin(products, eq(products.id, reservations.productId))
+      .innerJoin(resources, eq(resources.id, reservations.resourceId))
       .innerJoin(users, eq(users.id, reservations.customerId))
       .where(eq(reservations.id, id))
       .limit(1);
@@ -58,6 +60,7 @@ export async function notifyReservation(id: string, event: ReservationMailEvent,
       : event === "CONFIRMED" ? reservationConfirmedMail(r.email, info)
       : event === "REJECTED" ? reservationRejectedMail(r.email, info, reason)
       : event === "CANCELED_BY_BIZ" ? reservationCanceledByBizMail(r.email, info, reason)
+      : event === "REASSIGNED" ? reservationReassignedMail(r.email, info, r.staffName)
       : reservationExpiredMail(r.email, info);
     await sendMail(mail);
   } catch (e) {
