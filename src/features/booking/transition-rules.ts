@@ -20,10 +20,15 @@ export type TransitionActor =
   /** canViewAll: `permissions.viewAllReservations`. **보이는 범위**를 넓힐 뿐, 처리 권한은 넓히지 않는다 (FR-BOOK-030) */
   | { kind: "CONSOLE"; uid: string; role: "OWNER" | "MANAGER"; memberId: string; businessId: string; canViewAll: boolean }
   /** 배치 — 만료·자동 노쇼. actorId 는 null 로 남는다 */
-  | { kind: "SYSTEM" };
+  | { kind: "SYSTEM" }
+  /**
+   * 운영자. 사업장 차단(FR-ADM-020)으로 남은 예약을 정리할 때만 쓴다 — 배치(SYSTEM)와 나누는 이유는
+   * **사람이 사유를 적고 책임을 지기 때문**이다. 확정된 예약을 아무도 모르게 취소하는 경로는 만들지 않는다
+   */
+  | { kind: "ADMIN"; uid: string };
 
 export type Rule = {
-  by: Array<"CUSTOMER" | "CONSOLE" | "SYSTEM">;
+  by: Array<TransitionActor["kind"]>;
   /** OWNER 만 (오판 교정) */
   ownerOnly?: boolean;
   reasonRequired?: boolean;
@@ -71,11 +76,13 @@ export const RULES: Record<string, Rule> = {
   "REQUESTED>CONFIRMED": { by: ["CONSOLE"], revalidate: true },
   "REQUESTED>REJECTED": { by: ["CONSOLE"], reasonRequired: true },
   "REQUESTED>CANCELED_BY_USER": { by: ["CUSTOMER"] },
-  "REQUESTED>CANCELED_BY_BIZ": { by: ["CONSOLE", "SYSTEM"], reasonRequired: true },
+  "REQUESTED>CANCELED_BY_BIZ": { by: ["CONSOLE", "SYSTEM", "ADMIN"], reasonRequired: true },
   "REQUESTED>EXPIRED": { by: ["SYSTEM"] },
   "CONFIRMED>CANCELED_BY_USER": { by: ["CUSTOMER"], guard: CANCEL_DEADLINE },
-  // 명세 표의 이 행에는 시스템이 없다 — 일괄 취소(휴무 등록 등)가 건드리는 것은 REQUESTED 까지다
-  "CONFIRMED>CANCELED_BY_BIZ": { by: ["CONSOLE"], reasonRequired: true },
+  // 명세 표의 이 행에는 시스템이 없다 — 일괄 취소(휴무 등록 등)가 건드리는 것은 REQUESTED 까지다.
+  // 운영자(ADMIN)는 예외다: 사업장을 차단하면 확정 예약도 지킬 수 없고, 손님이 빈 가게에 가는 것보다
+  // 사유가 적힌 취소 메일을 받는 편이 낫다 (FR-ADM-020 "예약 일괄 취소 여부 선택")
+  "CONFIRMED>CANCELED_BY_BIZ": { by: ["CONSOLE", "ADMIN"], reasonRequired: true },
   "CONFIRMED>COMPLETED": {
     by: ["CONSOLE"],
     guard: (r, now) => {

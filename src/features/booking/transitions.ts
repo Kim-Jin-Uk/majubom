@@ -129,6 +129,8 @@ export async function validateExisting(r: ValidateSubject, q: DbLike): Promise<v
  * `viewAllReservations` 가 있으면 보이기는 하므로 여기를 통과하고, 처리 권한은 `authorize` 가 403 으로 따로 막는다.
  */
 function assertVisible(r: Loaded, actor: TransitionActor): void {
+  // 운영자는 사업장을 넘어 본다 — 그 권한 자체가 프록시(ADMIN + TOTP)에서 이미 검사됐다
+  if (actor.kind === "ADMIN") return;
   if (actor.kind === "CUSTOMER" && r.customerId !== actor.uid) throw new HttpError(404, "NOT_FOUND");
   if (actor.kind !== "CONSOLE") return;
   if (r.businessId !== actor.businessId) throw new HttpError(404, "NOT_FOUND");
@@ -187,7 +189,7 @@ export async function transitionReservation(
       {
         action: "RESERVATION_STATUS_CHANGE",
         actorId,
-        actorRole: actor.kind === "CONSOLE" ? actor.role : actor.kind === "CUSTOMER" ? "CUSTOMER" : "SYSTEM",
+        actorRole: actor.kind === "CONSOLE" ? actor.role : actor.kind === "CUSTOMER" ? "CUSTOMER" : actor.kind === "ADMIN" ? "ADMIN" : "SYSTEM",
         businessId: r.businessId,
         targetType: "RESERVATION",
         targetId: id,

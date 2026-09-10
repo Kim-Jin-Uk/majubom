@@ -156,3 +156,46 @@ export function reservationReassignedMail(to: string, i: ReservationMailInfo, st
     `예약 시간과 내용은 그대로이고, 담당자만 ${staffName} 님으로 바뀌었습니다.\n\n${block(i)}\n· 담당자: ${staffName}\n\n예약 확인: ${i.url}`,
   );
 }
+
+/**
+ * 심사·상태 메일 (FR-ADM-010 · FR-ADM-020, #65·#66).
+ *
+ * 넷 다 **사람이 내린 결정**을 전한다. 그래서 사유를 요약하거나 완곡하게 바꾸지 않고 운영자가 쓴 그대로 옮긴다 —
+ * 사업자가 무엇을 고쳐야 다시 열 수 있는지 알아야 한다.
+ */
+export function businessApprovedMail(to: string, businessName: string, publicUrl: string, consoleUrl: string): Mail {
+  return mail(
+    to,
+    `${businessName} 가입이 승인되었습니다`,
+    `${businessName} 의 ${BRAND} 가입이 승인되었습니다. 예약 페이지가 지금부터 공개됩니다.\n\n· 예약 페이지: ${publicUrl}\n· 콘솔: ${consoleUrl}\n\n예약 페이지 주소를 인스타그램 프로필이나 매장 안내에 걸어 두시면 손님이 바로 예약할 수 있어요.`,
+  );
+}
+
+export function businessRejectedMail(to: string, businessName: string, reason: string): Mail {
+  return mail(
+    to,
+    `${businessName} 가입 신청이 반려되었습니다`,
+    `${businessName} 의 가입 신청이 반려되었습니다.\n\n사유:\n${reason}\n\n내용을 보완해 같은 이메일로 다시 신청하실 수 있습니다.`,
+  );
+}
+
+export function businessSuspendedMail(to: string, businessName: string, reason: string): Mail {
+  return mail(
+    to,
+    `${businessName} 이(가) 일시정지되었습니다`,
+    `${businessName} 의 예약 페이지가 일시정지되어 새 예약을 받지 않습니다. 이미 확정된 예약은 그대로 남아 있고, 콘솔에서 예약 취소와 손님 상담은 계속 하실 수 있습니다.\n\n사유:\n${reason}\n\n확인 후 회신해 주시면 검토하겠습니다.`,
+  );
+}
+
+export function businessBlockedMail(to: string, businessName: string, reason: string, canceledCount: number): Mail {
+  const canceled = canceledCount > 0 ? `\n\n남아 있던 예약 ${canceledCount}건은 취소되었고, 손님에게도 안내가 나갔습니다.` : "";
+  return mail(
+    to,
+    `${businessName} 이(가) 차단되었습니다`,
+    `${businessName} 의 예약 페이지와 콘솔 접근이 차단되었습니다.\n\n사유:\n${reason}${canceled}\n\n이의가 있으시면 이 메일에 회신해 주세요.`,
+  );
+}
+
+export function businessRestoredMail(to: string, businessName: string): Mail {
+  return mail(to, `${businessName} 이(가) 다시 열렸습니다`, `${businessName} 의 예약 페이지와 콘솔이 정상으로 돌아왔습니다. 다시 로그인해 주세요.`);
+}

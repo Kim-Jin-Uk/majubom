@@ -12,7 +12,7 @@ features/booking/peak-occupancy.ts 순간 최대 동시 인원 (겹침 합산이
 features/booking/slots.ts         computeSlots — 순수 함수. DB·시계 없음
 features/booking/context.ts       DB → SlotContext. 유일한 DB 접점
 features/booking/create.ts        예약 생성·변경·워크인 — 재검증 · 자원 배정 · 락
-features/booking/transition-rules.ts 상태 전이 표. 순수
+features/booking/transition-rules.ts 상태 전이 표 + 그 전이가 손님에게 보내는 메일. 순수
 features/booking/transitions.ts   전이 실행 · 승인 재검증 · 배치(C2·C3)
 features/booking/notify.ts        손님 메일 발송 (#57 최소본) — 커밋 뒤, 절대 던지지 않는다
 features/booking/notify-text.ts   메일 시각 문구. 화면과 같은 규칙(widget/format.ts)을 부른다

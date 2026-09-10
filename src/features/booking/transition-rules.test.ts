@@ -87,3 +87,20 @@ describe("손님 메일 (#57)", () => {
     for (const to of arrivals) expect(["CONFIRMED", "REJECTED", "CANCELED_BY_BIZ", "EXPIRED", "CANCELED_BY_USER", "COMPLETED", "NO_SHOW"], `${to} 를 이 테스트에 추가할 것`).toContain(to);
   });
 });
+
+describe("운영자(ADMIN) 전이 (#66)", () => {
+  it("차단으로 남은 예약을 정리할 수 있다 — 확정된 것까지", () => {
+    expect(RULES["CONFIRMED>CANCELED_BY_BIZ"].by).toContain("ADMIN");
+    expect(RULES["REQUESTED>CANCELED_BY_BIZ"].by).toContain("ADMIN");
+    expect(RULES["CONFIRMED>CANCELED_BY_BIZ"].reasonRequired, "사유 없이 남의 손님 예약을 없애지 않는다").toBe(true);
+  });
+
+  it("배치(SYSTEM)는 확정 예약을 취소하지 못한다 — 아무도 모르게 사라지는 경로를 만들지 않는다", () => {
+    expect(RULES["CONFIRMED>CANCELED_BY_BIZ"].by).not.toContain("SYSTEM");
+  });
+
+  it("운영자에게 열린 것은 취소뿐 — 승인·완료·노쇼는 매장의 판단이다", () => {
+    const adminCan = Object.entries(RULES).filter(([, r]) => r.by.includes("ADMIN")).map(([k]) => k);
+    expect(adminCan.sort()).toEqual(["CONFIRMED>CANCELED_BY_BIZ", "REQUESTED>CANCELED_BY_BIZ"]);
+  });
+});
