@@ -2,9 +2,9 @@ import { randomUUID } from "node:crypto";
 import { eq, inArray } from "drizzle-orm";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { db, pool } from "@/db/client";
-import { businessMembers, businesses, productResources, products, reservationLogs, reservations, resources, users, workSchedules } from "@/db/schema";
+import { auditLogs, businessMembers, businesses, productResources, products, reservationLogs, reservations, resources, users, workSchedules } from "@/db/schema";
 import { createReservation, createWalkIn } from "@/features/booking/create";
-import { expireRequests, transitionReservation } from "@/features/booking/transitions";
+import { transitionReservation } from "@/features/booking/transitions";
 import { DEFAULT_POLICY } from "@/features/business/policy-defaults";
 import { dbTestEnabled, fakeBizRegNo } from "./_fixture";
 
@@ -95,6 +95,8 @@ describe.skipIf(!dbTestEnabled())("예약 메일 (#57)", () => {
     for (const f of made) {
       const ids = (await db.select({ id: reservations.id }).from(reservations).where(eq(reservations.businessId, f.businessId))).map((r) => r.id);
       if (ids.length) await db.delete(reservationLogs).where(inArray(reservationLogs.reservationId, ids));
+      // 전이는 감사 로그를 남긴다 — users 보다 먼저 지우지 않으면 actor_id FK 로 정리가 막힌다
+      await db.delete(auditLogs).where(eq(auditLogs.businessId, f.businessId));
       await db.delete(reservations).where(eq(reservations.businessId, f.businessId));
       await db.delete(productResources).where(eq(productResources.productId, f.productId));
       await db.delete(products).where(eq(products.id, f.productId));
@@ -155,12 +157,12 @@ describe.skipIf(!dbTestEnabled())("예약 메일 (#57)", () => {
 
   it("승인 대기 만료(C2)도 알린다 — 없으면 손님은 '접수됨' 에서 소식이 끊긴 채 가게 앞에 선다", async () => {
     const f = await make(false);
-    await createReservation({ productId: f.productId, startAt: at(8), partySize: 1, customerNote: null }, { uid: f.customerId });
+    const r = await createReservation({ productId: f.productId, startAt: at(8), partySize: 1, customerNote: null }, { uid: f.customerId });
     sent.length = 0;
-    // requestExpireHours(기본 24) 를 지난 시점으로 배치를 돌린다
-    const n = await expireRequests(new Date(Date.now() + 48 * 3_600_000));
-    expect(n).toBeGreaterThanOrEqual(1);
-    expect(sent.some((m) => m.subject.includes("만료되었습니다"))).toBe(true);
+    // 배치(`expireRequests`)를 부르지 않는다 — 그 함수는 DB 전체를 훑어서, 병렬로 도는 다른 테스트 파일의
+    // REQUESTED 건까지 만료시킨다. 메일 판단은 전이 하나에 달려 있으므로 같은 전이를 직접 일으킨다
+    await transitionReservation(r.id, "EXPIRED", { kind: "SYSTEM" });
+    expect(sent.at(-1)!.subject).toContain("만료되었습니다");
   }, 30_000);
 
   it("워크인에는 보내지 않는다 — 고객 계정이 사업장 내부 계정이라 보낼 곳이 없다", async () => {
