@@ -16,7 +16,8 @@ import { dbTestEnabled, fakeBizRegNo } from "./_fixture";
  * 1년 뒤 예약 테이블의 전화번호는 지워지는데 감사 로그의 사본은 그대로 있는 상태가 된다.
  */
 const meta = { ip: null, userAgent: null };
-const HOURS = [1, 2, 3, 4, 5].map((dow) => ({ dow, open: "10:00", close: "20:00" }));
+/** 브레이크가 있어야 jsonb 왕복의 키 순서 문제가 드러난다 — 직렬화 비교였다면 여기서 오탐이 났다 */
+const HOURS = [1, 2, 3, 4, 5].map((dow) => ({ dow, open: "10:00", close: "20:00", breaks: [{ start: "13:00", end: "14:00" }] }));
 
 async function fixture() {
   const tag = randomUUID().slice(0, 8);
@@ -52,13 +53,18 @@ describe.skipIf(!dbTestEnabled())("사업장 정보 변경 감사 로그 (#56)",
     await pool.end();
   });
 
-  it("바뀐 것이 없으면 아무것도 쓰지 않는다", async () => {
+  it("바뀐 것이 없으면 아무것도 쓰지 않는다 — jsonb 를 한 바퀴 돌고 온 영업시간도", async () => {
     const f = await make();
     // 첫 저장은 name 이 다르므로 한 줄이 남는다. 같은 값을 다시 저장하면 늘지 않아야 한다
     await updateBusinessInfo(f.businessId, input(), { uid: f.ownerId, role: "OWNER" }, meta);
     const n = (await logs(f.businessId)).length;
     await updateBusinessInfo(f.businessId, input(), { uid: f.ownerId, role: "OWNER" }, meta);
     expect((await logs(f.businessId)).length, "같은 값 재저장").toBe(n);
+
+    // 요일·브레이크 순서만 뒤집어도 같은 영업시간이다. 직렬화 비교였다면 여기서 "변경됨" 이 찍힌다
+    const shuffled = [...HOURS].reverse().map((h) => ({ ...h, breaks: [...h.breaks].reverse() }));
+    await updateBusinessInfo(f.businessId, input({ openingHours: shuffled }), { uid: f.ownerId, role: "OWNER" }, meta);
+    expect((await logs(f.businessId)).length, "순서만 뒤집은 같은 영업시간").toBe(n);
   }, 30_000);
 
   it("변경된 필드만 남는다 — 레코드 전체가 아니다", async () => {

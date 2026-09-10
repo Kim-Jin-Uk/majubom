@@ -128,6 +128,24 @@ export async function getBusinessSettings(businessId: string): Promise<BusinessS
   return b;
 }
 
+/**
+ * 영업시간이 **뜻으로** 같은가.
+ *
+ * `JSON.stringify` 로 비교하면 안 된다 — jsonb 는 키 순서를 보존하지 않고 길이·바이트 순으로 다시 쓴다.
+ * 지금은 `dow`(3) `open`(4) `close`(5) `breaks`(6) 가 우연히 스키마 순서와 같아 맞아떨어지지만,
+ * 키를 하나 더하거나 이름을 바꾸는 순간 **안 바뀐 영업시간이 "변경됨" 으로 찍힌다.**
+ * "바뀐 필드만 남긴다" 가 이 함수 하나에 걸려 있어서 뜻으로 비교한다:
+ * 요일 순서·브레이크 순서는 의미가 없고, `breaks` 없음과 빈 배열은 같다.
+ */
+export function sameOpeningHours(a: OpeningHour[] | null | undefined, b: OpeningHour[] | null | undefined): boolean {
+  const norm = (list: OpeningHour[] | null | undefined) =>
+    [...(list ?? [])]
+      .sort((x, y) => x.dow - y.dow)
+      .map((h) => [h.dow, h.open, h.close, [...(h.breaks ?? [])].map((br) => `${br.start}~${br.end}`).sort().join(",")].join("|"))
+      .join(";");
+  return norm(a) === norm(b);
+}
+
 /** 감사 diff 에 원문을 남기지 않는 필드 — 연락처·주소는 해시로 대체한다 (FR-ADM-040) */
 const HASHED_FIELDS = new Set(["phone", "address", "addressDetail"]);
 
@@ -172,8 +190,8 @@ export async function updateBusinessInfo(businessId: string, input: BusinessInfo
     for (const k of Object.keys(next) as Array<keyof typeof next>) {
       const a = before[k];
       const b = next[k];
-      // 영업시간은 배열이라 값 비교가 안 된다 — 직렬화해서 본다
-      if (JSON.stringify(a ?? null) === JSON.stringify(b ?? null)) continue;
+      const same = k === "openingHours" ? sameOpeningHours(a as OpeningHour[], b as OpeningHour[]) : (a ?? null) === (b ?? null);
+      if (same) continue;
       diff[k] = { from: auditValue(k, a), to: auditValue(k, b) };
     }
     if (Object.keys(diff).length === 0) return;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { openingHourSchema, openingHoursSchema, slugSchema } from "./settings";
+import { openingHourSchema, openingHoursSchema, sameOpeningHours, slugSchema } from "./settings";
 
 describe("openingHourSchema (#26 영업시간 규칙)", () => {
   it("일반 영업시간 + 휴게 1구간", () => {
@@ -77,5 +77,34 @@ describe("openingHourSchema 자정 넘김", () => {
     expect(openingHourSchema.safeParse({ dow: 6, open: "20:00", close: "04:00", breaks: [{ start: "05:00", end: "06:00" }] }).success).toBe(false);
     // 마감에 딱 붙는 휴게는 허용
     expect(openingHourSchema.safeParse({ dow: 1, open: "10:00", close: "20:00", breaks: [{ start: "19:00", end: "20:00" }] }).success).toBe(true);
+  });
+});
+
+describe("sameOpeningHours — 감사 diff 의 '안 바뀌었다' 판정 (#56)", () => {
+  const mon = { dow: 1, open: "10:00", close: "20:00" };
+  const tue = { dow: 2, open: "10:00", close: "20:00" };
+
+  it("키 순서가 달라도 같다 — jsonb 는 키 순서를 보존하지 않는다", () => {
+    // Postgres 는 jsonb 를 길이·바이트 순으로 다시 쓴다. 직렬화 비교였다면 여기서 "변경됨" 이 됐다
+    const stored = [{ close: "20:00", dow: 1, open: "10:00" }] as never;
+    expect(sameOpeningHours(stored, [mon])).toBe(true);
+  });
+
+  it("요일 순서와 브레이크 순서는 뜻이 없다", () => {
+    expect(sameOpeningHours([tue, mon], [mon, tue])).toBe(true);
+    const twoBreaks = (order: 0 | 1) => [{ ...mon, breaks: order === 0 ? [{ start: "13:00", end: "14:00" }, { start: "17:00", end: "17:30" }] : [{ start: "17:00", end: "17:30" }, { start: "13:00", end: "14:00" }] }];
+    expect(sameOpeningHours(twoBreaks(0), twoBreaks(1))).toBe(true);
+  });
+
+  it("브레이크 없음과 빈 배열은 같다", () => {
+    expect(sameOpeningHours([mon], [{ ...mon, breaks: [] }])).toBe(true);
+    expect(sameOpeningHours(null, [])).toBe(true);
+  });
+
+  it("실제로 달라지면 다르다", () => {
+    expect(sameOpeningHours([mon], [{ ...mon, close: "21:00" }]), "마감 시각").toBe(false);
+    expect(sameOpeningHours([mon], [mon, tue]), "요일 추가").toBe(false);
+    expect(sameOpeningHours([mon], [{ ...mon, breaks: [{ start: "13:00", end: "14:00" }] }]), "브레이크 추가").toBe(false);
+    expect(sameOpeningHours([{ ...mon, breaks: [{ start: "13:00", end: "14:00" }] }], [{ ...mon, breaks: [{ start: "13:00", end: "14:30" }] }]), "브레이크 길이").toBe(false);
   });
 });
