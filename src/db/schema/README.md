@@ -22,6 +22,7 @@
 | Review | `reviews` | `reviews.ts` | `reservation_id` unique |
 | ReviewReply | `review_replies` | `reviews.ts` | `review_id` unique |
 | SitePage (Section·Block 은 jsonb) | `site_pages` | `site-pages.ts` | `business_id` unique (MVP 1페이지) |
+| BookingSelection (위젯 임시 선택) | `booking_selections` | `booking-selections.ts` | 사용자에 안 묶인다 — 로그인 **전에** 만들어진다. 30분 TTL |
 | PushSubscription | `push_subscriptions` | `notifications.ts` | FCM 토큰 1개만 (`fcm_token` unique). VAPID 3종 보관 안 함 |
 | Notification | `notifications` | `notifications.ts` | `event_type` enum 코드는 `enums.ts` 참조 |
 | NotificationPreference | `notification_preferences` | `notifications.ts` | `(user_id, event_group)` PK |

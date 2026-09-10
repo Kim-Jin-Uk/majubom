@@ -3,6 +3,7 @@ import { notFound, permanentRedirect } from "next/navigation";
 import { Suspense } from "react";
 import { BookingWidget } from "@/features/booking/widget/BookingWidget";
 import { loadBookingWidget, type BookingWidgetData } from "@/features/booking/widget/data";
+import { optionalUser } from "@/features/auth/guards";
 import { resolveSlug } from "@/features/site/public-home";
 import { todayIn } from "@/lib/dates";
 
@@ -47,10 +48,12 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
     for (const [k, v] of Object.entries(await searchParams)) if (typeof v === "string") q.set(k, v);
     permanentRedirect(`/@${r.moveTo}/book${q.size ? `?${q}` : ""}`);
   }
+  // 로그인 여부만 본다 — 누구인지는 위젯이 알 필요가 없다. 확정 버튼 문구와 로그인 왕복 여부만 갈린다
+  const signedIn = (await optionalUser()) !== null;
   return (
     // useSearchParams 를 쓰는 클라이언트 컴포넌트는 Suspense 경계가 필요하다
     <Suspense fallback={<main className="bw" />}>
-      <BookingWidget data={r.data} today={todayIn(r.data.timezone)} />
+      <BookingWidget data={r.data} today={todayIn(r.data.timezone)} signedIn={signedIn} />
     </Suspense>
   );
 }

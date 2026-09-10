@@ -1,7 +1,8 @@
 "use client";
 
+import { Alert } from "@/components/ui";
 import type { BookingWidgetData, WidgetProduct } from "./data";
-import { DOW, clock, dayText, dowOfDate, minsText, monthGrid, rangeText } from "./format";
+import { DOW, calendarDay, clock, dayText, dowOfDate, minsText, monthGrid, rangeText } from "./format";
 import type { SlotDay } from "./slots-client";
 import { ANY_RESOURCE, durationChoices, effectiveDuration, needsDuration, needsParty, resourcePick, type Selection } from "./state";
 
@@ -304,6 +305,190 @@ export function StepResource({ product, sel, tz, day, loading, onChange }: { pro
           ))}
         </ul>
       )}
+    </section>
+  );
+}
+
+// ─────────────────────────── [5] 확인 · 요청사항 · 정책 ───────────────────────────
+
+/** 확정 결과 3종 (#84). `taken` 은 "방금 마감" — 처음으로 돌려보내지 않고 인접 시각을 제시한다 */
+export type Placed =
+  | { kind: "CONFIRMED" | "REQUESTED"; code: string; startAt: string; endAt: string; resourceId: string }
+  | { kind: "TAKEN"; alternatives: string[] };
+
+export function StepConfirm({
+  product,
+  sel,
+  tz,
+  day,
+  policy,
+  note,
+  onNote,
+  signedIn,
+  busy,
+  error,
+  onSubmit,
+  onChange,
+}: {
+  product: WidgetProduct;
+  sel: Selection;
+  tz: string;
+  day: SlotDay | null;
+  policy: { cancelDeadlineHours: number; autoConfirm: boolean };
+  note: string;
+  onNote: (v: string) => void;
+  signedIn: boolean;
+  busy: boolean;
+  error: string | null;
+  onSubmit: () => void;
+  onChange: OnChange;
+}) {
+  const resource = product.resources.find((r) => r.id === sel.resourceId);
+  const slot = day?.slots.find((s) => s.start === sel.startAt) ?? null;
+  // 주소를 손으로 고쳐 오면 "그 시각에 없는 담당자" 가 실려 올 수 있다. 예약 생성이 어차피 재검증하지만,
+  // 여기서 먼저 걸러야 손님이 확인 화면에서 본 이름과 실제 배정이 달라지지 않는다
+  const resourceGone = Boolean(resource && slot?.resourceIds && !slot.resourceIds.includes(resource.id));
+  const remaining = slot?.remaining;
+  const only = slot?.resourceIds?.length === 1 ? product.resources.find((r) => r.id === slot.resourceIds![0]) : undefined;
+  const assigned = resource ?? (resourcePick(product) === "none" ? only : undefined);
+
+  return (
+    <section className="bw-panel">
+      <h2>맞는지 확인해 주세요</h2>
+
+      <dl className="bw-summary">
+        <div>
+          <dt>상품</dt>
+          <dd>
+            {product.name}
+            {product.priceDisplay ? ` · ${product.priceDisplay}` : ""}
+          </dd>
+        </div>
+        <div>
+          <dt>일시</dt>
+          <dd>
+            {sel.date ? dayText(sel.date) : ""} {sel.startAt && slot ? rangeText(slot.start, slot.end, tz) : sel.startAt ? clock(sel.startAt, tz) : ""}
+          </dd>
+        </div>
+        <div>
+          <dt>이용 시간</dt>
+          <dd>{minsText(effectiveDuration(product, sel))}</dd>
+        </div>
+        {/*
+          인원 재확인 — 명세가 [5]에서 한 번 더 보게 한 자리다. 여기서 바로 바꿀 수 있게 두되,
+          바꾸면 그 시각이 아직 가능한지 알 수 없으므로 `change` 가 시각을 버리고 날짜 단계로 되돌린다
+        */}
+        {product.maxPartySize > 1 && (
+          <div>
+            <dt>인원</dt>
+            <dd>
+              <span className="bw-party">
+                {Array.from({ length: product.maxPartySize }, (_, i) => i + 1).map((n) => (
+                  <button key={n} type="button" className={`bw-chip bw-chip--sm${sel.partySize === n ? " on" : ""}`} aria-pressed={sel.partySize === n} onClick={() => onChange({ partySize: n })}>
+                    {n}명
+                  </button>
+                ))}
+              </span>
+            </dd>
+          </div>
+        )}
+        <div>
+          <dt>{product.resources[0]?.type === "SPACE" ? "공간" : "담당"}</dt>
+          {/*
+            수업형(NONE)은 고객이 고르지 않지만 **누가 하는지는 보여 준다** — 손님은 강사를 보고 회차를 고른다
+            (명세: 회차 카드에 자원 이름을 텍스트로 표시). AUTO 는 자원 목록 자체가 비어 있어 여기 안 걸린다
+          */}
+          <dd>{assigned ? assigned.name : sel.resourceId === ANY_RESOURCE ? "상관없음 (가게에서 배정)" : "가게에서 배정"}</dd>
+        </div>
+      </dl>
+
+      <div className="bw-edit">
+        <button type="button" className="bw-link" onClick={() => onChange({ startAt: null })}>
+          시간 바꾸기
+        </button>
+        <button type="button" className="bw-link" onClick={() => onChange({ date: null })}>
+          날짜 바꾸기
+        </button>
+      </div>
+
+      {resourceGone && <Alert kind="warn">고르신 담당자가 이 시각에는 어려워졌어요. 시간이나 담당자를 다시 골라 주세요.</Alert>}
+      {typeof remaining === "number" && remaining <= 3 && product.startMode === "FIXED" && <Alert kind="warn">남은 자리가 {remaining}개예요. 서두르시는 게 좋겠어요.</Alert>}
+
+      <label className="bw-field" htmlFor="bw-note">
+        <span className="bw-field-label">요청사항 (선택)</span>
+        <textarea id="bw-note" className="textarea" maxLength={500} rows={3} value={note} onChange={(e) => onNote(e.target.value)} placeholder="미리 알려 주실 것이 있으면 적어 주세요" />
+        <span className="bw-hint">{note.length}/500</span>
+      </label>
+
+      {/* 정책 안내 — 확정 방식과 취소 기한. 예약을 누르기 **전에** 보여 준다 */}
+      <ul className="bw-policy">
+        <li>{policy.autoConfirm ? "예약을 누르면 바로 확정돼요." : "가게가 확인한 뒤 확정돼요. 결과는 알림으로 알려 드려요."}</li>
+        <li>{policy.cancelDeadlineHours > 0 ? `이용 ${policy.cancelDeadlineHours}시간 전까지 직접 취소할 수 있어요. 그 뒤에는 가게에 문의해 주세요.` : "이용 직전까지 직접 취소할 수 있어요."}</li>
+      </ul>
+
+      {error && <Alert kind="error">{error}</Alert>}
+
+      <button type="button" className="btn btn--primary btn--block" onClick={onSubmit} disabled={busy || resourceGone} aria-busy={busy}>
+        {busy ? "처리 중…" : signedIn ? "예약하기" : "로그인하고 예약하기"}
+      </button>
+      {!signedIn && <p className="bw-hint">고르신 내용은 그대로 두고 로그인 화면으로 갑니다. 돌아오면 여기서 이어져요.</p>}
+    </section>
+  );
+}
+
+// ─────────────────────────────── [7] 완료 3종 ───────────────────────────────
+
+export function StepDone({ product, placed, tz, slug, onPick }: { product: WidgetProduct; placed: Placed; tz: string; slug: string; onPick: (startAt: string) => void }) {
+  if (placed.kind === "TAKEN") {
+    return (
+      <section className="bw-panel">
+        <h2>방금 마감됐어요</h2>
+        {/* 처음으로 돌려보내지 않는다 (명세). 고른 조건은 그대로 두고 인접 시각만 다시 제시한다 */}
+        <p className="bw-sub">고르신 시각을 조금 전에 다른 분이 가져갔어요. 조건은 그대로 두었으니 가까운 시각으로 바로 옮길 수 있어요.</p>
+        {placed.alternatives.length > 0 ? (
+          <div className="bw-times">
+            {placed.alternatives.map((t) => (
+              <button key={t} type="button" className="bw-time" onClick={() => onPick(t)}>
+                {clock(t, tz)}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="bw-hint">이 날에는 대신할 시각이 없어요. 다른 날짜를 골라 주세요.</p>
+        )}
+      </section>
+    );
+  }
+
+  const confirmed = placed.kind === "CONFIRMED";
+  return (
+    <section className="bw-panel bw-done">
+      <p className={`bw-done-mark${confirmed ? " ok" : ""}`} aria-hidden="true">
+        {confirmed ? "✓" : "…"}
+      </p>
+      <h2>{confirmed ? "예약이 확정됐어요" : "예약 요청을 보냈어요"}</h2>
+      <p className="bw-sub">{confirmed ? "예약 내용을 메일로 보내 드렸어요." : "가게가 확인하면 알려 드릴게요. 아직 확정된 것은 아니에요."}</p>
+      <dl className="bw-summary">
+        <div>
+          <dt>예약번호</dt>
+          <dd>
+            <b>{placed.code}</b>
+          </dd>
+        </div>
+        <div>
+          <dt>상품</dt>
+          <dd>{product.name}</dd>
+        </div>
+        <div>
+          <dt>일시</dt>
+          <dd>
+            {dayText(calendarDay(placed.startAt, tz))} {rangeText(placed.startAt, placed.endAt, tz)}
+          </dd>
+        </div>
+      </dl>
+      <a className="btn btn--block" href={`/@${slug}`}>
+        가게 페이지로
+      </a>
     </section>
   );
 }

@@ -22,6 +22,11 @@ export function clock(instant: string, tz: string): string {
   return new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(instant));
 }
 
+/** ISO 순간 → 그 가게의 달력 날짜 `YYYY-MM-DD`. **영업일이 아니다** — 자정 넘김 영업의 새벽은 달력으로 다음 날이다 */
+export function calendarDay(instant: string, tz: string): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(instant));
+}
+
 /** `10:00 – 11:00`. 끝이 다음 날이면 `익일` 을 붙인다 (영업일 규약) */
 export function rangeText(start: string, end: string, tz: string): string {
   const day = (i: string) => new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(i));

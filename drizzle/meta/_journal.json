@@ -57,6 +57,13 @@
       "when": 1788935040140,
       "tag": "0007_reservations_replaces_idx",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1789003038496,
+      "tag": "0008_booking_selections",
+      "breakpoints": true
     }
   ]
 }
