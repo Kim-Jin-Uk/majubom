@@ -1,7 +1,7 @@
-import { addDays, dowOf, span, toMin, type Interval } from "@/features/schedule/resolve";
+import { addDays, dowOf, span, toMin, type Interval, type OpeningLike } from "@/features/schedule/resolve";
 import { openingWindows, operatingWindows } from "@/features/schedule/operating";
 import { countsTowardOccupancy, peakOccupancy } from "./peak-occupancy";
-import type { ExcludedSlot, FixedExclusionReason, ISODate, Slot, SlotContext, SlotQuery, SlotResource, SlotResult } from "./slot-types";
+import type { ExcludedSlot, FixedExclusionReason, ISODate, Slot, SlotBusiness, SlotContext, SlotQuery, SlotResource, SlotResult } from "./slot-types";
 import { todayIn } from "@/lib/dates";
 import { formatInstant, localToInstant, toMs } from "./time";
 
@@ -31,22 +31,34 @@ const isTeamUnit = (cap: number) => cap === 1;
  * 영업일 하나는 최대 24시간이라 이 판정으로 열리는 것은 **어제 하루뿐**이고, 이미 지난 시각은
  * 6단계 최소 선행시간이 그대로 걸러낸다 — 여는 것은 "아직 남은 오늘 새벽" 이지 과거가 아니다.
  */
-export function stillRunning(ctx: SlotContext, date: ISODate, nowMs: number): boolean {
-  const o = ctx.business.openingHours.find((x) => x.dow === dowOf(date));
+type OpeningOwner = { openingHours: OpeningLike[]; timezone: string };
+
+export function stillRunning(biz: OpeningOwner, date: ISODate, nowMs: number): boolean {
+  const o = biz.openingHours.find((x) => x.dow === dowOf(date));
   if (!o) return false; // 그날은 휴무 — 이어질 영업이 없다
   const end = span(o.open, o.close).end;
   if (end <= 1440) return false; // 자정을 넘기지 않는 날은 어제일 수 없다
-  return nowMs < localToInstant(date, end, ctx.business.timezone);
+  return nowMs < localToInstant(date, end, biz.timezone);
+}
+
+/**
+ * 지금 예약을 받을 수 있는 **가장 이른 영업일**. 오늘이거나, 어제가 아직 영업 중이면 어제다.
+ * 위젯 달력의 하한도 이 값이어야 한다 — 백엔드만 열어 두면 손님은 그 날짜 칸을 누를 수조차 없다.
+ */
+export function firstBookableDate(biz: OpeningOwner, nowMs: number): ISODate {
+  const today = todayIn(biz.timezone, new Date(nowMs));
+  const yesterday = addDays(today, -1);
+  return stillRunning(biz, yesterday, nowMs) ? yesterday : today;
 }
 
 /**
  * 조회·생성이 **같은 규칙**을 쓰게 한 날짜 범위 판정. 두 곳에 따로 적어 두면 언젠가 한쪽만 고쳐져
  * "위젯에는 보이는데 예약은 안 되는 시각" 이 생긴다.
  */
-export function dateInRange(ctx: SlotContext, date: ISODate, nowMs: number): boolean {
-  const today = todayIn(ctx.business.timezone, new Date(nowMs));
-  if (date > addDays(today, ctx.business.policy.maxAdvanceDays)) return false;
-  return date >= today || stillRunning(ctx, date, nowMs);
+export function dateInRange(biz: SlotBusiness, date: ISODate, nowMs: number): boolean {
+  const today = todayIn(biz.timezone, new Date(nowMs));
+  if (date > addDays(today, biz.policy.maxAdvanceDays)) return false;
+  return date >= today || stillRunning(biz, date, nowMs);
 }
 
 /**
@@ -110,7 +122,7 @@ export function computeSlots(ctx: SlotContext, q: SlotQuery): SlotResult {
   const isFixed = p.startMode === "FIXED";
   // 0) 날짜 범위 정책 — 범위 밖은 오류가 아니라 빈 결과. FIXED 는 응답 형태를 지키려고 빈 excluded 를 함께 준다
   const nowMs = toMs(ctx.now);
-  if (!dateInRange(ctx, q.date, nowMs)) return isFixed ? { slots: [], excluded: [] } : { slots: [] };
+  if (!dateInRange(biz, q.date, nowMs)) return isFixed ? { slots: [], excluded: [] } : { slots: [] };
 
   // FIXED 는 영업시간 브레이크를 차감하지 않는다(fixedIgnoreBreaks 기본 true). 근무표 휴게는 늘 차감된다 (가정 A4)
   const opening = openingWindows(ctx.business.openingHours, q.date, !(isFixed && (p.fixedIgnoreBreaks ?? true)));

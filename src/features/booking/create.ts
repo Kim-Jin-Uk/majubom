@@ -160,7 +160,7 @@ async function place(input: CreateReservationInput, customerId: string, mode: Pl
       if (wantedMs < now.getTime() + policy.minLeadTimeMin * 60_000) throw new HttpError(400, "LEAD_TIME", { minLeadTimeMin: policy.minLeadTimeMin });
       // 조회와 **같은 함수**로 판정한다. 따로 적어 두면 언젠가 한쪽만 고쳐져
       // "위젯에는 보이는데 예약은 안 되는 시각" 이 생긴다 — 지금 영업 중인 어제(가정 A7)가 바로 그 자리였다
-      if (!dates.some((d) => dateInRange(ctx, d, now.getTime()))) throw new HttpError(400, "OUT_OF_RANGE", { maxAdvanceDays: policy.maxAdvanceDays });
+      if (!dates.some((d) => dateInRange(ctx.business, d, now.getTime()))) throw new HttpError(400, "OUT_OF_RANGE", { maxAdvanceDays: policy.maxAdvanceDays });
     }
     throw new HttpError(409, "SLOT_TAKEN", { alternatives: nearest(found.all, wantedMs) });
   }

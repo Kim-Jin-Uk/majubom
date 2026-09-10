@@ -111,39 +111,39 @@ describe("dateInRange · stillRunning (가정 A7)", () => {
   const D = "2026-10-01";
 
   it("자정을 넘겨 영업하는 날은 그날이 끝날 때까지 열려 있다", () => {
-    expect(stillRunning(night(), D, at("2026-10-02T00:10:00+09:00"))).toBe(true);
-    expect(dateInRange(night(), D, at("2026-10-02T00:10:00+09:00"))).toBe(true);
+    expect(stillRunning(night().business, D, at("2026-10-02T00:10:00+09:00"))).toBe(true);
+    expect(dateInRange(night().business, D, at("2026-10-02T00:10:00+09:00"))).toBe(true);
   });
 
   it("끝나는 순간부터는 닫힌다 — 02:00 은 반열림 구간의 밖이다", () => {
-    expect(stillRunning(night(), D, at("2026-10-02T01:59:59+09:00"))).toBe(true);
-    expect(stillRunning(night(), D, at("2026-10-02T02:00:00+09:00"))).toBe(false);
-    expect(dateInRange(night(), D, at("2026-10-02T02:00:00+09:00"))).toBe(false);
+    expect(stillRunning(night().business, D, at("2026-10-02T01:59:59+09:00"))).toBe(true);
+    expect(stillRunning(night().business, D, at("2026-10-02T02:00:00+09:00"))).toBe(false);
+    expect(dateInRange(night().business, D, at("2026-10-02T02:00:00+09:00"))).toBe(false);
   });
 
   it("자정을 넘기지 않는 날은 어제가 되는 순간 닫힌다 — 이 규칙으로 과거가 열리지 않는다", () => {
-    expect(stillRunning(base, D, at("2026-10-02T00:10:00+09:00"))).toBe(false);
-    expect(dateInRange(base, D, at("2026-10-02T00:10:00+09:00"))).toBe(false);
+    expect(stillRunning(base.business, D, at("2026-10-02T00:10:00+09:00"))).toBe(false);
+    expect(dateInRange(base.business, D, at("2026-10-02T00:10:00+09:00"))).toBe(false);
   });
 
   it("그날이 휴무면 이어질 영업이 없다", () => {
     const closed = night({ openingHours: [{ dow: 5, open: "20:00", close: "02:00" }] });
-    expect(stillRunning(closed, D, at("2026-10-02T00:10:00+09:00")), "목요일이 영업시간 목록에 없다").toBe(false);
+    expect(stillRunning(closed.business, D, at("2026-10-02T00:10:00+09:00")), "목요일이 영업시간 목록에 없다").toBe(false);
   });
 
   it("24시간 영업(open === close)", () => {
     // 00:00~00:00 은 자정에 딱 끝난다 — 어제로 넘어가는 순간 닫힌다
     const midnight = night({ openingHours: [{ dow: 4, open: "00:00", close: "00:00" }] });
-    expect(stillRunning(midnight, D, at("2026-10-02T00:10:00+09:00"))).toBe(false);
+    expect(stillRunning(midnight.business, D, at("2026-10-02T00:10:00+09:00"))).toBe(false);
     // 10:00 시작 24시간 영업은 다음 날 10:00 까지가 그 영업일이다
     const from10 = night({ openingHours: [{ dow: 4, open: "10:00", close: "10:00" }] });
-    expect(stillRunning(from10, D, at("2026-10-02T09:00:00+09:00"))).toBe(true);
-    expect(stillRunning(from10, D, at("2026-10-02T10:00:00+09:00"))).toBe(false);
+    expect(stillRunning(from10.business, D, at("2026-10-02T09:00:00+09:00"))).toBe(true);
+    expect(stillRunning(from10.business, D, at("2026-10-02T10:00:00+09:00"))).toBe(false);
   });
 
   it("앞쪽 상한(maxAdvanceDays)은 그대로다 — A7 은 뒤쪽만 연다", () => {
-    expect(dateInRange(base, "2026-10-30", at("2026-09-30T09:00:00+09:00"))).toBe(true);
-    expect(dateInRange(base, "2026-10-31", at("2026-09-30T09:00:00+09:00")), "9-30 + 30일 = 10-30").toBe(false);
+    expect(dateInRange(base.business, "2026-10-30", at("2026-09-30T09:00:00+09:00"))).toBe(true);
+    expect(dateInRange(base.business, "2026-10-31", at("2026-09-30T09:00:00+09:00")), "9-30 + 30일 = 10-30").toBe(false);
   });
 
   it("열린 영업일이어도 지난 시각은 선행시간이 걸러낸다 — 여는 것은 '남은 새벽' 이지 과거가 아니다", () => {
