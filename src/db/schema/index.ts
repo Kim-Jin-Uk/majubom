@@ -12,6 +12,7 @@ export * from "./resources";
 export * from "./products";
 export * from "./schedules";
 export * from "./reservations";
+export * from "./booking-selections";
 export * from "./reviews";
 export * from "./site-pages";
 export * from "./notifications";

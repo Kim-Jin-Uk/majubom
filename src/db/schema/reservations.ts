@@ -91,6 +91,12 @@ export const reservations = pgTable(
     index("reservations_customer_start_idx").on(t.customerId, t.startAt),
     index("reservations_business_status_idx").on(t.businessId, t.status),
     index("reservations_business_start_idx").on(t.businessId, t.startAt),
+    // 0007 에서 손으로 넣은 부분 인덱스. **스키마에도 적어 둔다** — 여기 없으면 다음 `db:generate` 가
+    // "스키마에 없는 인덱스" 로 보고 DROP 문을 뱉는다(실제로 0008 을 만들 때 그랬다).
+    // 취소 남용 카운트가 예약 생성 트랜잭션 안, 고객 락을 쥔 채 도는 상관 서브쿼리라 seq scan 이면 곤란하다
+    // 조건절은 0007 이 만든 것과 **글자까지** 같아야 한다 — `${t.col}` 은 테이블명까지 붙여 렌더링돼
+    // 스냅샷과 문자열이 달라지고, 그러면 DROP + CREATE 가 한 번 더 나온다
+    index("reservations_replaces_idx").on(t.replacesReservationId).where(sql`"replaces_reservation_id" IS NOT NULL`),
   ],
 );
 

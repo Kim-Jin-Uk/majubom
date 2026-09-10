@@ -20,6 +20,8 @@ const REQUIRED_COLUMNS: Array<[string, string]> = [
   ["work_exceptions", "status"],
   ["reservations", "guest_label"],
   ["reservations", "replaces_reservation_id"],
+  // 0008 — 예약 위젯의 로그인 왕복이 이 표 없이는 통째로 깨진다 (#83)
+  ["booking_selections", "business_date"],
 ];
 const REQUIRED_INDEXES = ["reservations_replaces_idx", "work_exceptions_business_status_idx"];
 
