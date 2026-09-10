@@ -43,3 +43,30 @@ export function describeConnError(e: unknown, url: string): string {
   else if (/ssl/i.test(msg ?? "")) hint = "Neon 은 ?sslmode=verify-full 이 필요하다";
   return `DB 연결 실패 — ${host}${codes.length ? ` [${codes.join(", ")}]` : ""}${msg ? `: ${msg}` : ""}${hint ? `\n  → ${hint}` : ""}`;
 }
+
+/**
+ * 스크립트가 던진 오류를 사람이 읽을 문장으로. **연결 오류로 단정하지 않는다** —
+ * `describeConnError` 를 그냥 부르면 원인이 무엇이든 "DB 연결 실패" 라는 라벨이 붙어,
+ * 표가 없는 것도·입력이 틀린 것도 연결 문제로 오진단된다(리뷰 지적).
+ *
+ * drizzle 은 pg 오류를 `DrizzleQueryError` 로 감싸고 원인을 `cause` 에만 담는다. 그래서 사슬을
+ * 벗겨 보고, **연결·DB 상태로 판정되는 것만** 그 문장을 쓴다. 나머지는 원인 사슬을 그대로 보여 준다.
+ */
+export function explainDbError(e: unknown): string {
+  const chain: unknown[] = [];
+  for (let cur: unknown = e; cur && chain.length < 5; cur = (cur as { cause?: unknown }).cause) chain.push(cur);
+  const url = process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL ?? "";
+  if (!url) return "DATABASE_URL 이 없다 — .env.local 에 넣거나 명령 앞에 붙여서 실행할 것";
+
+  const CONN = ["ECONNREFUSED", "ENOTFOUND", "ETIMEDOUT", "EHOSTUNREACH", "ECONNRESET", "28P01", "28000"];
+  const net = chain.find((x) => x instanceof AggregateError || CONN.includes((x as { code?: string }).code ?? ""));
+  if (net) return describeConnError(net, url);
+
+  const pg = chain.find((x) => /^[0-9A-Z]{5}$/.test((x as { code?: string }).code ?? "")) as { code?: string; message?: string } | undefined;
+  if (pg?.code === "42P01") return `표가 없다 (42P01) — 이 DB 에 마이그레이션이 안 돌았다. \`npm run db:migrate\` 뒤 다시\n  ${pg.message ?? ""}`;
+  if (pg?.code === "3D000") return `그런 이름의 데이터베이스가 없다 (3D000) — DATABASE_URL 의 마지막 경로를 확인\n  ${pg.message ?? ""}`;
+  if (pg) return `Postgres 오류 ${pg.code}: ${pg.message ?? ""}`;
+
+  // 연결·DB 문제가 아니다. 지어내지 말고 원인 사슬을 그대로 보여 준다
+  return chain.map((x) => (x as Error)?.message).filter(Boolean).join("\n  ← ") || String(e);
+}

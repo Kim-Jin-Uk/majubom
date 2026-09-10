@@ -9,7 +9,7 @@
  * 승격만으로는 `/admin` 이 열리지 않는다. 첫 진입에서 **TOTP 등록이 강제된다** (FR-AUTH-030 "ADMIN 은 2단계 필수").
  */
 import { config as loadEnv } from "dotenv";
-import { describeConnError } from "./_conn";
+import { explainDbError } from "./_conn";
 
 loadEnv({ path: [".env.local", ".env"], quiet: true });
 
@@ -73,31 +73,8 @@ async function main() {
   await pool.end();
 }
 
-/**
- * drizzle 은 pg 오류를 `DrizzleQueryError` 로 감싸고, 원인은 `cause` 에만 있다. 겉 message 는
- * "Failed query: select …" 라 **왜 실패했는지가 통째로 사라진다** — 연결 거부인지 비밀번호인지 표가 없는 건지.
- * `_conn.ts` 의 `describeConnError` 가 그걸 문장으로 바꿔 주므로 원인까지 벗겨서 넘긴다.
- */
-function explain(e: unknown): string {
-  const chain: unknown[] = [];
-  for (let cur: unknown = e; cur && chain.length < 5; cur = (cur as { cause?: unknown }).cause) chain.push(cur);
-  const url = process.env.DATABASE_URL ?? "";
-  const net = chain.find((x) => {
-    const c = (x as { code?: string }).code;
-    return x instanceof AggregateError || (c && ["ECONNREFUSED", "ENOTFOUND", "ETIMEDOUT", "28P01", "3D000", "42P01"].includes(c));
-  });
-  if (!url) return "DATABASE_URL 이 없다 — .env.local 에 넣거나 앞에 붙여서 실행할 것";
-  if (net) {
-    const code = (net as { code?: string }).code;
-    if (code === "42P01") return "users 표가 없다 — 이 DB 에 마이그레이션이 안 돌았다. `npm run db:migrate` 뒤 다시";
-    if (code === "3D000") return "그런 이름의 데이터베이스가 없다 — DATABASE_URL 의 마지막 경로를 확인";
-    return describeConnError(net, url);
-  }
-  return chain.map((x) => (x as Error)?.message).filter(Boolean).join("\n  ← ") || String(e);
-}
-
 main().catch((e) => {
-  console.error("✗ 실패:", explain(e));
+  console.error("✗ 실패:", explainDbError(e));
   console.error("  진단: npm run db:status");
   process.exit(1);
 });
