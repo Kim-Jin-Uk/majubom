@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/db/client";
 import { businessSlugHistory, businesses, type OpeningHour } from "@/db/schema";
 import { HttpError } from "@/features/auth/errors";
-import { writeAudit } from "@/lib/audit";
+import { hashPii, writeAudit } from "@/lib/audit";
 import type { RequestMeta } from "@/lib/request-meta";
 import { phoneSchema } from "@/features/auth/validation";
 import { timeSchema, toMin } from "./hours";
@@ -128,22 +128,78 @@ export async function getBusinessSettings(businessId: string): Promise<BusinessS
   return b;
 }
 
-export async function updateBusinessInfo(businessId: string, input: BusinessInfoInput): Promise<void> {
-  const rows = await db
-    .update(businesses)
-    .set({
-      name: input.name,
-      category: input.category,
-      phone: input.phone ?? null,
-      address: input.address ?? null,
-      addressDetail: input.addressDetail ?? null,
-      description: input.description ?? null,
-      timezone: input.timezone,
-      openingHours: input.openingHours.slice().sort((a, b) => a.dow - b.dow),
-    })
-    .where(eq(businesses.id, businessId))
-    .returning({ id: businesses.id });
-  if (rows.length !== 1) throw new HttpError(404, "NOT_FOUND");
+/**
+ * 영업시간이 **뜻으로** 같은가.
+ *
+ * `JSON.stringify` 로 비교하면 안 된다 — jsonb 는 키 순서를 보존하지 않고 길이·바이트 순으로 다시 쓴다.
+ * 지금은 `dow`(3) `open`(4) `close`(5) `breaks`(6) 가 우연히 스키마 순서와 같아 맞아떨어지지만,
+ * 키를 하나 더하거나 이름을 바꾸는 순간 **안 바뀐 영업시간이 "변경됨" 으로 찍힌다.**
+ * "바뀐 필드만 남긴다" 가 이 함수 하나에 걸려 있어서 뜻으로 비교한다:
+ * 요일 순서·브레이크 순서는 의미가 없고, `breaks` 없음과 빈 배열은 같다.
+ */
+export function sameOpeningHours(a: OpeningHour[] | null | undefined, b: OpeningHour[] | null | undefined): boolean {
+  const norm = (list: OpeningHour[] | null | undefined) =>
+    [...(list ?? [])]
+      .sort((x, y) => x.dow - y.dow)
+      .map((h) => [h.dow, h.open, h.close, [...(h.breaks ?? [])].map((br) => `${br.start}~${br.end}`).sort().join(",")].join("|"))
+      .join(";");
+  return norm(a) === norm(b);
+}
+
+/** 감사 diff 에 원문을 남기지 않는 필드 — 연락처·주소는 해시로 대체한다 (FR-ADM-040) */
+const HASHED_FIELDS = new Set(["phone", "address", "addressDetail"]);
+
+/** 소개글처럼 긴 자유 입력은 "바뀌었다" 만 남긴다 — 2000자를 로그에 두 벌 복제할 이유가 없다 */
+const LONG_FIELDS = new Set(["description", "openingHours"]);
+
+function auditValue(field: string, value: unknown): unknown {
+  if (value === null || value === undefined) return null;
+  if (HASHED_FIELDS.has(field)) return hashPii(String(value));
+  if (LONG_FIELDS.has(field)) return "(변경됨)";
+  return value;
+}
+
+/**
+ * 사업장 기본정보 수정. **변경된 필드만** 감사 로그에 남기고, 연락처·주소는 해시로 대체한다 (FR-ADM-040, #56) —
+ * 레코드를 통째로 담으면 연락처가 로그에 복제되어 마스킹 배치(FR-PRIV-010)의 사정권 밖에 남는다.
+ *
+ * diff 의 기준(before)을 같은 트랜잭션에서 잠그고 읽는다. 동시 저장이 서로의 변경을 감사 로그에서 지우지 않게 —
+ * 정책 수정(`updatePolicy`)과 같은 수법이다.
+ */
+export async function updateBusinessInfo(businessId: string, input: BusinessInfoInput, actor?: { uid: string; role: "OWNER" | "MANAGER" }, meta?: RequestMeta): Promise<void> {
+  const next = {
+    name: input.name,
+    category: input.category,
+    phone: input.phone ?? null,
+    address: input.address ?? null,
+    addressDetail: input.addressDetail ?? null,
+    description: input.description ?? null,
+    timezone: input.timezone,
+    openingHours: input.openingHours.slice().sort((a, b) => a.dow - b.dow),
+  };
+  await db.transaction(async (tx) => {
+    const [before] = await tx
+      .select({ name: businesses.name, category: businesses.category, phone: businesses.phone, address: businesses.address, addressDetail: businesses.addressDetail, description: businesses.description, timezone: businesses.timezone, openingHours: businesses.openingHours })
+      .from(businesses)
+      .where(eq(businesses.id, businessId))
+      .limit(1)
+      .for("update");
+    if (!before) throw new HttpError(404, "NOT_FOUND");
+
+    const diff: Record<string, { from: unknown; to: unknown }> = {};
+    for (const k of Object.keys(next) as Array<keyof typeof next>) {
+      const a = before[k];
+      const b = next[k];
+      const same = k === "openingHours" ? sameOpeningHours(a as OpeningHour[], b as OpeningHour[]) : (a ?? null) === (b ?? null);
+      if (same) continue;
+      diff[k] = { from: auditValue(k, a), to: auditValue(k, b) };
+    }
+    if (Object.keys(diff).length === 0) return;
+
+    await tx.update(businesses).set(next).where(eq(businesses.id, businessId));
+    // 배치·마이그레이션 등 행위자가 없는 경로도 있으므로 actor 는 선택이다
+    await writeAudit({ action: "BUSINESS_UPDATE", actorId: actor?.uid ?? null, actorRole: actor?.role ?? "SYSTEM", businessId, targetType: "BUSINESS", targetId: businessId, diff, meta }, tx);
+  });
 }
 
 export type SlugChangeResult = { ok: true; slug: string } | { ok: false; reason: "TAKEN" | "RESERVED" | "SAME" | "LIMIT" };
