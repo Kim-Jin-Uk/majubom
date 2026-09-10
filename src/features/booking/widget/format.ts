@@ -41,6 +41,14 @@ export function monthGrid(monthStart: string): { lead: number; days: string[] } 
   return { lead, days: Array.from({ length: count }, (_, i) => `${monthStart.slice(0, 8)}${String(i + 1).padStart(2, "0")}`) };
 }
 
+/** 달력 격자를 **주 단위**로 자른다 — `role="row"` 가 있어야 gridcell 이 유효하다. 빈 칸은 null */
+export function monthWeeks(monthStart: string): Array<Array<string | null>> {
+  const { lead, days } = monthGrid(monthStart);
+  const flat: Array<string | null> = [...Array.from({ length: lead }, () => null), ...days];
+  while (flat.length % 7 !== 0) flat.push(null);
+  return Array.from({ length: flat.length / 7 }, (_, i) => flat.slice(i * 7, i * 7 + 7));
+}
+
 /** `2026-10` 앞뒤 달의 1일 */
 export function shiftMonth(monthStart: string, n: number): string {
   const [y, m] = monthStart.split("-").map(Number);

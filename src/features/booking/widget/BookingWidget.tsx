@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert } from "@/components/ui";
 import { hardNavigate } from "@/features/auth/ui/safe-next";
 import { apiGet, apiPost, describeError } from "@/lib/client-api";
@@ -187,6 +187,22 @@ export function BookingWidget({ data, signedIn }: { data: BookingWidgetData; sig
 
   const doneCode = params.get("done");
 
+  /**
+   * 단계가 바뀌어도 **페이지는 바뀌지 않는다** — 주소만 바뀐다. 그대로 두면 스크린리더는 아무 일도
+   * 없었다고 여기고, 키보드 사용자는 초점이 방금 누른(이제 사라진) 버튼 자리에 남는다.
+   * 그래서 새 단계의 제목으로 초점을 옮긴다. **첫 렌더에서는 옮기지 않는다** — 페이지를 열자마자
+   * 초점을 낚아채면 그 위의 "가게로 돌아가기" 를 탭으로 만나지 못한다.
+   */
+  const headingRef = useRef<HTMLDivElement>(null);
+  const lastStep = useRef<Step | null>(null);
+  useEffect(() => {
+    const shown = placed ? 7 : doneCode ? 7 : step;
+    if (lastStep.current !== null && lastStep.current !== shown) {
+      headingRef.current?.querySelector<HTMLElement>("h2")?.focus();
+    }
+    lastStep.current = shown as Step;
+  }, [step, placed, doneCode]);
+
   return (
     <main className="bw">
       <header className="bw-top">
@@ -203,7 +219,8 @@ export function BookingWidget({ data, signedIn }: { data: BookingWidgetData; sig
           .map((n) => (
             <li key={n} className={n === step ? "now" : n < step ? "done" : undefined} aria-current={n === step ? "step" : undefined}>
               <span className="n">{n}</span>
-              {LABELS[n]}
+              {/* 좁은 화면에서 접기 위해 텍스트 노드가 아니라 요소로 감싼다 (#86) */}
+              <span className="t">{LABELS[n]}</span>
             </li>
           ))}
       </ol>
@@ -218,6 +235,7 @@ export function BookingWidget({ data, signedIn }: { data: BookingWidgetData; sig
         </Alert>
       )}
 
+      <div ref={headingRef}>
       {/* 복원 중에는 1단계가 잠깐 비치지 않게 한다 — 고른 것이 사라진 줄 알고 뒤로 누른다 */}
       {selectionId ? (
         <section className="bw-panel">
@@ -281,6 +299,7 @@ export function BookingWidget({ data, signedIn }: { data: BookingWidgetData; sig
       )}
         </>
       )}
+      </div>
     </main>
   );
 }

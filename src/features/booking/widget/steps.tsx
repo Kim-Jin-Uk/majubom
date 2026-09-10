@@ -1,8 +1,11 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
+
 import { Alert } from "@/components/ui";
 import type { BookingWidgetData, WidgetProduct } from "./data";
-import { DOW, calendarDay, clock, dayText, dowOfDate, minsText, monthGrid, rangeText } from "./format";
+import { DOW, calendarDay, clock, dayText, dowOfDate, minsText, monthGrid, monthWeeks, rangeText } from "./format";
+import { isCalendarKey, nextFocus, rovingDate } from "./calendar-keys";
 import { dayState, type SlotDay } from "./slots-client";
 import { ANY_RESOURCE, durationChoices, effectiveDuration, needsDuration, needsParty, resourcePick, type Selection } from "./state";
 
@@ -20,7 +23,7 @@ export function StepProduct({ data, sel, product, onChange }: { data: BookingWid
   if (!product) {
     return (
       <section className="bw-panel">
-        <h2>무엇을 예약할까요?</h2>
+        <h2 tabIndex={-1}>무엇을 예약할까요?</h2>
         <ul className="bw-products">
           {data.products.map((p) => (
             <li key={p.id}>
@@ -51,7 +54,7 @@ export function StepProduct({ data, sel, product, onChange }: { data: BookingWid
   const pick = resourcePick(product);
   return (
     <section className="bw-panel">
-      <h2>{product.name}</h2>
+      <h2 tabIndex={-1}>{product.name}</h2>
       <button type="button" className="bw-link" onClick={() => onChange({ productId: null })}>
         다른 상품 고르기
       </button>
@@ -133,14 +136,43 @@ export function StepDate({
   loading: boolean;
   onChange: OnChange;
 }) {
-  const { lead, days: cells } = monthGrid(month);
+  const cells = monthGrid(month).days;
+  const weeks = monthWeeks(month);
   const byDate = new Map((days ?? []).map((d) => [d.date, d]));
   const prevDisabled = month <= `${firstDate.slice(0, 7)}-01`;
   const nextDisabled = month >= `${lastDate.slice(0, 7)}-01`;
+  const bounds = { firstDate, lastDate };
+
+  /**
+   * 격자 안에서 탭은 **한 번**만 멈춘다 (roving tabindex). 31개 칸이 전부 탭 정지점이면
+   * 키보드로 날짜를 지나 다음 요소까지 가는 데 서른 번을 눌러야 한다.
+   * 이동은 방향키가 맡고, 옮긴 칸으로 초점을 직접 옮긴다.
+   */
+  const [focusDate, setFocusDate] = useState<string | null>(null);
+  const roving = focusDate && focusDate.slice(0, 7) === month.slice(0, 7) ? focusDate : rovingDate(month, sel.date, today, bounds);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const moved = useRef(false);
+  useEffect(() => {
+    // 방향키로 옮겼을 때만 초점을 따라 옮긴다 — 첫 렌더에서 달력이 초점을 낚아채면 안 된다
+    if (!moved.current) return;
+    moved.current = false;
+    gridRef.current?.querySelector<HTMLButtonElement>(`[data-day="${roving}"]`)?.focus();
+  }, [roving]);
+
+  function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (!isCalendarKey(e.key)) return;
+    e.preventDefault(); // ↑↓ 로 페이지가 스크롤되면 초점이 화면 밖으로 나간다
+    const to = nextFocus(roving, e.key, bounds);
+    if (to === roving) return;
+    moved.current = true;
+    // 달을 넘어가면 그 달을 펼친다 — 안 그러면 초점만 사라진 것처럼 보인다
+    if (to.slice(0, 7) !== month.slice(0, 7)) onMonth(to > roving ? 1 : -1);
+    setFocusDate(to);
+  }
 
   return (
     <section className="bw-panel">
-      <h2>언제 오시겠어요?</h2>
+      <h2 tabIndex={-1}>언제 오시겠어요?</h2>
       <p className="bw-sub">
         {product.name} · {minsText(effectiveDuration(product, sel))}
         {sel.partySize > 1 ? ` · ${sel.partySize}명` : ""}
@@ -157,37 +189,49 @@ export function StepDate({
       </div>
 
       {/*
-        `role="grid"` 는 쓰지 않는다 — 제대로 된 grid 는 row 래핑과 방향키 이동까지 갖춰야 하는데,
-        반쪽짜리 롤은 스크린리더에 "표인데 행이 없다" 로 읽혀 안 붙인 것만 못하다.
-        버튼마다 `aria-label` 로 날짜와 상태를 읽어 주는 편이 정직하다
+        이제 제대로 된 grid 다 (#85) — row 래핑 · roving tabindex · 방향키. 반쪽짜리 롤은
+        스크린리더에 "표인데 행이 없다" 로 읽혀 안 붙인 것만 못하므로, 셋을 다 갖춘 뒤에 붙였다.
       */}
-      <div className="bw-cal" aria-busy={loading}>
-        {DOW.map((d, i) => (
-          <span key={d} className={`bw-cal-dow${i === 0 ? " sun" : i === 6 ? " sat" : ""}`} aria-hidden="true">
-            {d}
-          </span>
+      <div className="bw-cal" role="grid" aria-label="예약 날짜" aria-busy={loading} onKeyDown={onKeyDown} ref={gridRef}>
+        <div className="bw-cal-row" role="row">
+          {DOW.map((d, i) => (
+            <span key={d} className={`bw-cal-dow${i === 0 ? " sun" : i === 6 ? " sat" : ""}`} role="columnheader" aria-label={`${d}요일`}>
+              {d}
+            </span>
+          ))}
+        </div>
+        {weeks.map((week) => (
+          <div className="bw-cal-row" role="row" key={week.find(Boolean) ?? String(week)}>
+            {week.map((date, i) => {
+              if (!date) return <span key={`b-${i}`} role="gridcell" />;
+              const state = dayState(date, { firstDate, lastDate }, days, byDate);
+              const open = state === "open";
+              const dow = dowOfDate(date);
+              return (
+                <button
+                  key={date}
+                  type="button"
+                  role="gridcell"
+                  data-day={date}
+                  className={`bw-day${sel.date === date ? " on" : ""}${date === today ? " today" : ""}${dow === 0 ? " sun" : dow === 6 ? " sat" : ""}`}
+                  /*
+                    `disabled` 가 아니라 `aria-disabled` 다 — 못 고르는 날도 방향키로 지나갈 수 있어야
+                    "이 주는 통째로 닫혔다" 를 알 수 있다 (APG). 누르면 아무 일도 일어나지 않는다
+                  */
+                  aria-disabled={!open}
+                  aria-selected={sel.date === date}
+                  aria-current={date === today ? "date" : undefined}
+                  tabIndex={date === roving ? 0 : -1}
+                  aria-label={`${dayText(date)}${state === "out" ? " 예약 불가" : state === "closed" ? " 예약 마감" : ""}`}
+                  onFocus={() => setFocusDate(date)}
+                  onClick={() => open && onChange({ date })}
+                >
+                  {Number(date.slice(8))}
+                </button>
+                  );
+            })}
+          </div>
         ))}
-        {Array.from({ length: lead }, (_, i) => (
-          <span key={`lead-${i}`} />
-        ))}
-        {cells.map((date) => {
-          const state = dayState(date, { firstDate, lastDate }, days, byDate);
-          const open = state === "open";
-          const dow = dowOfDate(date);
-          return (
-            <button
-              key={date}
-              type="button"
-              className={`bw-day${sel.date === date ? " on" : ""}${date === today ? " today" : ""}${dow === 0 ? " sun" : dow === 6 ? " sat" : ""}`}
-              disabled={!open}
-              aria-disabled={!open}
-              aria-label={`${dayText(date)}${state === "out" ? " 예약 불가" : state === "closed" ? " 예약 마감" : ""}`}
-              onClick={() => onChange({ date })}
-            >
-              {Number(date.slice(8))}
-            </button>
-          );
-        })}
       </div>
       {days !== null && cells.every((d) => dayState(d, { firstDate, lastDate }, days, byDate) !== "open") && <p className="bw-hint">이 달에는 예약할 수 있는 날이 없어요. 다른 달을 봐 주세요.</p>}
       {/* 시간대가 다른 곳에서 열어도 화면의 시각은 가게 시각이다 — 조용히 어긋나면 손님이 한 시간 늦게 온다 */}
@@ -218,7 +262,7 @@ export function StepTime({ product, sel, tz, day, loading, onChange }: { product
 
   return (
     <section className="bw-panel">
-      <h2>{sel.date ? dayText(sel.date) : "시간"}</h2>
+      <h2 tabIndex={-1}>{sel.date ? dayText(sel.date) : "시간"}</h2>
       <button type="button" className="bw-link" onClick={() => onChange({ date: null })}>
         다른 날짜 고르기
       </button>
@@ -272,7 +316,7 @@ export function StepResource({ product, sel, tz, day, loading, onChange }: { pro
 
   return (
     <section className="bw-panel">
-      <h2>담당자를 고르시겠어요?</h2>
+      <h2 tabIndex={-1}>담당자를 고르시겠어요?</h2>
       <p className="bw-sub">
         {sel.date ? dayText(sel.date) : ""} {sel.startAt ? clock(sel.startAt, tz) : ""}
       </p>
@@ -352,7 +396,7 @@ export function StepConfirm({
 
   return (
     <section className="bw-panel">
-      <h2>맞는지 확인해 주세요</h2>
+      <h2 tabIndex={-1}>맞는지 확인해 주세요</h2>
 
       <dl className="bw-summary">
         <div>
@@ -440,7 +484,7 @@ export function StepDone({ product, placed, tz, slug, onPick }: { product: Widge
   if (placed.kind === "TAKEN") {
     return (
       <section className="bw-panel">
-        <h2>방금 마감됐어요</h2>
+        <h2 tabIndex={-1}>방금 마감됐어요</h2>
         {/* 처음으로 돌려보내지 않는다 (명세). 고른 조건은 그대로 두고 인접 시각만 다시 제시한다 */}
         <p className="bw-sub">고르신 시각을 조금 전에 다른 분이 가져갔어요. 조건은 그대로 두었으니 가까운 시각으로 바로 옮길 수 있어요.</p>
         {placed.alternatives.length > 0 ? (
@@ -464,7 +508,7 @@ export function StepDone({ product, placed, tz, slug, onPick }: { product: Widge
       <p className={`bw-done-mark${confirmed ? " ok" : ""}`} aria-hidden="true">
         {confirmed ? "✓" : "…"}
       </p>
-      <h2>{confirmed ? "예약이 확정됐어요" : "예약 요청을 보냈어요"}</h2>
+      <h2 tabIndex={-1}>{confirmed ? "예약이 확정됐어요" : "예약 요청을 보냈어요"}</h2>
       <p className="bw-sub">{confirmed ? "예약 내용을 메일로 보내 드렸어요." : "가게가 확인하면 알려 드릴게요. 아직 확정된 것은 아니에요."}</p>
       <dl className="bw-summary">
         <div>
