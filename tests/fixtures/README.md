@@ -69,17 +69,20 @@
 
 ### 명세 해석 가정 (구현 시 반드시 재확인)
 
-FR-BOOK-010 본문만으로 결정되지 않아 픽스처가 택한 해석. 명세가 개정되면 해당 케이스의 기대값을 바꾼다.
+FR-BOOK-010 본문만으로 결정되지 않아 픽스처가 택한 해석.
+**9/10 결정으로 전부 명세에 올렸다** — `02_기능명세서.md` FR-BOOK-010 의 "정원의 두 가지 의미"(A1) · 시간 규약 날짜 범위(A7) ·
+"구현 해석 고정" 표(나머지). 이제 이 표는 **명세의 어느 문장이 어느 케이스에서 왔는지**를 되짚는 색인이다.
+명세가 다시 개정되면 해당 케이스의 기대값을 바꾼다.
 
 | # | 가정 | 근거·영향 | 케이스 |
 |---|---|---|---|
-| **A1** | **정원 1 슬롯(`min(capacityPerSlot, capacity) = 1`)은 팀 단위 점유다.** `remaining`은 0/1이고 `partySize`와 비교하지 않는다. `partySize`는 `maxPartySize`로만 제한한다 | 명세 알고리즘 `remaining ≥ partySize`를 문자 그대로 적용하면 공간형 프리셋(정원 1, 최대 4명)은 2명 이상 **영원히 예약 불가**. FR-SITE-020의 "인원 상한 = min(maxPartySize, remaining)"도 같은 모순. 정원 N에서는 명세대로 인원 단위 | S09 S23 S24 S35 S40 |
+| **A1** ✅명세반영 | **정원 1 슬롯(`min(capacityPerSlot, capacity) = 1`)은 팀 단위 점유다.** `remaining`은 0/1이고 `partySize`와 비교하지 않는다. `partySize`는 `maxPartySize`로만 제한한다 | 명세 알고리즘 `remaining ≥ partySize`를 문자 그대로 적용하면 공간형 프리셋(정원 1, 최대 4명)은 2명 이상 **영원히 예약 불가**. FR-SITE-020의 "인원 상한 = min(maxPartySize, remaining)"도 같은 모순. 정원 N에서는 명세대로 인원 단위 | S09 S23 S24 S35 S40 |
 | A2 | `ceilToInterval`은 로컬 시계 00:00을 기준으로 정렬한 격자다(10:05 오픈·30분 → 10:30) | 명세는 정렬 기준을 말하지 않음. 픽스처는 모두 정각 오픈이라 결과 영향 없음 | — |
 | A3 | `partySize > maxPartySize`는 슬롯 조회에서도 `PARTY_SIZE_EXCEEDED` 오류다 | FR-BOOK-020 1단계에만 명시. 순수 함수도 같은 검증을 하는 편이 안전 | S34 |
 | A4 | `WorkException MODIFIED`는 그날 주간 패턴을 **휴게 포함** 통째로 대체한다. `EXTRA`는 (OFF가 없으면) 패턴에 **추가**된다. `WorkSchedule.breaks`는 FIXED 상품에서도 차감한다(`fixedIgnoreBreaks`는 영업시간 브레이크에만) | FR-SCH-020 우선순위 표는 순서만 정하고 결합 방식은 OFF+EXTRA만 설명 | S31 S32 |
 | A5 | `resourceSelectMode=REQUIRED`에 `query.resourceId`가 없으면 `RESOURCE_REQUIRED` 오류 | FR-SITE-020: REQUIRED는 [1]단계에서 공간을 고른 뒤 조회. 합산 결과를 주는 대안도 가능 | S39 |
 | A6 | `AUTO`에서도 함수 결과의 `resourceIds`는 채운다. 고객 미노출은 API 계층 책임 | 배정 후보 정렬(FR-BOOK-020 3.5)에 필요 | S38 |
-| **A7** | 날짜 범위 0단계는 `date ≥ today` **또는 그 영업일이 지금도 영업 중**이면 통과다 (`dateInRange`) | **9/10 결정으로 바뀐 항목.** 명세 문자 그대로(`today = (now AT TIME ZONE tz)::date`)면 20:00~02:00 영업에서 00:10에 01:00 자리를 앱으로 못 잡는다 — 손님이 가게 안에 있는데 전화로만 되는 상태였다. 영업일 하나는 최대 24시간이라 이 규칙으로 열리는 것은 **어제 하루뿐**이고, 이미 지난 시각은 6단계 선행시간이 그대로 거른다. **명세 §3.7 0단계에 이 문장을 넣어야 한다** | S28 S41 |
+| **A7** ✅명세반영 | 날짜 범위 0단계는 `date ≥ today` **또는 그 영업일이 지금도 영업 중**이면 통과다 (`dateInRange`) | **9/10 결정으로 바뀐 항목.** 명세 문자 그대로(`today = (now AT TIME ZONE tz)::date`)면 20:00~02:00 영업에서 00:10에 01:00 자리를 앱으로 못 잡는다 — 손님이 가게 안에 있는데 전화로만 되는 상태였다. 영업일 하나는 최대 24시간이라 이 규칙으로 열리는 것은 **어제 하루뿐**이고, 이미 지난 시각은 6단계 선행시간이 그대로 거른다. **명세 §3.7 0단계에 이 문장을 넣어야 한다** | S28 S41 |
 | A8 | 반복 휴무·근무예외는 **영업일 `date`** 기준으로 매칭한다. 전일 휴무는 익일로 넘어가는 구간까지 통째로 차단 | 시간 규약 "모든 time은 영업일 기준" 확장 | S27 S29 |
 | A9 | FIXED에서 `excluded`는 구간이 비어도(휴무 등) 그날 정의된 회차마다 `OUT_OF_WINDOW`로 열거한다. 판정 순서는 OUT_OF_WINDOW → LEAD_TIME → FULL | 알고리즘은 `windows is empty: continue`지만 위젯이 "운영 시간 외"를 보여줘야 함 | S16~S22 |
 | A10 | `durationOptions`가 없는 상품에 `query.durationMin`이 와도 무시하고 `product.durationMin`을 쓴다 | 명세 의사코드 `durationOptions ? assertIn : product.durationMin` 문자 그대로 | — |
