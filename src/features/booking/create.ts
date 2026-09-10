@@ -7,6 +7,7 @@ import { addDays } from "@/features/schedule/resolve";
 import { todayIn } from "@/lib/dates";
 import { newReservationCode } from "./code";
 import { loadBookingContext, loadProductTimezone } from "./context";
+import { notifyReservation } from "./notify";
 import { peakOccupancy } from "./peak-occupancy";
 import { computeSlots, dateInRange, fixedStartMinutes } from "./slots";
 import { canceledTodayCount } from "./transitions";
@@ -109,8 +110,12 @@ function findSlot(ctx: SlotContext, dates: string[], input: CreateReservationInp
 }
 
 export async function createReservation(input: CreateReservationInput, customer: { uid: string }, now = new Date()): Promise<CreatedReservation> {
-  if (!input.replacesReservationId) return place(input, customer.uid, { via: "WEB", bypassPolicy: false }, now);
-  return changeReservation(input, customer.uid, now);
+  const r = input.replacesReservationId
+    ? await changeReservation(input, customer.uid, now)
+    : await place(input, customer.uid, { via: "WEB", bypassPolicy: false }, now);
+  // 커밋 뒤에 손님에게 알린다 (#57). 워크인(`createWalkIn`)은 부르지 않는다 — 보낼 곳이 없다
+  await notifyReservation(r.id, r.status === "CONFIRMED" ? "CONFIRMED" : "REQUESTED");
+  return r;
 }
 
 /**

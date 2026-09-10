@@ -14,11 +14,13 @@ export type Mail = { to: string; subject: string; text: string; html?: string };
 let client: Resend | undefined;
 
 export async function sendMail(mail: Mail): Promise<{ id: string | null; delivered: boolean }> {
-  const env = serverEnv();
-  if (!env.RESEND_API_KEY) {
+  // 키 유무만 보는 데 전체 env 검증을 걸지 않는다 — AUTH_SECRET 이 없는 CI·테스트에서
+  // 콘솔 폴백까지 예외가 되면, 메일을 보내는 코드 경로가 통째로 테스트에서 빠진다
+  if (!process.env.RESEND_API_KEY) {
     console.info(`[mail:dev] to=${mail.to}\n  subject=${mail.subject}\n${indent(mail.text)}`);
     return { id: null, delivered: false };
   }
+  const env = serverEnv();
   client ??= new Resend(env.RESEND_API_KEY);
   const { data, error } = await client.emails.send({
     from: env.MAIL_FROM,

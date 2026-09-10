@@ -6,8 +6,9 @@ import type { ReservationStatus } from "@/features/booking/slot-types";
 import { HttpError } from "@/features/auth/errors";
 import { writeAudit } from "@/lib/audit";
 import type { RequestMeta } from "@/lib/request-meta";
+import { notifyReservation } from "./notify";
 import { peakOccupancy } from "./peak-occupancy";
-import { RULES, type Rule, type TransitionActor } from "./transition-rules";
+import { customerMailFor, RULES, type Rule, type TransitionActor } from "./transition-rules";
 
 export type { TransitionActor } from "./transition-rules";
 
@@ -153,7 +154,7 @@ export async function transitionReservation(
   opts: { reason?: string | null; noShowSource?: "MANUAL" | "AUTO"; meta?: RequestMeta; now?: Date } = {},
 ): Promise<TransitionResult> {
   const now = opts.now ?? new Date();
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     const r = await load(id, tx);
     assertVisible(r, actor);
     const rule = RULES[`${r.status}>${to}`];
@@ -197,6 +198,12 @@ export async function transitionReservation(
     );
     return { id, from: r.status, to };
   });
+
+  // 메일은 **커밋 뒤**에 보낸다. 트랜잭션 안에서 보내면 이후 롤백된 예약의 확정 메일이 나가고,
+  // 메일이 느린 만큼 예약 행 잠금이 길어진다. 실패해도 전이는 이미 끝난 것이다 (`notifyReservation` 은 던지지 않는다)
+  const mailEvent = customerMailFor(result.to);
+  if (mailEvent) await notifyReservation(result.id, mailEvent, { reason: opts.reason ?? null });
+  return result;
 }
 
 /** C2 승인 대기 만료 (5분 주기). `now ≥ min(createdAt + requestExpireHours, startAt − minLeadTimeMin)` */

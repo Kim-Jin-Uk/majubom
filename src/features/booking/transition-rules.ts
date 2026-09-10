@@ -39,6 +39,30 @@ const CANCEL_DEADLINE = (r: TransitionSubject, now: Date) => {
   if (now.getTime() >= deadline) throw new HttpError(409, "CANCEL_DEADLINE_PASSED", { deadline: new Date(deadline).toISOString() });
 };
 
+/**
+ * 그 전이 뒤 **손님에게** 나가는 메일 (FR-NOTI-010 · #57). 표에 없는 도착 상태는 메일이 없다.
+ *
+ * 전이 표 바로 옆에 두는 이유: "어떤 전이인가" 와 "그래서 손님에게 뭐라고 알리는가" 가 따로 살면
+ * 전이를 하나 추가한 날 알림이 조용히 빠진다. `REQUESTED` 는 전이가 아니라 생성이라 여기 없다 (`create.ts`).
+ *
+ * 없는 것들의 이유:
+ * - `CANCELED_BY_USER` — 손님이 스스로 한 일이다. "취소되었습니다" 를 받으면 매장이 취소한 줄 안다
+ * - `COMPLETED` · `NO_SHOW` — 매장의 사후 기록이다. 손님이 할 일이 없다
+ */
+export const CUSTOMER_MAIL_ON = {
+  CONFIRMED: "CONFIRMED",
+  REJECTED: "REJECTED",
+  CANCELED_BY_BIZ: "CANCELED_BY_BIZ",
+  EXPIRED: "EXPIRED",
+} as const satisfies Partial<Record<ReservationStatus, string>>;
+
+/** 생성(`REQUESTED`)을 포함한 손님 메일 갈래 */
+export type ReservationMailEvent = "REQUESTED" | (typeof CUSTOMER_MAIL_ON)[keyof typeof CUSTOMER_MAIL_ON];
+
+export function customerMailFor(to: ReservationStatus): ReservationMailEvent | null {
+  return CUSTOMER_MAIL_ON[to as keyof typeof CUSTOMER_MAIL_ON] ?? null;
+}
+
 /** `${from}>${to}` */
 export const RULES: Record<string, Rule> = {
   "REQUESTED>CONFIRMED": { by: ["CONSOLE"], revalidate: true },
