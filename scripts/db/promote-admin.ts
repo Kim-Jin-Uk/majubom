@@ -4,6 +4,7 @@
  * 승격 직후 첫 /admin 진입에서 TOTP 등록이 강제된다 (FR-AUTH-030).
  */
 import { config as loadEnv } from "dotenv";
+import { describeConnError } from "./_conn";
 
 loadEnv({ path: [".env.local", ".env"], quiet: true });
 
@@ -24,6 +25,9 @@ async function main() {
 }
 
 main().catch((e) => {
-  console.error("✗ 실패:", (e as Error).message);
+  // drizzle 은 원인을 cause 에만 담는다 — 겉 message 는 "Failed query: …" 라 이유가 사라진다
+  const cause = (e as { cause?: unknown }).cause;
+  console.error("✗ 실패:", describeConnError(cause ?? e, process.env.DATABASE_URL ?? ""));
+  console.error("  진단: npm run db:status");
   process.exit(1);
 });
