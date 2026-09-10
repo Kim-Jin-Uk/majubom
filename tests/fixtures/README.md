@@ -2,7 +2,7 @@
 
 ## slot-cases.json
 
-`FR-BOOK-010 가용 슬롯 조회`(`reservation-docs/02_기능명세서.md` §3.7)의 입력·기대출력 40건.
+`FR-BOOK-010 가용 슬롯 조회`(`reservation-docs/02_기능명세서.md` §3.7)의 입력·기대출력 41건.
 구현(이슈 7-1·7-2)보다 먼저 작성됐고, 기대값은 **명세를 손으로 따라가 계산한 값**이다.
 케이스마다 `rationale`에 한 줄 계산 근거가 있으니 구현과 결과가 다르면 먼저 그 줄을 검산한다.
 
@@ -64,7 +64,7 @@
 5. `expected.slots`는 `start` 오름차순, 시작 시각 중복 없음(자원 무관 조회는 합산됨). 슬롯 길이 = `query.durationMin ?? product.durationMin`.
 6. FIXED 상품은 `expected.excluded`를 반드시 채운다(제외 회차 없으면 `[]`). `reason=FULL`이면 `remaining`(partySize 미만)을 함께 적는다. FREE 상품은 `excluded`를 쓰지 않는다.
 7. 명세 해석이 갈리는 지점에 의존하면 아래 "가정" 목록에 번호를 추가하고 `title`·`rationale`에 `[가정 An]`으로 표기한다.
-8. 케이스 수를 바꾸면 `slot-calc.test.ts`의 `toHaveLength(40)`도 함께 바꾼다 (의도적 변경임을 리뷰에서 드러내기 위해 상수로 두지 않았다).
+8. 케이스 수를 바꾸면 `slot-calc.test.ts`의 `toHaveLength(41)`도 함께 바꾼다 (의도적 변경임을 리뷰에서 드러내기 위해 상수로 두지 않았다).
 9. `npx vitest run tests/unit` 으로 스키마·태그·정렬 검사를 통과시킨 뒤 커밋한다.
 
 ### 명세 해석 가정 (구현 시 반드시 재확인)
@@ -79,7 +79,7 @@ FR-BOOK-010 본문만으로 결정되지 않아 픽스처가 택한 해석. 명�
 | A4 | `WorkException MODIFIED`는 그날 주간 패턴을 **휴게 포함** 통째로 대체한다. `EXTRA`는 (OFF가 없으면) 패턴에 **추가**된다. `WorkSchedule.breaks`는 FIXED 상품에서도 차감한다(`fixedIgnoreBreaks`는 영업시간 브레이크에만) | FR-SCH-020 우선순위 표는 순서만 정하고 결합 방식은 OFF+EXTRA만 설명 | S31 S32 |
 | A5 | `resourceSelectMode=REQUIRED`에 `query.resourceId`가 없으면 `RESOURCE_REQUIRED` 오류 | FR-SITE-020: REQUIRED는 [1]단계에서 공간을 고른 뒤 조회. 합산 결과를 주는 대안도 가능 | S39 |
 | A6 | `AUTO`에서도 함수 결과의 `resourceIds`는 채운다. 고객 미노출은 API 계층 책임 | 배정 후보 정렬(FR-BOOK-020 3.5)에 필요 | S38 |
-| **A7** | 날짜 범위 0단계는 문자 그대로 `today = (now AT TIME ZONE tz)::date`. 심야 영업 중 자정이 지나면 **그 영업일은 `date < today`가 되어 빈 결과** | 20:00~02:00 영업에서 00:10에 01:00 슬롯을 예약할 수 없다. 의도라면 유지, 아니라면 "영업 중인 전 영업일은 허용"으로 명세 보강 필요 | S28 |
+| **A7** | 날짜 범위 0단계는 `date ≥ today` **또는 그 영업일이 지금도 영업 중**이면 통과다 (`dateInRange`) | **9/10 결정으로 바뀐 항목.** 명세 문자 그대로(`today = (now AT TIME ZONE tz)::date`)면 20:00~02:00 영업에서 00:10에 01:00 자리를 앱으로 못 잡는다 — 손님이 가게 안에 있는데 전화로만 되는 상태였다. 영업일 하나는 최대 24시간이라 이 규칙으로 열리는 것은 **어제 하루뿐**이고, 이미 지난 시각은 6단계 선행시간이 그대로 거른다. **명세 §3.7 0단계에 이 문장을 넣어야 한다** | S28 S41 |
 | A8 | 반복 휴무·근무예외는 **영업일 `date`** 기준으로 매칭한다. 전일 휴무는 익일로 넘어가는 구간까지 통째로 차단 | 시간 규약 "모든 time은 영업일 기준" 확장 | S27 S29 |
 | A9 | FIXED에서 `excluded`는 구간이 비어도(휴무 등) 그날 정의된 회차마다 `OUT_OF_WINDOW`로 열거한다. 판정 순서는 OUT_OF_WINDOW → LEAD_TIME → FULL | 알고리즘은 `windows is empty: continue`지만 위젯이 "운영 시간 외"를 보여줘야 함 | S16~S22 |
 | A10 | `durationOptions`가 없는 상품에 `query.durationMin`이 와도 무시하고 `product.durationMin`을 쓴다 | 명세 의사코드 `durationOptions ? assertIn : product.durationMin` 문자 그대로 | — |

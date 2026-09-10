@@ -4,7 +4,9 @@ import { db } from "@/db/client";
 import { businesses, productResources, products, resources } from "@/db/schema";
 import { mergePolicy } from "@/features/business/policy";
 import { guessPreset, type PresetKey } from "@/features/product/presets";
+import { firstBookableDate } from "@/features/booking/slots";
 import { loadPublicHome } from "@/features/site/public-home";
+import { todayIn } from "@/lib/dates";
 
 /**
  * 예약 위젯의 읽기 계층 (FR-SITE-020, 에픽 #11).
@@ -44,6 +46,14 @@ export type BookingWidgetData = {
   slug: string;
   businessName: string;
   timezone: string;
+  /** 사업장 타임존의 오늘 — 달력의 "오늘" 표시 */
+  today: string;
+  /**
+   * 지금 예약을 받을 수 있는 **가장 이른 영업일**. 보통 오늘이지만, 자정을 넘겨 영업하는 가게에서
+   * 새벽에 열면 **어제**다 (가정 A7). 달력 하한을 `today` 로 두면 백엔드만 열려 있고 손님은
+   * 그 날짜 칸을 누를 수조차 없다 — 고치려던 상황이 화면에 그대로 남는다.
+   */
+  firstDate: string;
   policy: { minLeadTimeMin: number; maxAdvanceDays: number; cancelDeadlineHours: number; autoConfirm: boolean };
   products: WidgetProduct[];
 };
@@ -107,6 +117,8 @@ export const loadBookingWidget = cache(async (businessId: string): Promise<Booki
     slug: home.slug,
     businessName: home.name,
     timezone: home.timezone,
+    today: todayIn(home.timezone),
+    firstDate: firstBookableDate({ openingHours: home.openingHours, timezone: home.timezone }, Date.now()),
     policy: { minLeadTimeMin: policy.minLeadTimeMin, maxAdvanceDays: policy.maxAdvanceDays, cancelDeadlineHours: policy.cancelDeadlineHours, autoConfirm: policy.autoConfirm },
     products: list,
   };

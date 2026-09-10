@@ -3,7 +3,7 @@
 import { Alert } from "@/components/ui";
 import type { BookingWidgetData, WidgetProduct } from "./data";
 import { DOW, calendarDay, clock, dayText, dowOfDate, minsText, monthGrid, rangeText } from "./format";
-import type { SlotDay } from "./slots-client";
+import { dayState, type SlotDay } from "./slots-client";
 import { ANY_RESOURCE, durationChoices, effectiveDuration, needsDuration, needsParty, resourcePick, type Selection } from "./state";
 
 /**
@@ -105,14 +105,12 @@ export function StepProduct({ data, sel, product, onChange }: { data: BookingWid
 
 // ─────────────────────────────── [2] 날짜 ───────────────────────────────
 
-/** 그날 예약할 수 있는 자리가 하나라도 있는가. 없는 날은 회색 + 비활성 (명세 "휴무일·풀부킹일 비활성 회색") */
-const openOn = (d: SlotDay | undefined): boolean => (d?.slots.length ?? 0) > 0;
-
 export function StepDate({
   product,
   sel,
   tz,
   today,
+  firstDate,
   lastDate,
   month,
   monthLabel,
@@ -125,6 +123,8 @@ export function StepDate({
   sel: Selection;
   tz: string;
   today: string;
+  /** 예약을 받을 수 있는 가장 이른 영업일. 오늘이 아닐 수 있다 — 자정을 넘겨 영업하는 가게의 새벽 (가정 A7) */
+  firstDate: string;
   lastDate: string;
   month: string;
   monthLabel: string;
@@ -135,7 +135,7 @@ export function StepDate({
 }) {
   const { lead, days: cells } = monthGrid(month);
   const byDate = new Map((days ?? []).map((d) => [d.date, d]));
-  const prevDisabled = month <= `${today.slice(0, 7)}-01`;
+  const prevDisabled = month <= `${firstDate.slice(0, 7)}-01`;
   const nextDisabled = month >= `${lastDate.slice(0, 7)}-01`;
 
   return (
@@ -171,10 +171,8 @@ export function StepDate({
           <span key={`lead-${i}`} />
         ))}
         {cells.map((date) => {
-          const outOfRange = date < today || date > lastDate;
-          // 아직 못 읽었으면 비활성이되 "휴무" 로 보이지는 않게 한다 — 로딩과 마감은 다른 상태다
-          const known = days !== null && !outOfRange;
-          const open = known && openOn(byDate.get(date));
+          const state = dayState(date, { firstDate, lastDate }, days, byDate);
+          const open = state === "open";
           const dow = dowOfDate(date);
           return (
             <button
@@ -183,7 +181,7 @@ export function StepDate({
               className={`bw-day${sel.date === date ? " on" : ""}${date === today ? " today" : ""}${dow === 0 ? " sun" : dow === 6 ? " sat" : ""}`}
               disabled={!open}
               aria-disabled={!open}
-              aria-label={`${dayText(date)}${open ? "" : outOfRange ? " 예약 불가" : known ? " 예약 마감" : ""}`}
+              aria-label={`${dayText(date)}${state === "out" ? " 예약 불가" : state === "closed" ? " 예약 마감" : ""}`}
               onClick={() => onChange({ date })}
             >
               {Number(date.slice(8))}
@@ -191,7 +189,7 @@ export function StepDate({
           );
         })}
       </div>
-      {days !== null && cells.every((d) => d < today || d > lastDate || !openOn(byDate.get(d))) && <p className="bw-hint">이 달에는 예약할 수 있는 날이 없어요. 다른 달을 봐 주세요.</p>}
+      {days !== null && cells.every((d) => dayState(d, { firstDate, lastDate }, days, byDate) !== "open") && <p className="bw-hint">이 달에는 예약할 수 있는 날이 없어요. 다른 달을 봐 주세요.</p>}
       {/* 시간대가 다른 곳에서 열어도 화면의 시각은 가게 시각이다 — 조용히 어긋나면 손님이 한 시간 늦게 온다 */}
       <p className="bw-tz">{tz.replace("_", " ")} 기준</p>
     </section>

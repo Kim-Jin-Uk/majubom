@@ -5,7 +5,6 @@ import { BookingWidget } from "@/features/booking/widget/BookingWidget";
 import { loadBookingWidget, type BookingWidgetData } from "@/features/booking/widget/data";
 import { optionalUser } from "@/features/auth/guards";
 import { resolveSlug } from "@/features/site/public-home";
-import { todayIn } from "@/lib/dates";
 
 /**
  * 예약 위젯 (FR-SITE-020). 손님이 보는 주소는 `/@{slug}/book` 이고 여기는 프록시가 rewrite 해 주는 내부 경로다.
@@ -53,7 +52,7 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
   return (
     // useSearchParams 를 쓰는 클라이언트 컴포넌트는 Suspense 경계가 필요하다
     <Suspense fallback={<main className="bw" />}>
-      <BookingWidget data={r.data} today={todayIn(r.data.timezone)} signedIn={signedIn} />
+      <BookingWidget data={r.data} signedIn={signedIn} />
     </Suspense>
   );
 }
