@@ -48,6 +48,19 @@ export function BookingWidget({ data, signedIn }: { data: BookingWidgetData; sig
   const product = useMemo(() => data.products.find((p) => p.id === sel.productId) ?? null, [data.products, sel.productId]);
   const step = stepOf(sel, product);
 
+  /**
+   * 단계가 바뀌어도 **페이지는 바뀌지 않는다** — 주소만 바뀐다. 그대로 두면 스크린리더는 아무 일도
+   * 없었다고 여기고, 키보드 사용자는 초점이 방금 누른(이제 사라진) 버튼 자리에 남는다.
+   * 그래서 새 단계의 제목으로 초점을 옮긴다.
+   *
+   * **손님이 이 화면에서 뭔가 눌렀을 때만 옮긴다.** "첫 렌더가 아니면" 으로는 부족했다 —
+   * 로그인하고 돌아오면 `?sel=` 복원이 1단계 → 5단계로 바꾸는데, 그건 손님이 누른 것이 아니라
+   * **막 도착한 것**이다. 도착하자마자 초점을 채가면 그 위의 "가게로 돌아가기" 와 단계 표시를
+   * 탭으로 만나지 못한다. 복원은 마운트 때만 돌므로 그 시점의 `acted` 는 언제나 false 다.
+   */
+  const headingRef = useRef<HTMLDivElement>(null);
+  const acted = useRef(false);
+
   // 보고 있는 달은 **유도한다** — 손님이 달을 넘겼을 때만 그 값이 이긴다.
   // 상태로 들고 effect 로 맞추면 선택과 달이 어긋난 프레임이 한 번 생긴다
   const [browsing, setBrowsing] = useState<string | null>(null);
@@ -82,6 +95,7 @@ export function BookingWidget({ data, signedIn }: { data: BookingWidgetData; sig
   const loading = key !== null && !fresh;
 
   const apply = (patch: Partial<Selection>) => {
+    acted.current = true;
     const next = change(sel, patch, product);
     const nextProduct = data.products.find((p) => p.id === next.productId) ?? null;
     const q = selectionQuery(next, nextProduct);
@@ -142,6 +156,7 @@ export function BookingWidget({ data, signedIn }: { data: BookingWidgetData; sig
 
   async function submit() {
     if (!product || !sel.startAt || !sel.date) return;
+    acted.current = true;
     setBusy(true);
     setPlaceError(null);
     const payload = {
@@ -187,20 +202,8 @@ export function BookingWidget({ data, signedIn }: { data: BookingWidgetData; sig
 
   const doneCode = params.get("done");
 
-  /**
-   * 단계가 바뀌어도 **페이지는 바뀌지 않는다** — 주소만 바뀐다. 그대로 두면 스크린리더는 아무 일도
-   * 없었다고 여기고, 키보드 사용자는 초점이 방금 누른(이제 사라진) 버튼 자리에 남는다.
-   * 그래서 새 단계의 제목으로 초점을 옮긴다. **첫 렌더에서는 옮기지 않는다** — 페이지를 열자마자
-   * 초점을 낚아채면 그 위의 "가게로 돌아가기" 를 탭으로 만나지 못한다.
-   */
-  const headingRef = useRef<HTMLDivElement>(null);
-  const lastStep = useRef<Step | null>(null);
   useEffect(() => {
-    const shown = placed ? 7 : doneCode ? 7 : step;
-    if (lastStep.current !== null && lastStep.current !== shown) {
-      headingRef.current?.querySelector<HTMLElement>("h2")?.focus();
-    }
-    lastStep.current = shown as Step;
+    if (acted.current) headingRef.current?.querySelector<HTMLElement>("h2")?.focus();
   }, [step, placed, doneCode]);
 
   return (
@@ -288,7 +291,7 @@ export function BookingWidget({ data, signedIn }: { data: BookingWidgetData; sig
           <p className="bw-done-mark ok" aria-hidden="true">
             ✓
           </p>
-          <h2>예약이 접수됐어요</h2>
+          <h2 tabIndex={-1}>예약이 접수됐어요</h2>
           <p className="bw-sub">
             예약번호 <b>{doneCode}</b> · 자세한 내용은 메일로 보내 드렸어요.
           </p>
