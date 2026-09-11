@@ -2843,8 +2843,16 @@ button {
   color: var(--text);
 }
 
-/* 자원 목록의 종류 구분 — 담당자/공간/공용은 등록할 때 묻는 것도 예약에서 하는 일도 다르다 */
+/* 자원 목록의 종류 구분 — 담당자/공간/공용은 등록할 때 묻는 것도 예약에서 하는 일도 다르다.
+   설명 줄은 `.sub` 를 쓰지 않는다: 그 규칙은 `.panel`/`.card`/`.console-body >` 안에서만 정의돼 있는데
+   온보딩 위저드는 `.console-body` 없이 렌더한다 */
 .res-group {
   margin: 0;
   font-size: 15px;
+}
+.res-group-hint {
+  margin: -4px 0 2px;
+  font-size: 13.5px;
+  color: var(--text-2);
+  line-height: 1.55;
 }

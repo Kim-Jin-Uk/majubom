@@ -147,9 +147,9 @@ export function ResourcesPanel({ initial, members, isOwner, readOnly, mode }: { 
           <h2 className="res-group">
             {TYPE_TEXT[t]} <span className="muted">{items.filter((r) => r.type === t).length}</span>
           </h2>
-          <p className="sub" style={{ margin: "-4px 0 2px" }}>
-            {TYPE_HINT[t]}
-          </p>
+          {/* `.sub` 는 `.panel`/`.card`/`.console-body >` 안에서만 정의돼 있다. 위저드(`mode="wizard"`)는
+              `.console-body` 없이 렌더하므로 여기서는 자체 클래스를 쓴다 (리뷰 지적) */}
+          <p className="res-group-hint">{TYPE_HINT[t]}</p>
           {items.map((r, i) => (r.type !== t ? null : (
           <div key={r.id} className={r.isActive ? "res-card" : "res-card off"}>
             {/* 종류는 섹션 제목이 이미 말한다. 이 자리에는 정원을 둔다 — 아래 줄은 계정·설명을 맡는다 */}
