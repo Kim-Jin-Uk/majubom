@@ -141,9 +141,10 @@ function authorize(r: Loaded, actor: TransitionActor, rule: Rule): void {
   if (!rule.by.includes(actor.kind)) throw new HttpError(403, "FORBIDDEN");
   if (actor.kind === "CONSOLE") {
     if (rule.ownerOnly && actor.role !== "OWNER") throw new HttpError(403, "OWNER_ONLY");
-    // FR-BOOK-030: OWNER 전체 / MANAGER 는 본인 담당 건만 — 볼 수 있다고(viewAllReservations) 처리까지 되는 것은 아니다.
-    // 담당이 없는 자원(공간·공용)은 OWNER 만 — LATER.md L-32
-    if (actor.role !== "OWNER" && r.resourceMemberId !== actor.memberId) throw new HttpError(403, "NOT_OWN_RESOURCE");
+    // FR-BOOK-030 + L-32 결정: 기본은 "본인 담당 건만" 이고, 표가 `anyManager` 를 켠 전이만 동료 건에도 열린다
+    // (완료·노쇼·취소 — 사후 기록과 취소). 승인·거절은 열지 않는다: 남의 담당 일정에 손님과 약속하는 자리다.
+    // 열려 있어도 **보여야 처리한다** — `assertVisible` 이 `viewAllReservations` 없는 매니저에게는 여전히 404 를 낸다.
+    if (actor.role !== "OWNER" && !rule.anyManager && r.resourceMemberId !== actor.memberId) throw new HttpError(403, "NOT_OWN_RESOURCE");
   }
 }
 
