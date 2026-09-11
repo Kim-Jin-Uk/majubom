@@ -9,7 +9,7 @@ import type { RequestMeta } from "@/lib/request-meta";
 import type { ReservationStatus } from "./slot-types";
 import { formatInstant, localToInstant } from "./time";
 import { ownResourceId } from "@/features/schedule/work-exceptions";
-import { validateExisting } from "./transitions";
+import { moveReservationResource, validateExisting } from "./transitions";
 
 /**
  * 예약 콘솔의 읽기 계층 (FR-BOOK-080, #58). 목록·상세·담당자 변경.
@@ -62,6 +62,10 @@ export type ReservationRow = {
   productName: string;
   resourceId: string;
   resourceName: string;
+  /** 담당자(사람) 자원인가 — 화면이 존칭을 붙일지 정한다 */
+  resourceIsStaff: boolean;
+  /** 그 자원에 담당 계정이 연결돼 있는가. 없으면 "남의 담당" 이 아니다 (룸·공용) */
+  resourceAssigned: boolean;
   /** 워크인은 받아 적은 이름, 아니면 계정 이름 */
   customerName: string;
   /** 고객 식별 보조 — 로그인 수단. 워크인은 null */
@@ -132,6 +136,8 @@ export async function listReservations(actor: ConsoleActor, q: ListQuery, tz: st
       productName: products.name,
       resourceId: reservations.resourceId,
       resourceName: resources.name,
+      resourceType: resources.type,
+      resourceMemberId: resources.memberId,
       customerName: users.name,
       customerProvider: users.provider,
     })
@@ -172,6 +178,8 @@ export async function listReservations(actor: ConsoleActor, q: ListQuery, tz: st
       customerName: r.guestLabel ?? r.customerName,
       customerProvider: r.createdVia === "WALK_IN" ? null : r.customerProvider,
       mine: r.resourceId === mineId,
+      resourceIsStaff: r.resourceType === "STAFF",
+      resourceAssigned: r.resourceMemberId !== null,
     })),
     nextCursor: rows.length > limit ? `${page[page.length - 1].startAt.toISOString()}|${page[page.length - 1].id}` : null,
   };
@@ -211,6 +219,8 @@ export async function getReservation(actor: ConsoleActor, id: string, tz: string
       productName: products.name,
       resourceId: reservations.resourceId,
       resourceName: resources.name,
+      resourceType: resources.type,
+      resourceMemberId: resources.memberId,
       customerName: users.name,
       customerProvider: users.provider,
       customerEmail: users.email,
@@ -256,6 +266,8 @@ export async function getReservation(actor: ConsoleActor, id: string, tz: string
     customerEmail: walkIn ? null : r.customerEmail,
     customerPhone: walkIn ? null : r.customerPhone,
     mine: r.resourceId === mineId,
+    resourceIsStaff: r.resourceType === "STAFF",
+    resourceAssigned: r.resourceMemberId !== null,
     history: logs.map((l) => ({ ...l, at: formatInstant(l.at.getTime(), tz) })),
   };
 }
@@ -290,37 +302,7 @@ export async function reassignReservation(actor: ConsoleActor, id: string, toRes
       .limit(1);
     if (!cur) throw new HttpError(404, "NOT_FOUND");
     if (cur.status !== "REQUESTED" && cur.status !== "CONFIRMED") throw new HttpError(409, "INVALID_TRANSITION", { status: cur.status });
-    if (cur.resourceId === toResourceId) return;
-
-    // 상품에 연결되지 않은 자원은 409 다(그 자원은 존재하고, 사장님도 그것을 안다 — 고칠 수 있는 상태의 문제).
-    // 남의 사업장 자원은 404 — 존재를 알리지 않는다
-    const [target] = await tx
-      .select({ id: resources.id, capacity: resources.capacity, isActive: resources.isActive })
-      .from(resources)
-      .where(and(eq(resources.id, toResourceId), eq(resources.businessId, actor.businessId)))
-      .limit(1);
-    if (!target) throw new HttpError(404, "NOT_FOUND");
-    // 비활성 자원은 기존 예약을 그대로 들고 있을 수는 있어도(FR-RES-010) 새로 배정받지는 않는다 —
-    // `validateExisting` 은 이미 놓인 예약을 다시 보는 함수라 isActive 를 일부러 안 본다. 배정의 게이트는 여기다
-    if (!target.isActive) throw new HttpError(409, "RESOURCE_INACTIVE");
-    const [linked] = await tx.select({ productId: productResources.productId }).from(productResources).where(and(eq(productResources.productId, cur.productId), eq(productResources.resourceId, toResourceId))).limit(1);
-    if (!linked) throw new HttpError(409, "RESOURCE_NOT_LINKED");
-
-    // 자원 단위 직렬화 후 그 자리가 비어 있는지 — 생성·승인과 같은 잣대
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${toResourceId}))`);
-    await validateExisting({ ...cur, resourceId: toResourceId, resourceCapacity: target.capacity, exclusive: target.capacity === 1 }, tx);
-
-    const rows = await tx
-      .update(reservations)
-      .set({ resourceId: toResourceId, exclusive: target.capacity === 1 })
-      .where(and(eq(reservations.id, id), eq(reservations.resourceId, cur.resourceId), eq(reservations.status, cur.status)))
-      .returning({ id: reservations.id });
-    if (rows.length !== 1) throw new HttpError(409, "CONFLICT");
-    await tx.insert(reservationLogs).values({ reservationId: id, fromStatus: cur.status, toStatus: cur.status, fromResourceId: cur.resourceId, toResourceId, actorId: actor.uid, reason: "담당 변경" });
-    await writeAudit(
-      { action: "RESERVATION_REASSIGN", actorId: actor.uid, actorRole: actor.role, businessId: actor.businessId, targetType: "RESERVATION", targetId: id, diff: { resourceId: { from: cur.resourceId, to: toResourceId } }, meta },
-      tx,
-    );
+    await moveReservationResource(tx, cur, toResourceId, actor, meta, "담당 변경");
   });
 }
 

@@ -1,13 +1,14 @@
 import { and, count, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db, type DbLike } from "@/db/client";
-import { products, reservationLogs, reservations, resources } from "@/db/schema";
+import { productResources, products, reservationLogs, reservations, resources } from "@/db/schema";
 import type { ReservationStatus } from "@/features/booking/slot-types";
 import { HttpError } from "@/features/auth/errors";
 import { writeAudit } from "@/lib/audit";
 import type { RequestMeta } from "@/lib/request-meta";
 import { notifyReservation } from "./notify";
 import { peakOccupancy } from "./peak-occupancy";
+import { ownResourceId } from "@/features/schedule/work-exceptions";
 import { customerMailFor, RULES, type Rule, type TransitionActor } from "./transition-rules";
 
 export type { TransitionActor } from "./transition-rules";
@@ -141,10 +142,64 @@ function authorize(r: Loaded, actor: TransitionActor, rule: Rule): void {
   if (!rule.by.includes(actor.kind)) throw new HttpError(403, "FORBIDDEN");
   if (actor.kind === "CONSOLE") {
     if (rule.ownerOnly && actor.role !== "OWNER") throw new HttpError(403, "OWNER_ONLY");
-    // FR-BOOK-030: OWNER 전체 / MANAGER 는 본인 담당 건만 — 볼 수 있다고(viewAllReservations) 처리까지 되는 것은 아니다.
-    // 담당이 없는 자원(공간·공용)은 OWNER 만 — LATER.md L-32
-    if (actor.role !== "OWNER" && r.resourceMemberId !== actor.memberId) throw new HttpError(403, "NOT_OWN_RESOURCE");
+    // FR-BOOK-030 + L-32 결정: 기본은 "본인 담당 건만" 이고, 표가 `anyManager` 를 켠 전이만 동료 건에도 열린다
+    // (완료·노쇼·취소 — 사후 기록과 취소). 승인·거절은 열지 않는다: 남의 담당 일정에 손님과 약속하는 자리다.
+    // 열려 있어도 **보여야 처리한다** — `assertVisible` 이 `viewAllReservations` 없는 매니저에게는 여전히 404 를 낸다.
+    if (actor.role !== "OWNER" && !rule.anyManager && r.resourceMemberId !== actor.memberId) throw new HttpError(403, "NOT_OWN_RESOURCE");
   }
+}
+
+/**
+ * 예약을 다른 자원으로 옮긴다 — **상태는 건드리지 않는다.** 시간이 바뀌는 것은 예약 변경(FR-BOOK-050)이라 고객 몫이다.
+ *
+ * 두 곳이 쓴다: 사장님의 담당 변경(`console.ts` `reassignReservation`)과, 매니저가 **남의 건을 승인·거절할 때의
+ * 자동 이관**(`takeOver`). 검사를 한 벌만 두려고 여기 둔다 — 옮길 자원이 상품에 연결됐는지, 활성인지,
+ * 그 시각에 비어 있는지는 어느 경로든 같아야 한다.
+ */
+/** `resourceCapacity`·`exclusive` 는 받지 않는다 — **옮길 자원**의 값으로 여기서 다시 정한다 */
+export type MoveSubject = Omit<ValidateSubject, "resourceCapacity" | "exclusive"> & { businessId: string; productId: string; status: ReservationStatus };
+
+export async function moveReservationResource(
+  tx: DbLike,
+  cur: MoveSubject,
+  toResourceId: string,
+  actor: { uid: string; role: "OWNER" | "MANAGER"; businessId: string },
+  meta: RequestMeta | undefined,
+  reason: string,
+): Promise<void> {
+  if (cur.resourceId === toResourceId) return;
+  // 상품에 연결되지 않은 자원은 409 다(그 자원은 존재하고 고칠 수 있는 상태의 문제). 남의 사업장 자원은 404 — 존재를 알리지 않는다
+  const [target] = await tx
+    .select({ id: resources.id, capacity: resources.capacity, isActive: resources.isActive })
+    .from(resources)
+    .where(and(eq(resources.id, toResourceId), eq(resources.businessId, actor.businessId)))
+    .limit(1);
+  if (!target) throw new HttpError(404, "NOT_FOUND");
+  // 비활성 자원은 기존 예약을 들고 있을 수는 있어도(FR-RES-010) 새로 배정받지는 않는다 —
+  // `validateExisting` 은 이미 놓인 예약을 다시 보는 함수라 isActive 를 일부러 안 본다. 배정의 게이트는 여기다
+  if (!target.isActive) throw new HttpError(409, "RESOURCE_INACTIVE");
+  const [linked] = await tx
+    .select({ productId: productResources.productId })
+    .from(productResources)
+    .where(and(eq(productResources.productId, cur.productId), eq(productResources.resourceId, toResourceId)))
+    .limit(1);
+  if (!linked) throw new HttpError(409, "RESOURCE_NOT_LINKED");
+
+  // 자원 단위 직렬화 후 그 자리가 비어 있는지 — 생성·승인과 같은 잣대
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${toResourceId}))`);
+  await validateExisting({ ...cur, resourceId: toResourceId, resourceCapacity: target.capacity, exclusive: target.capacity === 1 }, tx);
+
+  const rows = await tx
+    .update(reservations)
+    .set({ resourceId: toResourceId, exclusive: target.capacity === 1 })
+    .where(and(eq(reservations.id, cur.id), eq(reservations.resourceId, cur.resourceId), eq(reservations.status, cur.status)))
+    .returning({ id: reservations.id });
+  if (rows.length !== 1) throw new HttpError(409, "CONFLICT");
+  await tx.insert(reservationLogs).values({ reservationId: cur.id, fromStatus: cur.status, toStatus: cur.status, fromResourceId: cur.resourceId, toResourceId, actorId: actor.uid, reason });
+  await writeAudit(
+    { action: "RESERVATION_REASSIGN", actorId: actor.uid, actorRole: actor.role, businessId: actor.businessId, targetType: "RESERVATION", targetId: cur.id, diff: { resourceId: { from: cur.resourceId, to: toResourceId } }, meta },
+    tx,
+  );
 }
 
 export type TransitionResult = { id: string; from: ReservationStatus; to: ReservationStatus };
@@ -157,7 +212,7 @@ export async function transitionReservation(
 ): Promise<TransitionResult> {
   const now = opts.now ?? new Date();
   const result = await db.transaction(async (tx) => {
-    const r = await load(id, tx);
+    let r = await load(id, tx);
     assertVisible(r, actor);
     const rule = RULES[`${r.status}>${to}`];
     if (!rule) throw new HttpError(409, "INVALID_TRANSITION", { from: r.status, to });
@@ -165,6 +220,24 @@ export async function transitionReservation(
     const reason = opts.reason?.trim() || null;
     if (rule.reasonRequired && !reason) throw new HttpError(400, "REASON_REQUIRED");
     rule.guard?.(r, now);
+
+    // **동료 담당** 건을 승인·거절하면 담당이 넘어온다 (`takeOver`). 같은 트랜잭션이라
+    // 옮길 자리가 없으면 전이도 함께 실패한다 — 승인만 되고 담당이 그대로 남는 상태를 만들지 않는다.
+    //
+    // `resourceMemberId !== null` 이 중요하다. 룸·공용 자원은 담당이 **없어서** null 인데,
+    // 그것까지 "동료 담당" 으로 읽으면 손님이 고른 적 없는 매니저의 개인 자원으로 룸 예약이 조용히 옮겨진다
+    // (STAFF 와 SPACE 를 섞어 연결한 상품에서 실제로 통과한다 — `RESOURCE_NOT_LINKED` 가 못 막는다).
+    // 거절도 같은 경로라, 무관한 매니저의 일정이 차 있으면 룸 예약 거절이 SLOT_TAKEN 으로 실패할 수 있다. (리뷰 지적)
+    // 담당이 없는 자원에는 옮길 "원래 담당" 이 없으므로 이관 없이 전이만 한다.
+    if (rule.takeOver && actor.kind === "CONSOLE" && actor.role !== "OWNER" && r.resourceMemberId !== null && r.resourceMemberId !== actor.memberId) {
+      const mine = await ownResourceId(actor.businessId, actor.memberId);
+      // 담당자 자원이 없는 매니저(점장 등)는 대신 승인할 수 없다 — 넘겨받을 자리가 없다
+      if (!mine) throw new HttpError(409, "NO_OWN_RESOURCE");
+      await moveReservationResource(tx, r, mine, { uid: actor.uid, role: actor.role, businessId: actor.businessId }, opts.meta, to === "CONFIRMED" ? "승인하며 담당 이관" : "거절하며 담당 이관");
+      // 자원이 바뀌었으니 다시 읽는다 — 아래 재검증(`validateExisting`)이 **옮긴 자원**을 봐야 한다
+      r = await load(id, tx);
+    }
+
     if (rule.revalidate) await validateExisting(r, tx);
 
     // 거절은 취소가 아니다 — canceledAt 에 섞으면 취소 통계가 오염된다. 사유는 어느 쪽이든 로그에 남는다
