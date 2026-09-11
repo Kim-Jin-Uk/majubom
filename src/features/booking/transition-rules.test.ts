@@ -36,6 +36,21 @@ describe("전이 표", () => {
     expect(Object.entries(RULES).filter(([, r]) => r.ownerOnly).map(([k]) => k).sort()).toEqual(["COMPLETED>NO_SHOW", "NO_SHOW>COMPLETED"]);
   });
 
+  it("담당이 아닌 매니저에게 열린 것은 사후 기록과 취소뿐 — 승인 · 거절은 아니다", () => {
+    expect(Object.entries(RULES).filter(([, r]) => r.anyManager).map(([k]) => k).sort()).toEqual([
+      "CONFIRMED>CANCELED_BY_BIZ",
+      "CONFIRMED>COMPLETED",
+      "CONFIRMED>NO_SHOW",
+      "REQUESTED>CANCELED_BY_BIZ",
+    ]);
+    // 표가 조용히 넓어지는 것을 막는다 — 승인은 매장이 손님에게 하는 약속이라 남의 담당 건에 대신 하지 않는다
+    expect(RULES["REQUESTED>CONFIRMED"].anyManager).toBeUndefined();
+    expect(RULES["REQUESTED>REJECTED"].anyManager).toBeUndefined();
+    // 오판 교정은 OWNER 전용이라 이 플래그와 무관하다
+    expect(RULES["NO_SHOW>COMPLETED"].anyManager).toBeUndefined();
+    expect(RULES["COMPLETED>NO_SHOW"].anyManager).toBeUndefined();
+  });
+
   it("고객이 직접 할 수 있는 것은 취소뿐", () => {
     expect(Object.entries(RULES).filter(([, r]) => r.by.includes("CUSTOMER")).map(([k]) => k).sort()).toEqual(["CONFIRMED>CANCELED_BY_USER", "REQUESTED>CANCELED_BY_USER"]);
   });

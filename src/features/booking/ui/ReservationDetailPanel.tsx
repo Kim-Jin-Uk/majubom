@@ -44,6 +44,16 @@ export function ReservationDetailPanel({ detail, role, readOnly, resources }: { 
   // 정지된 사업장의 콘솔은 읽기 전용이지만 매장 취소만은 열려 있다 (FR-ADM-020)
   const allowed = (ACTIONS[detail.status] ?? []).filter((a) => (!a.ownerOnly || role === "OWNER") && (!readOnly || a.to === "CANCELED_BY_BIZ"));
 
+  /**
+   * 동료 담당 예약을 건드리기 전에 한 번 묻는다 (L-32 결정).
+   * 표(`anyManager`)가 여는 것은 완료·노쇼·취소뿐이고, 그건 "대신 정리해 주는" 일이라 **눌러도 되는 일**이다.
+   * 다만 남의 일정이므로 말없이 지나가지 않는다 — 사장님은 원래 전체를 보므로 묻지 않는다.
+   */
+  function confirmOthers(a: Action): boolean {
+    if (role === "OWNER" || detail.mine) return true;
+    return confirm(`「${detail.resourceName}」님 담당 예약입니다.\n${a.label} 처리할까요?`);
+  }
+
   async function run(a: Action, why: string) {
     setBusy(true);
     const r = await apiPatch(`/api/console/reservations/${detail.id}/status`, { status: a.to, reason: why || null });
@@ -138,7 +148,20 @@ export function ReservationDetailPanel({ detail, role, readOnly, resources }: { 
           <h2>처리</h2>
           <div className="actions">
             {allowed.map((a) => (
-              <Button key={a.to} variant={a.variant ?? "default"} disabled={busy} onClick={() => (a.reason ? (setPending(a), setReason("")) : void run(a, ""))}>
+              <Button
+                key={a.to}
+                variant={a.variant ?? "default"}
+                disabled={busy}
+                onClick={() => {
+                  if (!confirmOthers(a)) return;
+                  if (a.reason) {
+                    setPending(a);
+                    setReason("");
+                  } else {
+                    void run(a, "");
+                  }
+                }}
+              >
                 {a.label}
               </Button>
             ))}
@@ -228,7 +251,7 @@ function transitionError(code: string): string | null {
     case "PRODUCT_GONE":
       return "상품이 보관 처리돼 있어요. 상품을 되살린 뒤 다시 시도해 주세요";
     case "NOT_OWN_RESOURCE":
-      return "내가 담당하는 예약만 처리할 수 있어요";
+      return "승인 · 거절은 담당자 본인만 할 수 있어요. 완료 · 노쇼 · 취소는 대신 처리할 수 있어요";
     default:
       return null;
   }
