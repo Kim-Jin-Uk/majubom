@@ -30,6 +30,7 @@ export async function notifyReservation(id: string, event: ReservationMailEvent,
         partySize: reservations.partySize,
         createdVia: reservations.createdVia,
         businessName: businesses.name,
+        slug: businesses.slug,
         timezone: businesses.timezone,
         productName: products.name,
         staffName: resources.name,
@@ -52,7 +53,7 @@ export async function notifyReservation(id: string, event: ReservationMailEvent,
       when: whenText(r.startAt, r.endAt, r.timezone),
       partySize: r.partySize,
       code: r.code,
-      url: `${appUrl()}/me/reservations/${id}`,
+      url: reservationUrl(r.slug, id),
     };
     const reason = opts.reason ?? null;
     const mail =
@@ -71,4 +72,19 @@ export async function notifyReservation(id: string, event: ReservationMailEvent,
 
 function appUrl(): string {
   return (process.env.AUTH_URL ?? "http://localhost:3000").replace(/\/$/, "");
+}
+
+/**
+ * 메일이 거는 링크. **지금은 매장의 공개 홈이다.**
+ *
+ * 원래 `/me/reservations/{id}` 를 걸었는데, 그 화면은 마이페이지 에픽(#87~#89)의 것이라 아직 없다 —
+ * 손님이 확정 메일의 링크를 누르면 404 를 본다(리뷰 지적). 없는 화면으로 보내느니 매장 페이지가 낫다:
+ * 전화번호·길찾기·영업시간이 거기 있어서 손님이 실제로 할 수 있는 일이 있다.
+ *
+ * 예약번호는 본문에 이미 있으므로 링크가 없어도 매장에서 조회된다.
+ * **#89 가 붙으면 이 함수 하나만 바꾼다** — 다섯 통의 템플릿은 그대로다.
+ */
+function reservationUrl(slug: string, reservationId: string): string {
+  void reservationId;
+  return `${appUrl()}/@${slug}`;
 }

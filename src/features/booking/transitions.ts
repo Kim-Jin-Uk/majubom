@@ -153,7 +153,7 @@ export async function transitionReservation(
   id: string,
   to: ReservationStatus,
   actor: TransitionActor,
-  opts: { reason?: string | null; noShowSource?: "MANUAL" | "AUTO"; meta?: RequestMeta; now?: Date } = {},
+  opts: { reason?: string | null; noShowSource?: "MANUAL" | "AUTO"; meta?: RequestMeta; now?: Date; notify?: boolean } = {},
 ): Promise<TransitionResult> {
   const now = opts.now ?? new Date();
   const result = await db.transaction(async (tx) => {
@@ -202,8 +202,11 @@ export async function transitionReservation(
   });
 
   // 메일은 **커밋 뒤**에 보낸다. 트랜잭션 안에서 보내면 이후 롤백된 예약의 확정 메일이 나가고,
-  // 메일이 느린 만큼 예약 행 잠금이 길어진다. 실패해도 전이는 이미 끝난 것이다 (`notifyReservation` 은 던지지 않는다)
-  const mailEvent = customerMailFor(result.to);
+  // 메일이 느린 만큼 예약 행 잠금이 길어진다. 실패해도 전이는 이미 끝난 것이다 (`notifyReservation` 은 던지지 않는다).
+  //
+  // 배치는 `notify: false` 로 부르고 발송을 직접 모아서 한다 — 500건짜리 루프가 메일 왕복을 하나씩 기다리면
+  // 5분 주기 배치가 메일 지연만큼 길어진다 (리뷰 지적).
+  const mailEvent = opts.notify === false ? null : customerMailFor(result.to);
   if (mailEvent) await notifyReservation(result.id, mailEvent, { reason: opts.reason ?? null });
   return result;
 }
@@ -224,18 +227,30 @@ export async function expireRequests(now = new Date(), limit = 500): Promise<num
     )
     .orderBy(reservations.startAt)
     .limit(limit);
-  let n = 0;
+  const expired: string[] = [];
   for (const row of due) {
     try {
-      await transitionReservation(row.id, "EXPIRED", { kind: "SYSTEM" }, { now });
-      n++;
+      // 발송은 미룬다 — DB 작업을 먼저 끝내야 다음 배치가 같은 건을 다시 집지 않는다
+      await transitionReservation(row.id, "EXPIRED", { kind: "SYSTEM" }, { now, notify: false });
+      expired.push(row.id);
     } catch (e) {
       // 그 사이 고객이 취소했거나 매니저가 승인한 건 — 조건부 UPDATE 가 0행을 내고 여기로 온다. 배치는 계속 돈다
       if (e instanceof HttpError && e.status === 409) continue;
       throw e;
     }
   }
-  return n;
+  // 손님에게는 알려야 한다 — 안 보내면 "접수됨" 에서 소식이 끊긴다. 다만 하나씩 기다리지는 않는다
+  await inBatches(expired, MAIL_CONCURRENCY, (id) => notifyReservation(id, "EXPIRED"));
+  return expired.length;
+}
+
+/** 메일 왕복을 겹쳐서 보낸다. 한 번에 다 던지면 Resend 쪽 속도 제한에 걸린다 */
+const MAIL_CONCURRENCY = 8;
+
+async function inBatches<T>(items: T[], size: number, fn: (item: T) => Promise<void>): Promise<void> {
+  for (let i = 0; i < items.length; i += size) {
+    await Promise.all(items.slice(i, i + size).map(fn));
+  }
 }
 
 /**
