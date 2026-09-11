@@ -25,9 +25,17 @@ export default async function SwapsPage() {
   return (
     <ConsoleShell current="schedule" viewer={{ name: v.name, role: v.membership.role }}>
       <h1>근무 교대</h1>
-      <p className="sub" style={{ margin: "0 0 16px" }}>
+      <p className="sub" style={{ margin: "0 0 8px" }}>
         동료와 근무를 바꿔요. <b>그날 예약을 어떻게 할지</b> 함께 정해야 요청할 수 있어요 — 근무만 넘기고 예약을 두면 그날 손님이 빈 가게에 옵니다.
-        요청은 72시간 안에 응답이 없으면 자동으로 만료돼요. <Link href="/console/schedule">근무표로 돌아가기</Link>
+      </p>
+      {/* 순서를 적어 두지 않으면 화면만 보고는 "요청 다음에 무엇이 일어나는지" 를 알 수 없다 — 승인이 사장님 몫인 것도 여기서만 드러난다 */}
+      <ol className="sub" style={{ margin: "0 0 16px", paddingLeft: 20, display: "grid", gap: 2 }}>
+        <li>담당자 본인이 아래에서 상대·날짜·사유를 적어 <b>요청</b>합니다.</li>
+        <li>상대가 <b>수락</b>하거나 거절합니다. 72시간 안에 응답이 없으면 자동으로 만료돼요.</li>
+        <li>사장님이 <b>승인</b>하면 그때 근무표가 바뀌고, 넘기기로 한 예약의 담당자도 함께 바뀝니다.</li>
+      </ol>
+      <p className="sub" style={{ margin: "0 0 16px" }}>
+        <Link href="/console/schedule">근무표로 돌아가기</Link>
       </p>
       <SwapsPanel initial={swaps} staff={staff} myResourceId={mine?.id ?? null} today={todayIn(settings.timezone)} readOnly={v.readOnly} />
     </ConsoleShell>

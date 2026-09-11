@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { Alert, Button, Field, Input } from "@/components/ui";
 import { apiPost, describeError, fieldErrors } from "@/lib/client-api";
-import type { SwapAction, SwapStatus } from "@/features/schedule/swap-rules";
+import { swapEligibility, type SwapAction, type SwapStatus } from "@/features/schedule/swap-rules";
 import type { SwapItem } from "@/features/schedule/swaps";
 
 const STATUS_TEXT: Record<SwapStatus, string> = {
@@ -88,12 +88,14 @@ export function SwapsPanel({ initial, staff, myResourceId, today, readOnly }: { 
   }
 
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  /** 폼을 감출 때는 **왜 감추는지** 같이 말한다 (`swap-rules.ts`) */
+  const eligible = swapEligibility({ readOnly, hasOwnResource: Boolean(myResourceId), partnerCount: staff.length });
 
   return (
     <>
       {msg && <Alert kind={msg.kind}>{msg.text}</Alert>}
 
-      {!readOnly && myResourceId && staff.length > 0 && (
+      {eligible.canRequest && (
         <form onSubmit={create} className="card" style={{ display: "grid", gap: 12, marginBottom: 20 }}>
           <h2 style={{ margin: 0, fontSize: 16 }}>교대 요청</h2>
           <Field label="누구와" htmlFor="sw-target">
@@ -148,9 +150,9 @@ export function SwapsPanel({ initial, staff, myResourceId, today, readOnly }: { 
         </form>
       )}
 
-      {!myResourceId && <p className="sub">교대는 담당자 자원이 연결된 계정만 요청할 수 있어요.</p>}
+      {eligible.reason && <Alert kind="info">{eligible.reason}</Alert>}
 
-      <h2 style={{ fontSize: 16 }}>교대 요청</h2>
+      <h2 style={{ fontSize: 16, marginTop: 24 }}>주고받은 요청</h2>
       {initial.length === 0 ? (
         <p className="sub">아직 교대 요청이 없어요.</p>
       ) : (
