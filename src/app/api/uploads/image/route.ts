@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { assertSameOrigin } from "@/features/auth/csrf";
 import { assertWritable, handle, HttpError, requireConsole } from "@/features/auth/guards";
-import { ImageError, MAX_IMAGE_BYTES, processImage } from "@/lib/storage/image";
+import { checkDeclaredSize, ImageError, MAX_IMAGE_BYTES, processImage } from "@/lib/storage/image";
 import { buildImageBase, BUSINESS_IMAGE_QUOTA_BYTES, deleteObject, publicUrl, putVariant, usedBytes } from "@/lib/storage/r2";
 import { variantKey } from "@/lib/storage/variants";
 
@@ -35,9 +35,11 @@ export const POST = handle(async (req) => {
   // businessId 는 폼 안에 있으므로 소속·권한만 먼저 보고, 사업장 일치는 파싱 직후에 본다
   const { membership } = await requireConsole({ permission: "editProduct" });
 
-  // `formData()` 는 몸통을 끝까지 읽는다 — 크기 판정은 그전에 헤더로 한다. 여유분은 multipart 경계·필드 몫
-  const declared = Number(req.headers.get("content-length") ?? 0);
-  if (declared > MAX_IMAGE_BYTES + 64 * 1024) throw new HttpError(413, "TOO_LARGE", { message: `사진은 장당 ${MAX_IMAGE_BYTES / 1024 / 1024}MB 까지예요` });
+  // `formData()` 는 몸통을 끝까지 읽는다 — 크기 판정은 그전에 헤더로 한다 (`checkDeclaredSize`)
+  const declared = checkDeclaredSize(req.headers.get("content-length"));
+  // 길이를 말하지 않은 요청은 재기 전에 거부한다. 통과시키면 "몸통을 읽기 전에 판정한다" 가 성립하지 않는다
+  if (declared === "missing") throw new HttpError(411, "LENGTH_REQUIRED", { message: "요청에 Content-Length 가 없어요" });
+  if (declared === "too-large") throw new HttpError(413, "TOO_LARGE", { message: `사진은 장당 ${MAX_IMAGE_BYTES / 1024 / 1024}MB 까지예요` });
 
   const form = await req.formData().catch(() => null);
   if (!form) throw new HttpError(400, "INVALID_BODY", { message: "multipart/form-data 가 아니다" });

@@ -17,10 +17,31 @@ import { plannedWidths, VARIANT_MIME, type ImageKind } from "./variants";
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB — FR-PRD-010 · FR-CHAT-020
 /** 압축 폭탄 방어. 5MB png 로 1억 픽셀을 만들 수 있다 — 디코딩 전에 막는다 */
 export const MAX_SOURCE_PIXELS = 40_000_000;
+/** multipart 경계·필드 몫. 헤더로 재는 값은 파일보다 조금 크다 */
+const BODY_OVERHEAD_BYTES = 64 * 1024;
 const WEBP_QUALITY = 82;
 
 export const IMAGE_MIME = ["image/jpeg", "image/png", "image/webp", "image/avif"] as const;
 export type ImageMime = (typeof IMAGE_MIME)[number];
+
+/**
+ * 몸통을 읽기 전에 `Content-Length` 로 내리는 판정.
+ *
+ * `formData()` 는 몸통을 끝까지 읽어 메모리에 올린다 — 그 전에 헤더로 걸러야 의미가 있다.
+ * **헤더가 없으면 통과가 아니라 거부다.** 없는 값을 0 으로 읽으면 판정 자체가 없는 것과 같아서,
+ * 인증된 사용자가 청크 전송(Content-Length 생략)으로 임의 크기 body 를 보내면 5MB 가드를 그냥 지나간다
+ * — `file.size` 검사는 이미 다 읽은 뒤다 (#178 리뷰 지적).
+ * 브라우저는 `FormData` 본문에 길이를 항상 붙이므로 정상 업로드가 여기 걸리지 않는다 (`lib/upload-client.ts`).
+ *
+ * 숫자가 아닌 값(`"abc"`)·지수 표기(`"1e10"`)·공백 낀 값도 없는 것으로 본다 — HTTP 는 10진 숫자만 허용한다.
+ */
+export type DeclaredSize = "ok" | "missing" | "too-large";
+export function checkDeclaredSize(header: string | null): DeclaredSize {
+  if (header === null || !/^\d+$/.test(header)) return "missing";
+  const declared = Number(header);
+  if (declared === 0) return "missing";
+  return declared > MAX_IMAGE_BYTES + BODY_OVERHEAD_BYTES ? "too-large" : "ok";
+}
 
 const ascii = (b: Uint8Array, at: number, s: string) => s.split("").every((c, i) => b[at + i] === c.charCodeAt(0));
 

@@ -1,6 +1,6 @@
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
-import { ImageError, MAX_IMAGE_BYTES, processImage, sniffMime } from "./image";
+import { checkDeclaredSize, ImageError, MAX_IMAGE_BYTES, processImage, sniffMime } from "./image";
 
 const solid = (w: number, h: number) => sharp({ create: { width: w, height: h, channels: 3, background: "#2f6f4f" } });
 const jpeg = (w: number, h: number) => solid(w, h).jpeg().toBuffer();
@@ -79,5 +79,28 @@ describe("압축 폭탄", () => {
     const bomb = await sharp({ create: { width: 8000, height: 6000, channels: 3, background: "#fff" } }).png({ compressionLevel: 9 }).toBuffer();
     expect(bomb.byteLength).toBeLessThan(MAX_IMAGE_BYTES);
     await expect(processImage(bomb, "product")).rejects.toMatchObject({ code: "UNREADABLE" });
+  });
+});
+
+describe("checkDeclaredSize — 몸통을 읽기 전 판정", () => {
+  const OVER = String(MAX_IMAGE_BYTES + 64 * 1024 + 1);
+
+  it("길이를 말하지 않은 요청은 통과가 아니라 거부다 — 청크 전송으로 5MB 가드를 지나갈 수 있었다", () => {
+    expect(checkDeclaredSize(null)).toBe("missing");
+    expect(checkDeclaredSize("")).toBe("missing");
+    expect(checkDeclaredSize("0")).toBe("missing");
+  });
+
+  it("10진 숫자가 아닌 값도 없는 것으로 본다 — Number() 로 읽으면 NaN 이 비교를 전부 통과한다", () => {
+    for (const bogus of ["abc", "1e10", " 5", "5 ", "+5", "-1", "5.5", "0x10"]) {
+      expect(checkDeclaredSize(bogus), bogus).toBe("missing");
+    }
+  });
+
+  it("한도는 파일 5MB + multipart 여유분이다", () => {
+    expect(checkDeclaredSize("1")).toBe("ok");
+    expect(checkDeclaredSize(String(MAX_IMAGE_BYTES))).toBe("ok");
+    expect(checkDeclaredSize(String(MAX_IMAGE_BYTES + 64 * 1024))).toBe("ok");
+    expect(checkDeclaredSize(OVER)).toBe("too-large");
   });
 });
