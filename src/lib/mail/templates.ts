@@ -70,3 +70,132 @@ export function passwordResetSocialOnlyMail(to: string, provider: "KAKAO" | "GOO
     `이 계정은 ${name} 로그인으로 만들어져 비밀번호가 없습니다.\n\n${name}로 로그인해 주세요: ${loginUrl}\n\n본인이 요청한 것이 아니면 이 메일을 무시하세요.`,
   );
 }
+
+/**
+ * 예약 메일 (FR-NOTI-010 · #57 최소본).
+ *
+ * 알림 체계(에픽 #14 — `Notification` 적재 · 채널 선택 · 재시도 · 수신 설정)가 오기 전까지,
+ * **손님이 결과를 알 수 없으면 안 되는 것**만 즉시 메일로 보낸다. 매장 쪽 알림(담당 매니저 웹푸시·인앱)은
+ * 그 에픽의 몫이라 여기 없다.
+ *
+ * 다섯 통 모두 같은 정보 블록을 쓴다 — 손님이 여러 통을 받았을 때 어느 예약 이야기인지 한눈에 맞춰야 한다.
+ */
+export type ReservationMailInfo = {
+  businessName: string;
+  productName: string;
+  /** `2026년 10월 5일 (월) 14:00 – 15:00` — 화면과 같은 규칙 (`booking/notify-text.ts`) */
+  when: string;
+  partySize: number;
+  code: string;
+  /** 절대 URL. 예약 상세 */
+  url: string;
+};
+
+function block(i: ReservationMailInfo): string {
+  return [`· 매장: ${i.businessName}`, `· 상품: ${i.productName}`, `· 일시: ${i.when}`, `· 인원: ${i.partySize}명`, `· 예약번호: ${i.code}`].join("\n");
+}
+
+/** 사유는 매장이 쓴 그대로 옮긴다. 없으면 줄 자체를 빼서 "사유: (없음)" 같은 빈칸을 만들지 않는다 */
+function because(reason?: string | null): string {
+  const r = reason?.trim();
+  return r ? `\n\n매장이 남긴 사유:\n${r}` : "";
+}
+
+/** 접수 — 매장 승인을 기다리는 상태 (autoConfirm 이 아닌 상품) */
+export function reservationRequestedMail(to: string, i: ReservationMailInfo): Mail {
+  return mail(
+    to,
+    `예약이 접수되었습니다 — ${i.businessName}`,
+    `예약 신청이 접수되었습니다. 아직 확정은 아닙니다 — 매장이 확인하면 확정 메일을 다시 보내 드립니다.\n\n${block(i)}\n\n예약 확인: ${i.url}`,
+  );
+}
+
+/** 확정 — 손님이 실제로 가도 되는 상태 */
+export function reservationConfirmedMail(to: string, i: ReservationMailInfo): Mail {
+  return mail(to, `예약이 확정되었습니다 — ${i.businessName}`, `예약이 확정되었습니다.\n\n${block(i)}\n\n예약 확인·취소: ${i.url}`);
+}
+
+/** 거절 — 매장이 받지 않기로 한 것. 취소와 구분한다 */
+export function reservationRejectedMail(to: string, i: ReservationMailInfo, reason?: string | null): Mail {
+  return mail(
+    to,
+    `예약이 거절되었습니다 — ${i.businessName}`,
+    `아쉽게도 매장이 이 예약을 받지 못했습니다.${because(reason)}\n\n${block(i)}\n\n다른 시간으로 다시 예약하실 수 있습니다: ${i.url}`,
+  );
+}
+
+/** 매장 취소 — 이미 확정됐던 예약이 매장 사정으로 취소된 것. 손님에게는 가장 나쁜 소식이라 제목부터 분명히 */
+export function reservationCanceledByBizMail(to: string, i: ReservationMailInfo, reason?: string | null): Mail {
+  return mail(
+    to,
+    `예약이 취소되었습니다 — ${i.businessName}`,
+    `매장 사정으로 예약이 취소되었습니다.${because(reason)}\n\n${block(i)}\n\n다른 시간으로 다시 예약하실 수 있습니다: ${i.url}`,
+  );
+}
+
+/**
+ * 승인 대기 만료 — 매장이 정해진 시간 안에 확인하지 않아 자동으로 끝난 것.
+ * 이 메일이 없으면 손님은 "접수됨" 에서 소식이 끊긴 채 그날 가게 앞에 선다.
+ */
+export function reservationExpiredMail(to: string, i: ReservationMailInfo): Mail {
+  return mail(
+    to,
+    `예약 신청이 만료되었습니다 — ${i.businessName}`,
+    `매장이 확인하지 못해 예약 신청이 자동으로 만료되었습니다. 이 시간은 다시 열려 있습니다.\n\n${block(i)}\n\n다시 예약하기: ${i.url}`,
+  );
+}
+
+/**
+ * 담당자 변경 — 근무 교대로 담당자만 바뀐 것 (FR-SHIFT-030). 예약 자체는 그대로다.
+ * 제목에 "변경" 만 쓰면 시간이 바뀐 줄 안다 — 무엇이 바뀌었는지 제목에서 못 박는다.
+ */
+export function reservationReassignedMail(to: string, i: ReservationMailInfo, staffName: string): Mail {
+  return mail(
+    to,
+    `담당자가 바뀌었습니다 — ${i.businessName}`,
+    `예약 시간과 내용은 그대로이고, 담당자만 ${staffName} 님으로 바뀌었습니다.\n\n${block(i)}\n· 담당자: ${staffName}\n\n예약 확인: ${i.url}`,
+  );
+}
+
+/**
+ * 심사·상태 메일 (FR-ADM-010 · FR-ADM-020, #65·#66).
+ *
+ * 넷 다 **사람이 내린 결정**을 전한다. 그래서 사유를 요약하거나 완곡하게 바꾸지 않고 운영자가 쓴 그대로 옮긴다 —
+ * 사업자가 무엇을 고쳐야 다시 열 수 있는지 알아야 한다.
+ */
+export function businessApprovedMail(to: string, businessName: string, publicUrl: string, consoleUrl: string): Mail {
+  return mail(
+    to,
+    `${businessName} 가입이 승인되었습니다`,
+    `${businessName} 의 ${BRAND} 가입이 승인되었습니다. 예약 페이지가 지금부터 공개됩니다.\n\n· 예약 페이지: ${publicUrl}\n· 콘솔: ${consoleUrl}\n\n예약 페이지 주소를 인스타그램 프로필이나 매장 안내에 걸어 두시면 손님이 바로 예약할 수 있어요.`,
+  );
+}
+
+export function businessRejectedMail(to: string, businessName: string, reason: string): Mail {
+  return mail(
+    to,
+    `${businessName} 가입 신청이 반려되었습니다`,
+    `${businessName} 의 가입 신청이 반려되었습니다.\n\n사유:\n${reason}\n\n내용을 보완해 같은 이메일로 다시 신청하실 수 있습니다.`,
+  );
+}
+
+export function businessSuspendedMail(to: string, businessName: string, reason: string): Mail {
+  return mail(
+    to,
+    `${businessName} 이(가) 일시정지되었습니다`,
+    `${businessName} 의 예약 페이지가 일시정지되어 새 예약을 받지 않습니다. 이미 확정된 예약은 그대로 남아 있고, 콘솔에서 예약 취소와 손님 상담은 계속 하실 수 있습니다.\n\n사유:\n${reason}\n\n확인 후 회신해 주시면 검토하겠습니다.`,
+  );
+}
+
+export function businessBlockedMail(to: string, businessName: string, reason: string, canceledCount: number): Mail {
+  const canceled = canceledCount > 0 ? `\n\n남아 있던 예약 ${canceledCount}건은 취소되었고, 손님에게도 안내가 나갔습니다.` : "";
+  return mail(
+    to,
+    `${businessName} 이(가) 차단되었습니다`,
+    `${businessName} 의 예약 페이지와 콘솔 접근이 차단되었습니다.\n\n사유:\n${reason}${canceled}\n\n이의가 있으시면 이 메일에 회신해 주세요.`,
+  );
+}
+
+export function businessRestoredMail(to: string, businessName: string): Mail {
+  return mail(to, `${businessName} 이(가) 다시 열렸습니다`, `${businessName} 의 예약 페이지와 콘솔이 정상으로 돌아왔습니다. 다시 로그인해 주세요.`);
+}

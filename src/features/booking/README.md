@@ -12,8 +12,10 @@ features/booking/peak-occupancy.ts 순간 최대 동시 인원 (겹침 합산이
 features/booking/slots.ts         computeSlots — 순수 함수. DB·시계 없음
 features/booking/context.ts       DB → SlotContext. 유일한 DB 접점
 features/booking/create.ts        예약 생성·변경·워크인 — 재검증 · 자원 배정 · 락
-features/booking/transition-rules.ts 상태 전이 표. 순수
+features/booking/transition-rules.ts 상태 전이 표 + 그 전이가 손님에게 보내는 메일. 순수
 features/booking/transitions.ts   전이 실행 · 승인 재검증 · 배치(C2·C3)
+features/booking/notify.ts        손님 메일 발송 (#57 최소본) — 커밋 뒤, 절대 던지지 않는다
+features/booking/notify-text.ts   메일 시각 문구. 화면과 같은 규칙(widget/format.ts)을 부른다
 features/booking/console.ts       콘솔 읽기 계층 — 목록·상세·담당 변경·요약 (스코프가 여기 한 곳)
 features/booking/operating-context.ts 사업장 전체의 운영시간 계산 입력 (상품에 안 매인다)
 features/booking/dashboard.ts     대시보드 — 오늘·승인 대기·가동률·내 근무
@@ -77,10 +79,23 @@ FREE 는 후보가 구간 안에서 만들어지므로 `excluded` 를 쓰지 않
 - 슬롯 캐시 — 키(`win:{businessId}:{resourceId}:{date}` · `occ:…`)와 무효화 트리거·TTL 60초는 명세가 이미 정해 뒀다. 캐시 없이 먼저 만들고 느려지면 붙인다
 - `AUTO` 배정 후보 정렬(FR-BOOK-020 3.5) — 지금은 `resourceIds` 를 sortOrder 로 담아만 둔다 (가정 A6)
 - 위젯의 [5] 확인 · [6] 로그인 · [7] 완료 (#82~#84). [1]~[4] 는 `widget/README.md`
-- 알림·상담방 예약 카드(생성 7단계, 승인·취소 알림) — 알림 에픽
+- 상담방 예약 카드(생성 7단계) — 채팅 에픽
 - 자동 노쇼를 사업자가 끄는 스위치 — 명세엔 있는데 `policy` 에 키가 없다. 정책 폼과 함께 추가한다
 - 고객 쪽 예약 목록(`/api/me/reservations`) — 마이페이지 에픽
 - 캘린더 월 뷰 — 명세에 있고 일·주만 만들었다. 월은 건수 요약이라 격자가 아니라 다른 화면이다
+
+## 손님 메일 (#57 — FR-NOTI-010 의 일부)
+
+알림 체계(에픽 #14 — `Notification` 적재 · 채널 결정 · 재시도 · 수신 설정)가 오기 전까지,
+**손님이 결과를 알 수 없으면 안 되는 것**만 즉시 메일로 보낸다: 접수 · 확정 · 거절 · 매장취소 · 승인대기 만료.
+매장 쪽 알림(담당 매니저 웹푸시·인앱)은 여기 없다 — 그 에픽의 몫이다.
+
+**어떤 전이가 어떤 메일인가는 전이 표 옆(`transition-rules.ts` 의 `CUSTOMER_MAIL_ON`)에 있다.**
+따로 두면 전이를 하나 추가한 날 알림이 조용히 빠진다. 손님 본인 취소·완료·노쇼에 메일이 없는 이유도 거기 적혀 있다.
+
+**커밋 뒤에 보내고, 실패해도 던지지 않는다.** 트랜잭션 안에서 보내면 롤백된 예약의 확정 메일이 나가고
+메일이 느린 만큼 예약 행 잠금이 길어진다. 커밋 뒤에 던지면 라우트가 500 을 내는데 예약은 잡혀 있다 —
+손님 화면엔 실패, 매장 화면엔 예약. 가장 나쁜 결과라 로그만 남기고 지나간다.
 
 ## 예약 생성 (FR-BOOK-020)
 

@@ -6,8 +6,9 @@ import type { ReservationStatus } from "@/features/booking/slot-types";
 import { HttpError } from "@/features/auth/errors";
 import { writeAudit } from "@/lib/audit";
 import type { RequestMeta } from "@/lib/request-meta";
+import { notifyReservation } from "./notify";
 import { peakOccupancy } from "./peak-occupancy";
-import { RULES, type Rule, type TransitionActor } from "./transition-rules";
+import { customerMailFor, RULES, type Rule, type TransitionActor } from "./transition-rules";
 
 export type { TransitionActor } from "./transition-rules";
 
@@ -128,6 +129,8 @@ export async function validateExisting(r: ValidateSubject, q: DbLike): Promise<v
  * `viewAllReservations` 가 있으면 보이기는 하므로 여기를 통과하고, 처리 권한은 `authorize` 가 403 으로 따로 막는다.
  */
 function assertVisible(r: Loaded, actor: TransitionActor): void {
+  // 운영자는 사업장을 넘어 본다 — 그 권한 자체가 프록시(ADMIN + TOTP)에서 이미 검사됐다
+  if (actor.kind === "ADMIN") return;
   if (actor.kind === "CUSTOMER" && r.customerId !== actor.uid) throw new HttpError(404, "NOT_FOUND");
   if (actor.kind !== "CONSOLE") return;
   if (r.businessId !== actor.businessId) throw new HttpError(404, "NOT_FOUND");
@@ -153,7 +156,7 @@ export async function transitionReservation(
   opts: { reason?: string | null; noShowSource?: "MANUAL" | "AUTO"; meta?: RequestMeta; now?: Date } = {},
 ): Promise<TransitionResult> {
   const now = opts.now ?? new Date();
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     const r = await load(id, tx);
     assertVisible(r, actor);
     const rule = RULES[`${r.status}>${to}`];
@@ -186,7 +189,7 @@ export async function transitionReservation(
       {
         action: "RESERVATION_STATUS_CHANGE",
         actorId,
-        actorRole: actor.kind === "CONSOLE" ? actor.role : actor.kind === "CUSTOMER" ? "CUSTOMER" : "SYSTEM",
+        actorRole: actor.kind === "CONSOLE" ? actor.role : actor.kind === "CUSTOMER" ? "CUSTOMER" : actor.kind === "ADMIN" ? "ADMIN" : "SYSTEM",
         businessId: r.businessId,
         targetType: "RESERVATION",
         targetId: id,
@@ -197,6 +200,12 @@ export async function transitionReservation(
     );
     return { id, from: r.status, to };
   });
+
+  // 메일은 **커밋 뒤**에 보낸다. 트랜잭션 안에서 보내면 이후 롤백된 예약의 확정 메일이 나가고,
+  // 메일이 느린 만큼 예약 행 잠금이 길어진다. 실패해도 전이는 이미 끝난 것이다 (`notifyReservation` 은 던지지 않는다)
+  const mailEvent = customerMailFor(result.to);
+  if (mailEvent) await notifyReservation(result.id, mailEvent, { reason: opts.reason ?? null });
+  return result;
 }
 
 /** C2 승인 대기 만료 (5분 주기). `now ≥ min(createdAt + requestExpireHours, startAt − minLeadTimeMin)` */
