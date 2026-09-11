@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { Img } from "@/components/Img";
 import { Alert } from "@/components/ui";
 import type { BookingWidgetData, WidgetProduct } from "./data";
 import { DOW, calendarDay, clock, dayText, dowOfDate, minsText, monthGrid, monthWeeks, rangeText } from "./format";
@@ -29,8 +30,7 @@ export function StepProduct({ data, sel, product, onChange }: { data: BookingWid
             <li key={p.id}>
               <button type="button" className="bw-product" onClick={() => onChange({ productId: p.id })}>
                 {p.images[0] ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- 외부(R2) URL
-                  <img src={p.images[0]} alt="" />
+                  <Img src={p.images[0]} alt="" sizes="64px" />
                 ) : (
                   <span className="ph" aria-hidden="true" />
                 )}

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Img } from "@/components/Img";
 import { Alert, Button } from "@/components/ui";
 import type { ProductListItem } from "@/features/product/products";
 import { apiDelete, apiPatch, apiPut, describeError } from "@/lib/client-api";
@@ -72,8 +73,7 @@ export function ProductsPanel({ initial, isOwner, readOnly, canEdit }: { initial
             <div key={p.id} className={p.status === "ACTIVE" ? "prod-card" : "prod-card dim"}>
               <div className="thumb">
                 {p.image ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- 외부(R2) URL
-                  <img src={p.image} alt="" />
+                  <Img src={p.image} alt="" sizes="64px" />
                 ) : (
                   "사진 없음"
                 )}

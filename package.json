@@ -27,12 +27,10 @@
     "job:reservations": "tsx scripts/jobs/reservation-batches.ts",
     "admin:promote": "tsx scripts/db/promote-admin.ts",
     "admin:create": "tsx scripts/db/create-admin.ts",
-    "r2:cors": "node scripts/dev/r2-cors.mjs",
     "r2:verify": "tsx scripts/dev/verify-r2.mts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1127.0",
-    "@aws-sdk/s3-request-presigner": "^3.1127.0",
     "@sentry/nextjs": "^10",
     "drizzle-orm": "^0.45.2",
     "firebase-admin": "^14.3.0",
@@ -43,6 +41,7 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "resend": "^6.26.0",
+    "sharp": "^0.35.4",
     "zod": "^4"
   },
   "devDependencies": {

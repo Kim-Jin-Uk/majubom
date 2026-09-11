@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Img } from "@/components/Img";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import type { PublicHome } from "../public-home";
 import { bookingHref } from "../routing";
@@ -83,8 +84,7 @@ export function PublicHomeView({ home }: { home: PublicHome }) {
       <main className="site site--bar">
         <header className="site-cover">
           {cover ? (
-            // eslint-disable-next-line @next/next/no-img-element -- 외부(R2) URL
-            <img src={cover} alt="" className="site-cover-img" />
+            <Img src={cover} alt="" className="site-cover-img" sizes="(min-width: 720px) 720px, 100vw" />
           ) : (
             <div className="site-cover-img site-cover-ph" />
           )}
@@ -115,8 +115,7 @@ export function PublicHomeView({ home }: { home: PublicHome }) {
                 {/* 카드 전체가 예약 링크다 — 폰에서 작은 버튼을 겨냥하게 만들지 않는다 (#79) */}
                 <ProductCard href={p.bookable ? bookingHref(home.slug, p.id) : null}>
                   {p.images[0] ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- 외부(R2) URL
-                    <img src={p.images[0]} alt="" />
+                    <Img src={p.images[0]} alt="" sizes="104px" />
                   ) : (
                     <div className="ph" aria-hidden="true" />
                   )}
@@ -152,8 +151,7 @@ export function PublicHomeView({ home }: { home: PublicHome }) {
             <h2>사진</h2>
             <div className="site-gallery">
               {gallery.map((src, i) => (
-                // eslint-disable-next-line @next/next/no-img-element -- 외부(R2) URL
-                <img key={i} src={src} alt="" loading="lazy" />
+                <Img key={i} src={src} alt="" sizes="(min-width: 720px) 172px, 33vw" loading="lazy" />
               ))}
             </div>
           </section>
