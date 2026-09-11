@@ -6,6 +6,7 @@ import { useState, type FormEvent } from "react";
 import { Alert, Button, Field, Input } from "@/components/ui";
 import type { OpeningHour } from "@/db/schema";
 import { BUSINESS_CATEGORIES } from "@/features/business/policy-defaults";
+import { checkSlugInput, isTempSlug } from "@/features/business/slug-rules";
 import type { BusinessSettings } from "@/features/business/settings";
 import { apiPatch, describeError, fieldErrors } from "@/lib/client-api";
 
@@ -126,6 +127,8 @@ export function BusinessInfoForm({ initial, mode, readOnly, publicBase }: { init
   }
 
   const dis = readOnly || busy;
+  /** 주소 칸을 저장할 수 있는지 + 못 하면 왜인지. 규칙은 서버와 공용(`slug-rules.ts`) */
+  const slugCheck = checkSlugInput(slug, savedSlug);
   /** 1단계 완료 조건 (서버 isInfoComplete 와 같다) — 버튼 문구와 안내에 쓴다 */
   const missing = [
     !f.name.trim() && "상호",
@@ -212,13 +215,21 @@ export function BusinessInfoForm({ initial, mode, readOnly, publicBase }: { init
         <p className="sub">
           고객이 예약하러 오는 주소입니다. 영소문자·숫자·하이픈 3~30자. <b>한 번 쓴 주소는 바꾼 뒤에도 다른 사업장이 쓸 수 없고</b>, 옛 주소로 들어온 손님은 새 주소로 안내됩니다.
         </p>
+        {/* 임시 주소인 동안에는 공개 홈이 열리지 않는다(`isInfoComplete`). 승인만 받고 "왜 페이지가 404 냐" 로
+            막히는 자리라, 힌트 한 줄이 아니라 눈에 띄는 자리에 적는다 */}
+        {isTempSlug(savedSlug) && (
+          <Alert kind="warn">
+            지금은 가입할 때 자동으로 붙은 <b>임시 주소</b>(<code>/@{savedSlug}</code>)입니다. 임시 주소인 동안에는{" "}
+            <b>예약 페이지가 공개되지 않습니다</b> — 손님이 주소를 알아도 페이지를 찾을 수 없어요. 아래에서 주소를 정하면 그때 열립니다.
+          </Alert>
+        )}
         {slugMsg && <Alert kind={slugMsg.kind}>{slugMsg.text}</Alert>}
-        <Field label="주소" htmlFor="b-slug" hint={savedSlug.startsWith("b-") ? (mode === "wizard" ? "아직 임시 주소입니다 — 주소까지 정해야 1단계가 완료돼요" : "아직 임시 주소입니다 — 정해 주세요") : `현재: ${publicBase}/@${savedSlug}`}>
+        <Field label="주소" htmlFor="b-slug" hint={slugCheck.reason ?? (isTempSlug(savedSlug) ? (mode === "wizard" ? "아직 임시 주소입니다 — 주소까지 정해야 1단계가 완료돼요" : "아직 임시 주소입니다 — 정해 주세요") : `현재: ${publicBase}/@${savedSlug}`)}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <span className="muted" style={{ whiteSpace: "nowrap", fontSize: 13 }}>{publicBase.replace(/^https?:\/\//, "")}/@</span>
             <Input id="b-slug" style={{ flex: 1, minWidth: 160 }} value={slug} onChange={(e) => setSlug(e.target.value.toLowerCase())} disabled={readOnly || slugBusy} placeholder="my-salon" />
             {!readOnly && (
-              <Button type="button" onClick={saveSlug} loading={slugBusy} disabled={!slug || slug === savedSlug}>
+              <Button type="button" onClick={saveSlug} loading={slugBusy} disabled={!slugCheck.canSave}>
                 주소 저장
               </Button>
             )}

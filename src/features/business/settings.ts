@@ -7,6 +7,7 @@ import { hashPii, writeAudit } from "@/lib/audit";
 import type { RequestMeta } from "@/lib/request-meta";
 import { phoneSchema } from "@/features/auth/validation";
 import { timeSchema, toMin } from "./hours";
+import { RESERVED_SLUGS } from "./slug-rules";
 import { BUSINESS_CATEGORY_CODES } from "./policy-defaults";
 
 /**
@@ -50,16 +51,8 @@ export const openingHoursSchema = z
   .max(7)
   .refine((arr) => new Set(arr.map((h) => h.dow)).size === arr.length, "같은 요일이 두 번 들어 있습니다");
 
-export const slugSchema = z
-  .string()
-  .trim()
-  .toLowerCase()
-  .regex(/^[a-z0-9-]{3,30}$/, "영소문자·숫자·하이픈 3~30자")
-  .refine((s) => !s.startsWith("-") && !s.endsWith("-"), "하이픈으로 시작하거나 끝날 수 없습니다")
-  .refine((s) => !s.startsWith("b-"), "b- 로 시작하는 주소는 임시 주소용입니다");
-
-/** 예약어 — 공개 URL /@{slug} 와 충돌하거나 오해를 부르는 것 */
-const RESERVED_SLUGS = new Set(["admin", "console", "api", "login", "signup", "me", "majubom", "help", "about", "www", "app", "static", "_next", "support", "terms", "privacy", "notice", "official", "assets", "sitemap", "invite", "reset-password", "forgot-password"]);
+// 주소 규칙은 화면과 공용이라 순수 모듈에 있다 (`slug-rules.ts`) — 여기서 다시 적지 않는다
+export { slugSchema } from "./slug-rules";
 
 /** 30일 slug 변경 횟수 제한 — 옛 slug 가 영구 예약되므로 무제한이면 주소 선점(스쿼팅)에 쓰인다 */
 export const SLUG_CHANGES_PER_30D = 3;
