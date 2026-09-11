@@ -60,9 +60,12 @@ describe.skipIf(!enabled)("예약 변경 · 워크인", () => {
       if (ids.length) await db.delete(reservationLogs).where(inArray(reservationLogs.reservationId, ids));
       await db.update(reservations).set({ replacesReservationId: null }).where(eq(reservations.businessId, f.businessId));
       await db.delete(reservations).where(eq(reservations.businessId, f.businessId));
-      await db.delete(productResources).where(eq(productResources.productId, f.productId));
-      await db.delete(products).where(eq(products.id, f.productId));
-      await db.delete(resources).where(eq(resources.id, f.resourceId));
+      // 사업장 단위로 지운다 — 테스트가 상품·자원을 더 만들 수 있고(한도는 상품마다 따로 센다),
+      // 픽스처 id 만 지우면 남은 행이 아래 businesses 삭제를 FK 로 막는다
+      const prodIds = (await db.select({ id: products.id }).from(products).where(eq(products.businessId, f.businessId))).map((r) => r.id);
+      if (prodIds.length) await db.delete(productResources).where(inArray(productResources.productId, prodIds));
+      await db.delete(products).where(eq(products.businessId, f.businessId));
+      await db.delete(resources).where(eq(resources.businessId, f.businessId));
       await db.delete(users).where(inArray(users.id, [f.customerId, f.walkInId]));
       await db.delete(businesses).where(eq(businesses.id, f.businessId));
     }
