@@ -2360,7 +2360,14 @@ button {
 .bw-day[aria-disabled="true"]:hover {
   border-color: transparent;
 }
+/* 오늘은 테두리만으로는 눈에 안 띈다 — hover 테두리(--primary-border)보다도 흐린 --line 이었다.
+   칸을 채워서 한눈에 잡히게 한다. 선택(.on)은 아래에서 덮어쓰므로 둘이 겹치지 않는다 */
 .bw-day.today:not([aria-disabled="true"]) {
+  background: var(--surface-2);
+  border-color: var(--primary-border);
+}
+/* 지난 오늘(선행시간에 걸려 못 고르는 날)도 오늘인 건 알아야 한다. 다만 고를 수 있는 날처럼 보이면 안 된다 */
+.bw-day.today[aria-disabled="true"] {
   border-color: var(--line);
 }
 .bw-day.on {
