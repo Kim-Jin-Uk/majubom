@@ -9,6 +9,11 @@ import type { RemoveResult, ResourceItem } from "@/features/business/resources";
 import { apiDelete, apiPatch, apiPost, apiPut, describeError, fieldErrors } from "@/lib/client-api";
 
 const TYPE_TEXT = { STAFF: "담당자", SPACE: "공간", SHARED: "공용" } as const;
+/** 화면에 나오는 순서. 사람이 먼저다 — 대부분의 매장이 담당자부터 등록한다 */
+const TYPE_ORDER = ["STAFF", "SPACE", "SHARED"] as const;
+/** 같은 종류 안에서 처음/마지막인가 — 화살표를 잠그는 데 쓴다 */
+const isFirstOfType = (items: ResourceItem[], i: number): boolean => !items.some((r, k) => k < i && r.type === items[i].type);
+const isLastOfType = (items: ResourceItem[], i: number): boolean => !items.some((r, k) => k > i && r.type === items[i].type);
 const TYPE_HINT: Record<ResourceItem["type"], string> = {
   STAFF: "사람이 응대하는 예약 — 네일·헤어·PT·상담. 계정을 연결하면 본인 예약만 볼 수 있어요",
   SPACE: "공간을 시간 단위로 빌리는 예약 — 스터디룸·스튜디오·회의실",
@@ -102,11 +107,18 @@ export function ResourcesPanel({ initial, members, isOwner, readOnly, mode }: { 
     await reload();
   }
 
-  async function move(i: number, dir: -1 | 1) {
-    const j = i + dir;
-    if (j < 0 || j >= items.length) return;
+  /**
+   * 순서는 **같은 종류 안에서만** 바꾼다. 목록이 종류별로 나뉘어 보이므로, 평면 인덱스로 옮기면
+   * 화살표 한 번에 항목이 다른 칸으로 튄다. 저장은 그대로 전체 순서를 보낸다(API 는 평면 목록이다).
+   */
+  async function move(flatIndex: number, dir: -1 | 1) {
+    const type = items[flatIndex]?.type;
+    const sameType = items.map((r, k) => (r.type === type ? k : -1)).filter((k) => k >= 0);
+    const at = sameType.indexOf(flatIndex);
+    const j = sameType[at + dir];
+    if (j === undefined) return;
     const next = items.slice();
-    [next[i], next[j]] = [next[j], next[i]];
+    [next[flatIndex], next[j]] = [next[j], next[flatIndex]];
     setItems(next);
     setBusy(true);
     const x = await apiPut("/api/console/resources/reorder", { ids: next.map((r) => r.id) });
@@ -125,25 +137,38 @@ export function ResourcesPanel({ initial, members, isOwner, readOnly, mode }: { 
 
       {items.length === 0 && editing !== "new" && <Alert kind="info">아직 등록한 담당자·공간이 없어요. 예약이 점유하는 것(사람·방·장비)을 하나 이상 등록해야 상품을 만들 수 있어요.</Alert>}
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {items.map((r, i) => (
+      {/*
+        종류별로 나눈다. 담당자(사람)와 공간은 등록할 때 묻는 것도(계정 연결) 예약에서 하는 일도 다른데,
+        한 목록에 작은 뱃지만 붙여 섞어 두면 "무엇이 담당자이고 무엇이 방인지" 를 매번 읽어야 한다.
+        빈 종류는 칸을 만들지 않는다 — 공간을 안 쓰는 매장에 빈 "공간" 제목을 보여 줄 이유가 없다.
+      */}
+      {TYPE_ORDER.filter((t) => items.some((r) => r.type === t)).map((t) => (
+        <section key={t} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <h2 className="res-group">
+            {TYPE_TEXT[t]} <span className="muted">{items.filter((r) => r.type === t).length}</span>
+          </h2>
+          {/* `.sub` 는 `.panel`/`.card`/`.console-body >` 안에서만 정의돼 있다. 위저드(`mode="wizard"`)는
+              `.console-body` 없이 렌더하므로 여기서는 자체 클래스를 쓴다 (리뷰 지적) */}
+          <p className="res-group-hint">{TYPE_HINT[t]}</p>
+          {items.map((r, i) => (r.type !== t ? null : (
           <div key={r.id} className={r.isActive ? "res-card" : "res-card off"}>
-            <div className="ic">{TYPE_TEXT[r.type]}</div>
+            {/* 종류는 섹션 제목이 이미 말한다. 이 자리에는 정원을 둔다 — 아래 줄은 계정·설명을 맡는다 */}
+            <div className="ic">{r.capacity}명</div>
             <div className="body">
               <b>{r.name}</b>
               {!r.isActive && <span className="tag" style={{ marginLeft: 8, background: "var(--muted-fill)", color: "var(--text-2)" }}>비활성</span>}
               <div className="meta">
-                정원 {r.capacity}명
-                {r.member ? ` · ${r.member.name} 계정 연결${r.member.status === "INVITED" ? " (초대 대기)" : ""}` : r.type === "STAFF" ? " · 계정 없음" : ""}
-                {r.description ? ` · ${r.description}` : ""}
+                {/* 정원은 왼쪽 칸이 말한다 — 여기서는 그 종류에서 다음으로 궁금한 것만 */}
+                {r.member ? `${r.member.name} 계정 연결${r.member.status === "INVITED" ? " (초대 대기)" : ""}` : r.type === "STAFF" ? "계정 없음" : ""}
+                {r.description ? `${r.member || r.type === "STAFF" ? " · " : ""}${r.description}` : ""}
               </div>
             </div>
             {canEdit && (
               <div className="actions">
-                <Button size="sm" type="button" onClick={() => move(i, -1)} disabled={busy || i === 0} aria-label={`${r.name} 위로`}>
+                <Button size="sm" type="button" onClick={() => move(i, -1)} disabled={busy || isFirstOfType(items, i)} aria-label={`${r.name} 위로`}>
                   ↑
                 </Button>
-                <Button size="sm" type="button" onClick={() => move(i, 1)} disabled={busy || i === items.length - 1} aria-label={`${r.name} 아래로`}>
+                <Button size="sm" type="button" onClick={() => move(i, 1)} disabled={busy || isLastOfType(items, i)} aria-label={`${r.name} 아래로`}>
                   ↓
                 </Button>
                 <Button size="sm" type="button" onClick={() => startEdit(r)} disabled={busy}>
@@ -158,14 +183,15 @@ export function ResourcesPanel({ initial, members, isOwner, readOnly, mode }: { 
               </div>
             )}
           </div>
-        ))}
-      </div>
+          )))}
+        </section>
+      ))}
 
       {editing === null && (
         <div className="actions">
           {canEdit && (
             <Button type="button" variant="primary" onClick={startNew}>
-              + 담당자 · 공간 추가
+              + 담당자 · 공간 등록
             </Button>
           )}
           {mode === "wizard" && (
