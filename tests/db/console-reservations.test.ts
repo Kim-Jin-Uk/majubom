@@ -58,9 +58,12 @@ async function fixture() {
     .insert(products)
     .values({ businessId: biz.id, name: "시술", startMode: "FREE", slotIntervalMin: 60, durationMin: 60, capacityPerSlot: 1, maxPartySize: 1, resourceSelectMode: "OPTIONAL", status: "ACTIVE" })
     .returning({ id: products.id });
+  // 담당(memberId)이 **없는** 자원. 상품에 연결해 둔다 — 룸 예약이 승인될 때 이관되지 않는지 보려면 예약이 들어가야 한다
+  const [room] = await db.insert(resources).values({ businessId: biz.id, type: "SPACE", name: "룸", capacity: 1, sortOrder: 3 }).returning({ id: resources.id });
   await db.insert(productResources).values([
     { productId: prd.id, resourceId: mine.id },
     { productId: prd.id, resourceId: theirs.id },
+    { productId: prd.id, resourceId: room.id },
   ]);
   // 연결하지 않은 자원 — 담당 변경이 거절해야 한다
   const [loose] = await db.insert(resources).values({ businessId: biz.id, type: "SPACE", name: "창고", capacity: 1, sortOrder: 2 }).returning({ id: resources.id });
@@ -79,6 +82,7 @@ async function fixture() {
     mine: mine.id,
     theirs: theirs.id,
     loose: loose.id,
+    room: room.id,
     ownerActor: { uid: ownerU.id, role: "OWNER", memberId: owner.id, businessId: biz.id, canViewAll: false } satisfies ConsoleActor,
     mgrActor: { uid: mgrU.id, role: "MANAGER", memberId: mgr.id, businessId: biz.id, canViewAll: false } satisfies ConsoleActor,
     customerId: cust.id,
@@ -122,7 +126,7 @@ describe.skipIf(!enabled)("예약 콘솔 (FR-BOOK-080)", () => {
       await db.delete(workSchedules).where(eq(workSchedules.businessId, f.businessId));
       await db.delete(productResources).where(eq(productResources.productId, f.productId));
       await db.delete(products).where(eq(products.id, f.productId));
-      await db.delete(resources).where(inArray(resources.id, [f.mine, f.theirs, f.loose]));
+      await db.delete(resources).where(eq(resources.businessId, f.businessId));
       await db.delete(businessMembers).where(eq(businessMembers.businessId, f.businessId));
       await db.delete(users).where(inArray(users.id, f.userIds));
       await db.delete(businesses).where(eq(businesses.id, f.businessId));
@@ -168,8 +172,27 @@ describe.skipIf(!enabled)("예약 콘솔 (FR-BOOK-080)", () => {
     await expect(transitionReservation(theirs.id, "COMPLETED", console_)).rejects.toMatchObject({ status: 404 });
     await expect(transitionReservation(theirs.id, "CONFIRMED", console_)).rejects.toMatchObject({ status: 404 });
 
-    // viewAllReservations 는 **보이는 범위**만 넓힌다 — 처리까지 되면 FR-BOOK-030 이 무너진다
-    await expect(transitionReservation(theirs.id, "CONFIRMED", { ...console_, canViewAll: true })).rejects.toMatchObject({ status: 403, code: "NOT_OWN_RESOURCE" });
+    // 보이면 처리할 수 있다 (L-32 결정). 승인은 **담당까지 넘어온다** — 손님이 A 이름으로 확정 메일을 받고
+    // 매장에는 B 가 있는 상태를 만들지 않는다
+    const seen = { ...console_, canViewAll: true };
+    await transitionReservation(theirs.id, "CONFIRMED", seen);
+    const [after] = await db.select({ resourceId: reservations.resourceId, status: reservations.status }).from(reservations).where(eq(reservations.id, theirs.id));
+    expect(after.status).toBe("CONFIRMED");
+    expect(after.resourceId, "승인한 매니저가 담당이 된다").toBe(f.mine);
+    // 이관이 이력에 남는다 — 자원이 바뀐 로그 한 줄
+    const moves = await db.select({ from: reservationLogs.fromResourceId, to: reservationLogs.toResourceId }).from(reservationLogs).where(eq(reservationLogs.reservationId, theirs.id));
+    expect(moves.filter((m) => m.to !== null)).toEqual([{ from: f.theirs, to: f.mine }]);
+  }, 30_000);
+
+  it("담당이 없는 자원(룸)은 이관하지 않는다 — 손님이 고른 적 없는 자리로 옮기지 않는다", async () => {
+    const f = await make();
+    // `room` 은 담당(memberId)이 없는 SPACE 자원이다
+    const room = await createReservation({ productId: f.productId, startAt: at(21), partySize: 1, resourceId: f.room, customerNote: null }, { uid: f.customerId });
+    const seen = { kind: "CONSOLE" as const, uid: f.mgrActor.uid, role: "MANAGER" as const, memberId: f.mgrActor.memberId, businessId: f.businessId, canViewAll: true };
+    await transitionReservation(room.id, "CONFIRMED", seen);
+    const [after] = await db.select({ resourceId: reservations.resourceId, status: reservations.status }).from(reservations).where(eq(reservations.id, room.id));
+    expect(after.status).toBe("CONFIRMED");
+    expect(after.resourceId, "룸 예약은 그 자리에 그대로 있어야 한다").toBe(f.room);
   }, 30_000);
 
   it("다른 사업장 예약은 목록에도 없고 상세도 404", async () => {

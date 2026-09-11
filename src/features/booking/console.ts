@@ -64,6 +64,8 @@ export type ReservationRow = {
   resourceName: string;
   /** 담당자(사람) 자원인가 — 화면이 존칭을 붙일지 정한다 */
   resourceIsStaff: boolean;
+  /** 그 자원에 담당 계정이 연결돼 있는가. 없으면 "남의 담당" 이 아니다 (룸·공용) */
+  resourceAssigned: boolean;
   /** 워크인은 받아 적은 이름, 아니면 계정 이름 */
   customerName: string;
   /** 고객 식별 보조 — 로그인 수단. 워크인은 null */
@@ -135,6 +137,7 @@ export async function listReservations(actor: ConsoleActor, q: ListQuery, tz: st
       resourceId: reservations.resourceId,
       resourceName: resources.name,
       resourceType: resources.type,
+      resourceMemberId: resources.memberId,
       customerName: users.name,
       customerProvider: users.provider,
     })
@@ -176,6 +179,7 @@ export async function listReservations(actor: ConsoleActor, q: ListQuery, tz: st
       customerProvider: r.createdVia === "WALK_IN" ? null : r.customerProvider,
       mine: r.resourceId === mineId,
       resourceIsStaff: r.resourceType === "STAFF",
+      resourceAssigned: r.resourceMemberId !== null,
     })),
     nextCursor: rows.length > limit ? `${page[page.length - 1].startAt.toISOString()}|${page[page.length - 1].id}` : null,
   };
@@ -216,6 +220,7 @@ export async function getReservation(actor: ConsoleActor, id: string, tz: string
       resourceId: reservations.resourceId,
       resourceName: resources.name,
       resourceType: resources.type,
+      resourceMemberId: resources.memberId,
       customerName: users.name,
       customerProvider: users.provider,
       customerEmail: users.email,
@@ -262,6 +267,7 @@ export async function getReservation(actor: ConsoleActor, id: string, tz: string
     customerPhone: walkIn ? null : r.customerPhone,
     mine: r.resourceId === mineId,
     resourceIsStaff: r.resourceType === "STAFF",
+    resourceAssigned: r.resourceMemberId !== null,
     history: logs.map((l) => ({ ...l, at: formatInstant(l.at.getTime(), tz) })),
   };
 }
