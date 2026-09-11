@@ -5,53 +5,49 @@
 
 ## 지금 어디
 
-**9/11 — 에픽 #6·#7·#9 앞부분이 한꺼번에 `main` 에 들어갔다.** `main` 은 `80310a4` 이고, 그 앞에
-`1987499`(#177) 하나뿐이다. #181 이 **스쿼시 머지**라 그 한 커밋에 세 덩어리가 같이 담겼다:
+**9/11 — 열린 PR 이 하나도 없다.** `main` 은 `b73522f` 이고, 하루 만에 다섯 개가 들어갔다:
 
-- **#57 손님 메일** — 접수·확정·거절·매장취소·만료 다섯 통 (`features/booking/notify.ts`, `lib/mail/templates.ts`).
-  어떤 전이가 어떤 메일인지는 전이 표 옆 `transition-rules.ts` 의 `CUSTOMER_MAIL_ON` 에 있다
-- **#43~#46 근무 교대** — `features/schedule/swap-rules.ts`(순수) + `swaps.ts`, `/console/schedule/swaps`,
-  크론 C8 `/api/cron/expire-swaps`(매시, 72시간 만료)
-- **#65·#66 관리자 콘솔** — 가입 심사 · 사업장 상태 제어 (`features/admin/`, `/admin/applications`, `/admin/businesses`).
-  예약 전이 표에 `ADMIN` 자리가 생겼다(차단 시 확정 예약 취소 — 사유 필수)
+- **#181** 에픽 #6·#7·#9 앞부분 (스쿼시라 한 커밋에 세 덩어리) — 손님 메일 다섯 통 · 근무 교대 · 관리자 가입심사/상태제어
+- **#182** 그 리뷰 반영 — 메일 링크를 없는 화면(`/me/reservations/{id}`) 대신 매장 홈(`/@{slug}`)으로,
+  배치는 발송을 모아서(`notify: false` + 동시 8건), 교대 정원 판정을 `pg_advisory_xact_lock` **안**으로(`assertPlanUsable`)
+- **#183** 메일 발송 10초 시한 — Resend SDK 도 그 안의 `fetch` 도 타임아웃이 없어 느린 응답이 행(hang)이 됐다.
+  SDK 타입에 `signal` 이 없어 `lib/mail/timeout.test.ts` 가 fetch 까지 닿는지 직접 본다
+- **#178** 이미지 리사이즈를 업로드 시점으로 (`sharp`) · 브라우저 직접 PUT 폐기 · Content-Length 없는 요청은 411
 
-마이그레이션은 **0008 그대로**. 이번 작업은 전부 기존 표(`shift_swap_requests`·`work_exceptions`·
-`businesses`·`audit_logs`)를 쓴다. 새 의존성은 `sharp` 하나인데 아직 머지 전이다(PR #178).
+에픽 **#47(7. 예약 엔진)이 닫혔다** — 세부 #48~#57 전부 완료. FR-BOOK 중 남은 알림·예약 카드는 #95·#120 의 몫이다.
+**#179·#180 은 머지가 아니라 클로즈**했다. 내용이 #181 로 이미 들어가 있어서, 머지하면 리뷰 전 옛 코드가 되살아난다.
+
+마이그레이션은 **0008 그대로**. 새 의존성은 `sharp` 하나.
 
 ## 막힌 것
 
-**`main` 에 리뷰 반영분 2건이 빠져 있다.** #181 을 머지한 시점이 리뷰 수정 전이었다. 확인은 이렇게 한다 —
-둘 다 `0` 이면 아직 안 들어간 것이다.
+**`main` 브랜치 룰셋이 `Disabled` 다.** 커밋에서 회사 이메일을 지우느라 force-push 하려고 껐는데, 그 뒤로
+#181·#182·#183·#178 넷이 **보호 없이** 머지됐다. **Active 로 되돌릴 것** — 다음 PR 전에.
+
+**브랜치 둘이 남아 있다.** `feat/9-admin-console`(#181 머지됨) · `fix/review-followups`(#182 머지 후 자동 삭제된 것을
+뒤늦은 push 가 되살렸다 — 유일 커밋은 #183 으로 옮겨 갔다). 둘 다 지운다:
 
 ```bash
-git show origin/main:src/features/booking/notify.ts   | grep -c reservationUrl    # #57 메일 링크
-git show origin/main:src/features/schedule/swaps.ts   | grep -c assertPlanUsable  # #43 정원 판정
+git push origin --delete feat/9-admin-console fix/review-followups
 ```
-
-- **#57**: 메일 다섯 통이 `/me/reservations/{id}` 를 걸었는데 그 화면은 마이페이지 에픽(#87~#89)의 것이라
-  아직 없다 — 손님이 누르면 404. 매장 공개 홈(`/@{slug}`)으로 바꾸고, 확정 메일에는 "바꾸거나 취소하려면
-  매장으로 연락, 예약번호를 알려 주세요" 를 넣었다. 링크를 만드는 자리는 `notify.ts` 의 `reservationUrl` 하나다
-- **#43**: 정원(`peakOccupancy`) 판정이 `pg_advisory_xact_lock` **밖**이라, 계획과 잠금 사이에 들어온 예약을
-  못 보고 정원 초과 이관이 커밋될 수 있었다. 계획을 자물쇠 안에서 다시 돌리고 `assertPlanUsable` 로 두 판정을 묶었다
-
-고친 커밋은 브랜치 `fix/review-followups` 에 체리픽 중이다(`6db8c0b`, `899b7a5`).
-
-**`main` 브랜치 룰셋이 `Disabled` 다.** 커밋에서 회사 이메일을 지우느라 force-push 하려고 껐다. **Active 로 되돌릴 것.**
 
 **운영 쪽 세 가지는 그대로다.** 손님 메일 발신 도메인 미검증(`MAIL_FROM` 이 Resend 샌드박스) · 카카오 로그인 없음 ·
 `NEXT_PUBLIC_FIREBASE_PROJECT_ID` 가 `majubom` vs `majubom-bb43e` 미확정. 셋 다 코드가 아니라 계정 작업이다(#12).
 
 ## 다음 한 수
 
-1. **`fix/review-followups` 마무리** — `git cherry-pick 6db8c0b 899b7a5` 를 끝내고 PR. 본문에
-   `Closes #43 / #44 / #45 / #46 / #57` 을 한 줄씩 넣는다. **#179·#180 을 머지 없이 닫으면 그 이슈들이
-   안 닫히기 때문이다.**
-2. **PR 정리** — #178(이미지 리사이즈, 리뷰 반영 완료)은 머지. #179·#180 은 내용이 `main` 에 들어갔으니
-   닫고, 브랜치 `feat/7-booking-mail`·`feat/6-shift-swap`·`feat/9-admin-console` 삭제
-3. **에픽 #9 나머지** — #67 사용량 집계(배치 03:00) · #68 감사 로그 조회 · #69 지표 대시보드.
-   **#70 신고 처리는 못 한다** — 대상인 리뷰(#91)·채팅(#115)이 아직 없다
-4. **에픽 #12 고객 마이페이지(#87~#89)** — 이게 붙으면 `notify.ts` 의 `reservationUrl` 을
-   `/me/reservations/{id}` 로 되돌린다. 템플릿 다섯 통은 그대로다
+에픽 1~10 에서 남은 것은 **#64(9. 관리자 콘솔)의 #67~#70 과 #12** 뿐이다. 그런데 넷 중 둘이 다른 에픽에 묶여 있다:
 
-**아직 정하지 못한 것은 전부 `LATER.md`.** 이번에 늘어난 것은 L-40(R2 리사이즈 방식 — 해소) ·
-L-41(1기 게이트) · L-42(교대 요청 시점 경고) · L-43(교대 알림이 메일뿐)이다.
+1. **#68 감사 로그 조회** — 막힌 것 없음. 적재는 이미 되고 있고 읽는 화면만 없다. **여기부터.**
+2. **#67 사용량 집계** — 막힌 것 없음. `usage_counters` 표는 있고 쓰는 코드가 0줄이다.
+   새 크론(03:00)이라 **번호를 여기서 정해야 한다** — `LATER.md` L-44.
+3. **#69 지표 대시보드 — 절반만 된다.** 확정률·노쇼율은 지금 되고, PWA 설치율은 에픽 #16 미착수,
+   로그인 전환율은 카카오(#12)가 없으면 값이 무의미하다(기획서 R13 의 전제가 원클릭). 되는 둘만 먼저 하거나 범위를 쪼갠다.
+4. **#70 신고 처리 — 지금 만들 수 없다.** 대상인 리뷰(#91~#94)·채팅(#115~#124)이 착수 전이다.
+   이대로 두면 **#64 가 에픽 13·17 전까지 영원히 안 닫힌다** — #70 을 #64 에서 떼어 뒤로 옮길지 정할 것.
+
+그다음은 **에픽 #12 고객 마이페이지(#87~#90)**. 이게 붙으면 `notify.ts` 의 `reservationUrl` 을 `/me/reservations/{id}` 로
+되돌린다 — 함수 하나이고 템플릿 다섯 통은 그대로다.
+
+**아직 정하지 못한 것은 전부 `LATER.md`** (L-44 까지). 이번에 늘어난 것은 L-44(크론 번호 충돌)이고,
+L-40(R2 리사이즈)은 해소돼 `src/lib/storage/README.md` 로 옮겼다.

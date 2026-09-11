@@ -64,6 +64,9 @@ npm run dev
 
 넷 다 조건부 UPDATE 라 재실행이 무해하고, 한 번에 최대 500건씩 처리한다. C2 가 멈추면 콘솔 요약의 "승인 대기" 가 계속 늘어난다 — 그게 신호다.
 
+**번호는 아직 명세와 맞지 않는다.** 여기 `C1` 은 명세·#99 의 `C1`(리마인더)이 아니고, `C8` 은 명세 표(C1~C7)에 없는 번호다.
+리마인더가 없어서 지금은 안 부딪히지만 에픽 #14 가 들어오면 `C1` 이 두 개가 된다 — `LATER.md` L-44.
+
 ```bash
 gcloud scheduler jobs create http majubom-expire-requests \
   --location=asia-northeast3 --schedule="*/5 * * * *" --time-zone="Asia/Seoul" \
