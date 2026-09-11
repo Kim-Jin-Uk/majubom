@@ -29,6 +29,7 @@ export type BusinessPolicy = {
   minLeadTimeMin: number;
   maxAdvanceDays: number;
   cancelDeadlineHours: number;
+  /** 고객 1명이 **같은 상품**에 동시에 들고 있을 수 있는 예약 수 (확정 + 대기). 다른 상품은 따로 센다 — `booking/create.ts` */
   maxActivePerCustomer: number;
   autoNoShowAfterHours: number;
   requestExpireHours: number;

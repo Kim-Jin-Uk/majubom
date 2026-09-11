@@ -31,7 +31,7 @@ const PLACE_ERROR: Record<string, string> = {
   OUT_OF_RANGE: "이 가게가 열어 둔 예약 가능 기간을 벗어났어요",
   DURATION_NOT_ALLOWED: "고르신 이용 시간은 지금 받지 않아요. 다시 골라 주세요",
   PARTY_SIZE_EXCEEDED: "인원이 이 상품의 상한을 넘어요",
-  TOO_MANY_ACTIVE: "이 가게에 잡아 두신 예약이 이미 많아요. 하나를 취소한 뒤 다시 시도해 주세요",
+  TOO_MANY_ACTIVE: "이 상품으로 잡아 두신 예약이 이미 많아요. 하나를 취소한 뒤 다시 시도해 주세요",
   CANCEL_ABUSE: "오늘 취소가 잦아 잠시 예약이 제한됐어요. 내일 다시 시도해 주세요",
   UNAUTHENTICATED: "로그인이 풀렸어요. 다시 로그인해 주세요",
 };

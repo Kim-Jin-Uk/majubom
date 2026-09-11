@@ -310,13 +310,23 @@ async function insertOne(
     }
 
     if (!mode.bypassPolicy) {
-      // 한도는 사업장 단위(정책이 사업장 것이다) · **앞으로의** 예약만 센다 —
-      // 지난 예약은 상태 전이(COMPLETED·EXPIRED)가 늦어질 수 있고, 그게 고객을 영구히 막으면 안 된다.
-      // 변경이면 원 예약은 위에서 이미 취소돼 자연히 빠진다
+      // 한도는 **사업장 × 상품** 단위다. 정책은 사업장 것이지만 세는 범위는 상품까지 좁힌다 —
+      // 사업장 단위로 세면 "젤네일 3건" 을 잡은 고객이 그 매장의 페디큐어를 아예 예약할 수 없다.
+      // 막으려는 것은 한 상품의 자리를 한 사람이 쓸어 가는 것이고, 상품이 다르면 다른 자원·다른 격자다.
+      // **앞으로의** 예약만 센다 — 지난 예약은 상태 전이(COMPLETED·EXPIRED)가 늦어질 수 있고,
+      // 그게 고객을 영구히 막으면 안 된다. 변경이면 원 예약은 위에서 이미 취소돼 자연히 빠진다
       const [{ n: active }] = await tx
         .select({ n: sql<number>`count(*)::int` })
         .from(reservations)
-        .where(and(eq(reservations.customerId, customerId), eq(reservations.businessId, businessId), inArray(reservations.status, ["REQUESTED", "CONFIRMED"]), gte(reservations.startAt, now)));
+        .where(
+          and(
+            eq(reservations.customerId, customerId),
+            eq(reservations.businessId, businessId),
+            eq(reservations.productId, input.productId),
+            inArray(reservations.status, ["REQUESTED", "CONFIRMED"]),
+            gte(reservations.startAt, now),
+          ),
+        );
       if (active >= policy.maxActivePerCustomer) throw new HttpError(409, "TOO_MANY_ACTIVE", { limit: policy.maxActivePerCustomer });
       // 남용 방지 (FR-BOOK-040): 같은 사업장에서 오늘 3건을 넘겨 취소한 고객은 당일 재예약을 막는다. 같은 고객 락 안이라 경쟁이 없다
       // "당일" 은 사업장 타임존의 달력 하루다 (24시간 롤링이 아니다 — 어젯밤 취소가 다음 날 아침을 막으면 안 된다)
