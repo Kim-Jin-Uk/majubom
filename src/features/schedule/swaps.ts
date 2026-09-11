@@ -489,23 +489,27 @@ async function applyApproval(businessId: string, id: string, tz: string, input: 
   if (!cur || cur.status !== "ACCEPTED") throw new HttpError(409, "INVALID_SWAP_ACTION", { status: cur?.status ?? "GONE" });
   const shape = shapeOf(cur);
 
-  // ── 0단계. 트랜잭션 **밖**에서 전부 판정한다 ────────────────────────────
-  const plan = await planSwap(businessId, shape, tz);
-  if (snapshotKey(plan.currentIds) !== snapshotKey(cur.reservationIdsAtRequest)) {
-    // 요청부터 승인까지 최대 72시간이 비어 있다 — 그 사이 들어온 예약을 못 보고 넘기면 안 된다
-    throw new HttpError(409, "SWAP_RESERVATIONS_CHANGED", { reservations: plan.currentIds, atRequest: cur.reservationIdsAtRequest });
-  }
-  if (plan.conflicts.length > 0) throw new HttpError(409, "SWAP_CONFLICT", { conflicts: plan.conflicts });
-  if (plan.directPicks.length > 0 && !input.confirmDirectPicks) {
-    // 담당자를 보고 예약한 고객이다 — 자동으로 바꾸지 않는다 (FR-SHIFT-030)
-    throw new HttpError(409, "SWAP_DIRECT_PICKS", { reservations: plan.directPicks.map((r) => ({ id: r.id, code: r.code, customerName: r.customerName })) });
-  }
+  // ── 0단계 (예비). 트랜잭션 **밖**에서 먼저 본다 ─────────────────────────
+  // 여기서 보는 이유는 "사람에게 물어봐야 하는 것" 을 자물쇠를 쥔 채 묻지 않기 위해서다 —
+  // 담당자 직접 지정 확인(`SWAP_DIRECT_PICKS`)은 왕복이 한 번 더 필요하다.
+  // **판정의 정본은 아래 트랜잭션 안의 재계산이다.** 여기 통과했다고 반영이 보장되지는 않는다.
+  const preview = await planSwap(businessId, shape, tz);
+  assertPlanUsable(preview, cur.reservationIdsAtRequest, input);
 
   const moved = await db.transaction(async (tx) => {
-    // 1. 두 자원을 id 오름차순으로 잠근다 — 반대 방향 교대가 동시에 들어와도 데드락이 나지 않는다
+    // 1. 두 자원을 id 오름차순으로 잠근다 — 반대 방향 교대가 동시에 들어와도 데드락이 나지 않는다.
+    //    예약 생성(`create.ts`)도 같은 키(`hashtext(resource_id::text)`)를 잡으므로, 이 뒤로는
+    //    두 자원에 새 예약이 끼어들 수 없다
     for (const rid of [shape.requesterResourceId, shape.targetResourceId].sort()) {
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${rid}))`);
     }
+
+    // **자물쇠 안에서 다시 센다.** 바깥의 계산과 자물쇠 사이에 들어온 예약은 그 계산에 없다 —
+    // 정원 N 자원이면 `peakOccupancy` 가 그만큼 낮게 나와 정원 초과 이관이 커밋될 수 있었다(리뷰 지적).
+    // 스냅샷·충돌·직접 지정까지 같은 기준으로 다시 판정하고, 아래는 이 계획만 쓴다
+    const plan = await planSwap(businessId, shape, tz, tx);
+    assertPlanUsable(plan, cur.reservationIdsAtRequest, input);
+
     await setStatus(id, "ACCEPTED", "APPROVED", { approvedAt: new Date() }, tx);
 
     // 2~4. 근무표
@@ -555,6 +559,22 @@ async function applyApproval(businessId: string, id: string, tz: string, input: 
   // 6. 담당자가 바뀐 예약의 고객에게 알린다. 커밋 뒤에, 실패해도 던지지 않는다 (#57 과 같은 규약)
   for (const rid of moved) await notifyReservation(rid, "REASSIGNED");
   return { status: "APPROVED", movedReservationIds: moved };
+}
+
+/**
+ * 계획을 반영해도 되는가. **바깥(미리보기)과 자물쇠 안(정본)이 같은 판정을 쓰도록** 한 함수로 묶었다 —
+ * 둘이 갈라지면 "미리보기는 통과했는데 반영에서 다른 이유로 막히는" 조합이 생긴다.
+ */
+function assertPlanUsable(plan: SwapPlan, atRequest: string[], input: SwapActionInput): void {
+  if (snapshotKey(plan.currentIds) !== snapshotKey(atRequest)) {
+    // 요청부터 승인까지 최대 72시간이 비어 있다 — 그 사이 들어온 예약을 못 보고 넘기면 안 된다
+    throw new HttpError(409, "SWAP_RESERVATIONS_CHANGED", { reservations: plan.currentIds, atRequest });
+  }
+  if (plan.conflicts.length > 0) throw new HttpError(409, "SWAP_CONFLICT", { conflicts: plan.conflicts });
+  if (plan.directPicks.length > 0 && !input.confirmDirectPicks) {
+    // 담당자를 보고 예약한 고객이다 — 자동으로 바꾸지 않는다 (FR-SHIFT-030)
+    throw new HttpError(409, "SWAP_DIRECT_PICKS", { reservations: plan.directPicks.map((r) => ({ id: r.id, code: r.code, customerName: r.customerName })) });
+  }
 }
 
 /** C? 72시간 무응답 만료 (FR-SHIFT-010). 배치라 한 건이 막혀도 다음 건으로 넘어간다 */
