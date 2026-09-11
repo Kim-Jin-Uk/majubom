@@ -53,6 +53,8 @@ export function ReservationDetailPanel({ detail, role, readOnly, resources }: { 
    */
   function confirmOthers(a: Action): boolean {
     if (role === "OWNER" || detail.mine) return true;
+    // 담당이 **없는** 자원(룸·공용)은 "남의 담당" 이 아니다 — 서버도 이관하지 않는다. 묻지 않고 지나간다
+    if (!detail.resourceAssigned) return true;
     // 담당자(사람)에게만 존칭을 붙인다 — 룸·장비에 "「대회의실」님" 은 어색하다 (리뷰 지적)
     const who = detail.resourceIsStaff ? `「${detail.resourceName}」님` : `「${detail.resourceName}」`;
     const takeOver = a.to === "CONFIRMED" || a.to === "REJECTED";

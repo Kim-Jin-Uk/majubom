@@ -221,9 +221,15 @@ export async function transitionReservation(
     if (rule.reasonRequired && !reason) throw new HttpError(400, "REASON_REQUIRED");
     rule.guard?.(r, now);
 
-    // 남의 담당 건을 **승인·거절**하면 담당이 넘어온다 (`takeOver`). 같은 트랜잭션이라
+    // **동료 담당** 건을 승인·거절하면 담당이 넘어온다 (`takeOver`). 같은 트랜잭션이라
     // 옮길 자리가 없으면 전이도 함께 실패한다 — 승인만 되고 담당이 그대로 남는 상태를 만들지 않는다.
-    if (rule.takeOver && actor.kind === "CONSOLE" && actor.role !== "OWNER" && r.resourceMemberId !== actor.memberId) {
+    //
+    // `resourceMemberId !== null` 이 중요하다. 룸·공용 자원은 담당이 **없어서** null 인데,
+    // 그것까지 "동료 담당" 으로 읽으면 손님이 고른 적 없는 매니저의 개인 자원으로 룸 예약이 조용히 옮겨진다
+    // (STAFF 와 SPACE 를 섞어 연결한 상품에서 실제로 통과한다 — `RESOURCE_NOT_LINKED` 가 못 막는다).
+    // 거절도 같은 경로라, 무관한 매니저의 일정이 차 있으면 룸 예약 거절이 SLOT_TAKEN 으로 실패할 수 있다. (리뷰 지적)
+    // 담당이 없는 자원에는 옮길 "원래 담당" 이 없으므로 이관 없이 전이만 한다.
+    if (rule.takeOver && actor.kind === "CONSOLE" && actor.role !== "OWNER" && r.resourceMemberId !== null && r.resourceMemberId !== actor.memberId) {
       const mine = await ownResourceId(actor.businessId, actor.memberId);
       // 담당자 자원이 없는 매니저(점장 등)는 대신 승인할 수 없다 — 넘겨받을 자리가 없다
       if (!mine) throw new HttpError(409, "NO_OWN_RESOURCE");
