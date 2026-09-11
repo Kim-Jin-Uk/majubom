@@ -85,7 +85,7 @@ gcloud scheduler jobs create http majubom-expire-requests \
 
 | 패키지 | 왜 고쳤나 |
 |---|---|
-| `qs` → `^6.16.0` | express 4 의 `~6.14.0` 안에서 minor 만 올린다. 위험이 없다 |
+| `qs` → `^6.16.0` | qs 자체로는 minor 두 칸(6.14→6.16)이다. express 4 의 `~6.14.0`(`<6.15.0`) **밖**으로 강제하는 것이라 override 가 필요했다 — 경로가 firebase-tools → express 뿐이라 앱에 닿지 않는다 |
 | `gaxios > uuid` → `^11.1.1` | **하나뿐인 프로덕션 경로**(`firebase-admin` → optional `@google-cloud/storage` → `gaxios`)라 닫아 뒀다 |
 
 남긴 넷은 major 를 건너뛰어야 해서 두었다. 넷 다 **dev 전용**이고, `21-4 의존성 정비`(#147)에서 다시 본다:
