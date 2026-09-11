@@ -29,6 +29,34 @@ export const SWAP_RULES: Record<SwapAction, { from: SwapStatus[]; to: SwapStatus
   EXPIRE: { from: ["PENDING"], to: "EXPIRED", by: ["SYSTEM"] },
 };
 
+/**
+ * 지금 이 사람이 교대를 **요청할 수 있는가**, 없다면 왜인지.
+ *
+ * 화면이 조건을 만족하지 못하면 폼을 감추는데, 이유를 말하지 않으면 "페이지는 열리는데 뭘 해야 할지 모르겠다" 가 된다
+ * — 로컬 테스트에서 실제로 그랬다. 특히 **상대가 0명**인 경우가 조용했다: 본인 담당 자원은 있으니
+ * "담당자 계정만 요청할 수 있어요" 안내도 안 뜨고, 폼만 사라진다.
+ *
+ * 상대가 될 수 있는 담당자는 **계정이 연결되고 활성인 STAFF** 뿐이다 — 수락할 사람이 있어야 교대다.
+ */
+export type SwapEligibility = { canRequest: boolean; reason: string | null };
+
+export function swapEligibility(input: { readOnly: boolean; hasOwnResource: boolean; partnerCount: number }): SwapEligibility {
+  if (input.readOnly) return { canRequest: false, reason: "지금은 읽기 전용이라 교대를 요청할 수 없어요." };
+  if (!input.hasOwnResource) {
+    return {
+      canRequest: false,
+      reason: "교대는 담당자 자원이 연결된 계정만 요청할 수 있어요. 내 계정에 연결된 담당자가 없어요 — 사장님이 자원 설정에서 연결해 주면 요청할 수 있어요.",
+    };
+  }
+  if (input.partnerCount === 0) {
+    return {
+      canRequest: false,
+      reason: "교대할 상대가 없어요. 상대가 되려면 그 담당자 자원에 계정이 연결되어 있고 활성이어야 해요 — 계정을 연결하지 않은 담당자와는 교대할 수 없어요.",
+    };
+  }
+  return { canRequest: true, reason: null };
+}
+
 /** 더 움직이지 않는 상태 — 목록에서 접고, 중복 요청 검사에서도 제외한다 */
 export const isSwapOpen = (s: SwapStatus): boolean => s === "PENDING" || s === "ACCEPTED";
 
