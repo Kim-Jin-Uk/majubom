@@ -76,6 +76,30 @@ gcloud scheduler jobs create http majubom-expire-requests \
 
 시크릿을 명령줄에 직접 적으면 셸 히스토리에 남는다 — 파일에서 읽는다. 잡 설정에는 값이 저장되므로, 프로젝트 열람 권한을 가진 사람은 볼 수 있다.
 
+### 의존성 취약점
+
+`npm audit` 이 moderate 9건을 낸다. **전부 `firebase-tools`·`drizzle-kit` 안쪽의 전이 의존성이고, 앱이 쓰는 코드 경로가 아니다.**
+`npm audit fix --force` 는 firebase-tools 를 10.1.1 로, drizzle-kit 을 0.18.1 로 **다운그레이드**하려 한다 — 쓰면 안 된다.
+
+고친 둘은 `overrides` 에 있다:
+
+| 패키지 | 왜 고쳤나 |
+|---|---|
+| `qs` → `^6.16.0` | express 4 의 `~6.14.0` 안에서 minor 만 올린다. 위험이 없다 |
+| `gaxios > uuid` → `^11.1.1` | **하나뿐인 프로덕션 경로**(`firebase-admin` → optional `@google-cloud/storage` → `gaxios`)라 닫아 뒀다 |
+
+남긴 넷은 major 를 건너뛰어야 해서 두었다. 넷 다 **dev 전용**이고, `21-4 의존성 정비`(#147)에서 다시 본다:
+
+- `esbuild <=0.24.2` — `@esbuild-kit/core-utils`(deprecated, drizzle-kit 이 아직 쓴다)가 `~0.18.20` 에 묶여 있다.
+  취약점은 esbuild **dev 서버**의 CORS 인데 그 패키지는 transform API 만 쓴다 — 서버를 띄우지 않는다.
+  `overrides` 로 0.25 를 밀어 봤지만 npm 이 그 중첩 경로에 적용하지 않는다.
+- `csv-parse <7.0.2`(5→7) · `stream-json <=3.4.0`(1→3) · `@opentelemetry/core <2.8.0`(1→2) — 전부 firebase-tools 내부다.
+  강제로 올리면 `npm run test:rules:emu` 가 쓰는 에뮬레이터가 깨질 수 있고, 그건 CI 게이트다.
+
+`uuid` 건은 고치기 전에도 실제 위험은 없었다 — 권고문이 말하는 것은 v3/v5/v6 에 `buf` 를 넘길 때이고,
+`gaxios` 는 multipart 경계에 `v4()` 만 쓴다. 게다가 우리는 `firebase-admin/app` 과 `/auth` 만 import 해서
+`@google-cloud/storage` 가 아예 적재되지 않는다. 그래도 프로덕션 트리에 있는 유일한 건이라 닫는 쪽을 골랐다.
+
 ### 인증
 
 Auth.js v5 + 서버 저장 리프레시 토큰. **액세스 스냅샷(JWT 쿠키) 15분 / 리프레시(회전) 30일**, 갱신과 콘솔 매 요청 상태 재확인은
