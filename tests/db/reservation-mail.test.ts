@@ -117,6 +117,9 @@ describe.skipIf(!dbTestEnabled())("예약 메일 (#57)", () => {
     expect(sent[0].subject).toContain("예약이 확정되었습니다");
     expect(sent[0].text).toContain(r.code);
     expect(sent[0].text).toContain("시술 60분");
+    // 링크는 매장 공개 홈 — 손님용 예약 상세(#89)가 아직 없어 404 로 보내지 않는다
+    expect(sent[0].text).toMatch(/\/@ml-[0-9a-f]{8}(\s|$)/m);
+    expect(sent[0].text).not.toContain("/me/reservations");
     // 가게 시각(KST) 로 적힌다 — 서버 시계(UTC)가 아니다
     expect(sent[0].text).toMatch(/\d{4}년 \d+월 \d+일 \(.\) \d{2}:\d{2} – \d{2}:\d{2}/);
   }, 30_000);
@@ -163,6 +166,17 @@ describe.skipIf(!dbTestEnabled())("예약 메일 (#57)", () => {
     // REQUESTED 건까지 만료시킨다. 메일 판단은 전이 하나에 달려 있으므로 같은 전이를 직접 일으킨다
     await transitionReservation(r.id, "EXPIRED", { kind: "SYSTEM" });
     expect(sent.at(-1)!.subject).toContain("만료되었습니다");
+  }, 30_000);
+
+  it("배치는 전이마다 메일을 기다리지 않는다 — 미뤘다가 모아서 보낸다", async () => {
+    const f = await make(false);
+    const r = await createReservation({ productId: f.productId, startAt: at(11), partySize: 1, customerNote: null }, { uid: f.customerId });
+    sent.length = 0;
+    // `expireRequests` 가 쓰는 경로다. 500건짜리 루프가 메일 왕복을 하나씩 기다리면 5분 주기 배치가 그만큼 길어진다
+    await transitionReservation(r.id, "EXPIRED", { kind: "SYSTEM" }, { notify: false });
+    expect(sent).toHaveLength(0);
+    const [row] = await db.select({ status: reservations.status }).from(reservations).where(eq(reservations.id, r.id));
+    expect(row.status, "메일을 미뤘다고 전이까지 미뤄지면 안 된다").toBe("EXPIRED");
   }, 30_000);
 
   it("워크인에는 보내지 않는다 — 고객 계정이 사업장 내부 계정이라 보낼 곳이 없다", async () => {

@@ -87,7 +87,7 @@ export type ReservationMailInfo = {
   when: string;
   partySize: number;
   code: string;
-  /** 절대 URL. 예약 상세 */
+  /** 절대 URL. 지금은 매장 공개 홈 — 손님용 예약 상세 화면은 아직 없다 (`booking/notify.ts` `reservationUrl`) */
   url: string;
 };
 
@@ -106,13 +106,13 @@ export function reservationRequestedMail(to: string, i: ReservationMailInfo): Ma
   return mail(
     to,
     `예약이 접수되었습니다 — ${i.businessName}`,
-    `예약 신청이 접수되었습니다. 아직 확정은 아닙니다 — 매장이 확인하면 확정 메일을 다시 보내 드립니다.\n\n${block(i)}\n\n예약 확인: ${i.url}`,
+    `예약 신청이 접수되었습니다. 아직 확정은 아닙니다 — 매장이 확인하면 확정 메일을 다시 보내 드립니다.\n\n${block(i)}\n\n매장 페이지: ${i.url}`,
   );
 }
 
 /** 확정 — 손님이 실제로 가도 되는 상태 */
 export function reservationConfirmedMail(to: string, i: ReservationMailInfo): Mail {
-  return mail(to, `예약이 확정되었습니다 — ${i.businessName}`, `예약이 확정되었습니다.\n\n${block(i)}\n\n예약 확인·취소: ${i.url}`);
+  return mail(to, `예약이 확정되었습니다 — ${i.businessName}`, `예약이 확정되었습니다.\n\n${block(i)}\n\n매장 위치·연락처: ${i.url}\n\n예약을 바꾸거나 취소하셔야 하면 매장으로 연락해 주세요. 위 예약번호를 알려 주시면 됩니다.`);
 }
 
 /** 거절 — 매장이 받지 않기로 한 것. 취소와 구분한다 */

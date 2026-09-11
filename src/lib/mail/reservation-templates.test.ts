@@ -14,7 +14,7 @@ const INFO: ReservationMailInfo = {
   when: "2026년 10월 5일 (월) 14:00 – 15:00",
   partySize: 2,
   code: "K3M7QP9A",
-  url: "https://majubom.kr/me/reservations/abc",
+  url: "https://majubom.kr/@majubom-studio",
 };
 const ALL = [
   reservationRequestedMail("a@b.c", INFO),
@@ -65,5 +65,11 @@ describe("예약 메일", () => {
 
   it("링크는 절대 URL 이다 — 메일 클라이언트에는 기준 주소가 없다", () => {
     for (const m of ALL) expect(m.text).toMatch(/https:\/\/majubom\.kr\//);
+  });
+
+  it("확정 메일은 취소하는 법을 알려 준다 — 손님용 예약 상세 화면이 아직 없다 (#89)", () => {
+    const m = reservationConfirmedMail("a@b.c", INFO);
+    expect(m.text).toContain("매장으로 연락");
+    expect(m.text, "없는 화면으로 보내지 않는다").not.toContain("/me/reservations");
   });
 });

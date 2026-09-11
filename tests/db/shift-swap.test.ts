@@ -26,7 +26,7 @@ const iso = (d: Date) => d.toISOString().slice(0, 10);
 const dow = (d: Date) => d.getUTCDay();
 const at = (d: Date, h: number) => new Date(d.getTime() + h * 3_600_000).toISOString();
 
-async function fixture(autoApprove = false) {
+async function fixture(autoApprove = false, cap: { a?: number; b?: number } = {}) {
   const tag = randomUUID().slice(0, 8);
   const [biz] = await db
     .insert(businesses)
@@ -42,16 +42,16 @@ async function fixture(autoApprove = false) {
     })
     .returning({ id: businesses.id });
 
-  const mk = async (name: string) => {
+  const mk = async (name: string, capacity: number) => {
     const [u] = await db.insert(users).values({ email: `${name}-${tag}@test.local`, name, provider: "LOCAL" }).returning({ id: users.id });
     const [m] = await db.insert(businessMembers).values({ userId: u.id, businessId: biz.id, role: "MANAGER", status: "ACTIVE" }).returning({ id: businessMembers.id });
-    const [r] = await db.insert(resources).values({ businessId: biz.id, type: "STAFF", name: `${name} 자리`, capacity: 1, memberId: m.id }).returning({ id: resources.id });
+    const [r] = await db.insert(resources).values({ businessId: biz.id, type: "STAFF", name: `${name} 자리`, capacity, memberId: m.id }).returning({ id: resources.id });
     return { uid: u.id, memberId: m.id, resourceId: r.id, actor: { uid: u.id, role: "MANAGER" as const, memberId: m.id } };
   };
   const [ownerU] = await db.insert(users).values({ email: `own-${tag}@test.local`, name: "사장", provider: "LOCAL" }).returning({ id: users.id });
   const [ownerM] = await db.insert(businessMembers).values({ userId: ownerU.id, businessId: biz.id, role: "OWNER", status: "ACTIVE" }).returning({ id: businessMembers.id });
-  const a = await mk("가");
-  const b = await mk("나");
+  const a = await mk("가", cap.a ?? 1);
+  const b = await mk("나", cap.b ?? 1);
 
   // 가는 D1 요일에만, 나는 D2 요일에만 근무한다 — GIVE 의 "대상이 그날 이미 근무 중이면 불가" 를 통과하려면 필요하다.
   // 끝을 23:59 로 두는 것도 의도다: 자정(=1440)까지의 근무는 WorkException 에 적을 수 없어 교대가 막힌다
@@ -61,26 +61,27 @@ async function fixture(autoApprove = false) {
   ]);
 
   // 둘 다 맡을 수 있는 상품 / 가만 맡을 수 있는 상품
-  const mkProduct = async (name: string, resourceIds: string[]) => {
+  const mkProduct = async (name: string, resourceIds: string[], capacityPerSlot = 1) => {
     const [p] = await db
       .insert(products)
-      .values({ businessId: biz.id, name, startMode: "FREE", slotIntervalMin: 60, durationMin: 60, capacityPerSlot: 1, maxPartySize: 1, resourceSelectMode: "NONE", status: "ACTIVE" })
+      .values({ businessId: biz.id, name, startMode: "FREE", slotIntervalMin: 60, durationMin: 60, capacityPerSlot, maxPartySize: 1, resourceSelectMode: "NONE", status: "ACTIVE" })
       .returning({ id: products.id });
     await db.insert(productResources).values(resourceIds.map((resourceId) => ({ productId: p.id, resourceId })));
     return p.id;
   };
-  const shared = await mkProduct("공용 시술", [a.resourceId, b.resourceId]);
+  const shared = await mkProduct("공용 시술", [a.resourceId, b.resourceId], Math.max(cap.a ?? 1, 1));
   const onlyA = await mkProduct("가 전용", [a.resourceId]);
 
   const [cust] = await db.insert(users).values({ email: `c-${tag}@test.local`, name: "손님", provider: "LOCAL" }).returning({ id: users.id });
+  const [cust2] = await db.insert(users).values({ email: `c2-${tag}@test.local`, name: "손님2", provider: "LOCAL" }).returning({ id: users.id });
 
-  return { businessId: biz.id, a, b, shared, onlyA, customerId: cust.id, ownerActor: { uid: ownerU.id, role: "OWNER" as const, memberId: ownerM.id }, userIds: [ownerU.id, a.uid, b.uid, cust.id], memberIds: [ownerM.id, a.memberId, b.memberId] };
+  return { businessId: biz.id, a, b, shared, onlyA, customerId: cust.id, customerId2: cust2.id, ownerActor: { uid: ownerU.id, role: "OWNER" as const, memberId: ownerM.id }, userIds: [ownerU.id, a.uid, b.uid, cust.id, cust2.id], memberIds: [ownerM.id, a.memberId, b.memberId] };
 }
 
 type F = Awaited<ReturnType<typeof fixture>>;
 const made: F[] = [];
-const make = async (autoApprove = false) => {
-  const f = await fixture(autoApprove);
+const make = async (autoApprove = false, cap: { a?: number; b?: number } = {}) => {
+  const f = await fixture(autoApprove, cap);
   made.push(f);
   return f;
 };
@@ -196,6 +197,21 @@ describe.skipIf(!dbTestEnabled())("근무 교대 (#43)", () => {
     expect(ex.some((e) => e.resourceId === f.b.resourceId && e.kind === "EXTRA" && e.date === iso(D1))).toBe(true);
     expect(ex.some((e) => e.resourceId === f.b.resourceId && e.kind === "OFF" && e.date === iso(D2))).toBe(true);
     expect(ex.some((e) => e.resourceId === f.a.resourceId && e.kind === "EXTRA" && e.date === iso(D2))).toBe(true);
+  }, 60_000);
+
+  /**
+   * 정원은 **옮긴 뒤의 최종 구성**으로 세야 한다 — 옮겨 오는 것들끼리도 부딪힌다.
+   * 이 판정이 자물쇠 밖에 있으면, 계산과 잠금 사이에 들어온 예약을 못 보고 정원 초과가 커밋된다(리뷰 지적).
+   */
+  it("옮긴 뒤 정원을 넘기면 막는다 — 옮겨 오는 예약끼리 부딪히는 경우까지", async () => {
+    // 가(정원 2)에 같은 시각 예약 둘 → 나(정원 1)로 함께 옮기면 서로 부딪힌다
+    const f = await make(false, { a: 2 });
+    await createReservation({ productId: f.shared, startAt: at(D1, 12), partySize: 1, customerNote: null }, { uid: f.customerId });
+    await createReservation({ productId: f.shared, startAt: at(D1, 12), partySize: 1, customerNote: null }, { uid: f.customerId2 });
+    const sw = await createSwap(f.businessId, { targetResourceId: f.b.resourceId, swapType: "GIVE", requestDate: iso(D1), targetDate: null, reason: "교대", reassignRequester: true, reassignTarget: null }, f.a.actor);
+    await actOnSwap(f.businessId, sw.id, { action: "ACCEPT" }, f.b.actor, meta);
+    await expect(actOnSwap(f.businessId, sw.id, { action: "APPROVE" }, f.ownerActor, meta)).rejects.toMatchObject({ status: 409, code: "SWAP_CONFLICT" });
+    expect(await exceptionsOf(f), "막힌 승인이 근무표를 남기면 안 된다").toHaveLength(0);
   }, 60_000);
 
   it("당사자가 아니면 존재를 알리지 않는다 — 상태를 떠보는 통로가 되면 안 된다", async () => {
