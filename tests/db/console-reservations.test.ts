@@ -179,9 +179,10 @@ describe.skipIf(!enabled)("예약 콘솔 (FR-BOOK-080)", () => {
     const [after] = await db.select({ resourceId: reservations.resourceId, status: reservations.status }).from(reservations).where(eq(reservations.id, theirs.id));
     expect(after.status).toBe("CONFIRMED");
     expect(after.resourceId, "승인한 매니저가 담당이 된다").toBe(f.mine);
-    // 이관이 이력에 남는다 — 자원이 바뀐 로그 한 줄
-    const moves = await db.select({ from: reservationLogs.fromResourceId, to: reservationLogs.toResourceId }).from(reservationLogs).where(eq(reservationLogs.reservationId, theirs.id));
-    expect(moves.filter((m) => m.to !== null)).toEqual([{ from: f.theirs, to: f.mine }]);
+    // 이관이 이력에 남는다 — 자원이 **바뀐** 로그 한 줄.
+    // 생성 로그도 to_resource_id 를 들고 있으므로(from 은 null) from 까지 있는 것만 센다
+    const logs = await db.select({ from: reservationLogs.fromResourceId, to: reservationLogs.toResourceId }).from(reservationLogs).where(eq(reservationLogs.reservationId, theirs.id));
+    expect(logs.filter((m) => m.from !== null && m.to !== null)).toEqual([{ from: f.theirs, to: f.mine }]);
   }, 30_000);
 
   it("담당이 없는 자원(룸)은 이관하지 않는다 — 손님이 고른 적 없는 자리로 옮기지 않는다", async () => {
