@@ -2360,9 +2360,10 @@ button {
 .bw-day[aria-disabled="true"]:hover {
   border-color: transparent;
 }
-/* 오늘은 테두리만으로는 눈에 안 띈다 — hover 테두리(--primary-border)보다도 흐린 --line 이었다.
-   칸을 채워서 한눈에 잡히게 한다. 선택(.on)은 아래에서 덮어쓰므로 둘이 겹치지 않는다 */
-.bw-day.today:not([aria-disabled="true"]) {
+/* 오늘은 테두리만으로는 눈에 안 띈다 — hover 테두리(--primary-border)보다도 흐린 --line 이었다. 칸을 채워서 한눈에 잡히게 한다.
+   `:not()` 안을 `:where()` 로 감싸 명시도를 (0,2,0) 으로 낮춘다 — 그래야 뒤에 오는 `.bw-day.on`(0,2,0)이 이긴다.
+   감싸지 않으면 (0,3,0) 이라 **오늘을 고른 칸**이 배경·테두리는 오늘 스타일로 남고 글자만 흰색(--on-primary)이 돼 사라진다 */
+.bw-day.today:not(:where([aria-disabled="true"])) {
   background: var(--surface-2);
   border-color: var(--primary-border);
 }
