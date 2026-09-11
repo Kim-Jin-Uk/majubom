@@ -10,7 +10,18 @@ app/api/admin/applications(+[id]) · app/api/admin/businesses(+[id]/status)
 app/admin/{,applications,businesses}
 ```
 
-접근 제어는 프록시가 한다 — `/admin`·`/api/admin` 은 **ADMIN + TOTP 통과**여야 하고, ADMIN 이 아니면 404 다(존재를 노출하지 않는다).
+접근 제어는 프록시가 한다 — `/admin`·`/api/admin` 은 **ADMIN + TOTP 통과**여야 한다. 검사 순서는 **인증 → 역할 → MFA** 이고, 단계마다 답이 다르다:
+
+| 누가 | 페이지 | API |
+|---|---|---|
+| 비로그인 | `/login?next=…` (307) | 401 `UNAUTHENTICATED` |
+| 로그인 · ADMIN 아님 | **404** | **404** `NOT_FOUND` |
+| ADMIN · TOTP 미통과 | `/login/totp` | 403 `MFA_REQUIRED` |
+
+**비로그인을 404 로 숨기지 않는 이유**: `/console` 도 똑같이 `/login` 으로 보낸다. 여기서 404 를 내도 "인증이 필요한 경로" 라는
+사실 말고는 숨겨지는 것이 없고, 대신 관리자 본인이 북마크로 들어왔을 때 로그인 화면 대신 404 를 보게 된다.
+**숨겨야 할 상대는 로그인한 채 `/admin` 을 떠보는 사업자**이고, 그 자리에서는 실제로 404 다.
+
 화면·라우트에도 같은 검사가 한 번 더 있는데, 그건 프록시를 거치지 않는 직접 호출에 대한 이중 방어다.
 
 ## 결정한 것

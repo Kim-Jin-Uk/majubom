@@ -17,7 +17,10 @@ import { internalSitePath, isPublicHome, isPublicPath, SITE_PREFIX } from "@/fea
  * (2) 세션 (features/auth/refresh.ts)
  *   - 액세스 스냅샷(15분)이 지났으면 리프레시 토큰을 회전해 JWT 를 다시 쓴다. 실패하면 쿠키를 지운다.
  *   - /console·/admin(+API) 은 매 요청 상태를 재확인한다. 차단 사유가 있으면 페이지는 /login 으로, API 는 401/403.
- *   - /admin 은 ADMIN + TOTP 통과(mfa=ok) 여야 한다. ADMIN 이 아니면 404 (존재를 노출하지 않는다).
+ *   - /admin 은 ADMIN + TOTP 통과(mfa=ok) 여야 한다. 검사 순서는 **인증 → 역할 → MFA** 이고 단계마다 답이 다르다:
+ *     비로그인은 다른 보호 경로와 똑같이 /login?next=… (API 는 401) — 여기서 404 를 내도 숨겨지는 것이 없다.
+ *     **로그인했는데 ADMIN 이 아니면 404** 다. 숨겨야 할 상대는 로그인한 채 /admin 을 떠보는 사업자이고, 그게 이 404 의 대상이다.
+ *     ADMIN 이지만 mfa != ok 면 /login/totp (API 는 403 MFA_REQUIRED).
  *   세션 처리에서 예외가 나도 게이트와 공개 페이지는 계속 동작한다 — 실패는 "로그아웃 상태" 로 취급한다.
  */
 
