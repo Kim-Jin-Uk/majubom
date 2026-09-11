@@ -3,7 +3,7 @@ import { z } from "zod";
 import { assertSameOrigin } from "@/features/auth/csrf";
 import { assertWritable, handle, HttpError, requireConsole } from "@/features/auth/guards";
 import { ImageError, MAX_IMAGE_BYTES, processImage } from "@/lib/storage/image";
-import { buildImageBase, BUSINESS_IMAGE_QUOTA_BYTES, publicUrl, putVariant, usedBytes } from "@/lib/storage/r2";
+import { buildImageBase, BUSINESS_IMAGE_QUOTA_BYTES, deleteObject, publicUrl, putVariant, usedBytes } from "@/lib/storage/r2";
 import { variantKey } from "@/lib/storage/variants";
 
 /**
@@ -80,6 +80,17 @@ export const POST = handle(async (req) => {
     throw new HttpError(503, "STORAGE_NOT_CONFIGURED", { message: (e as Error).message });
   }
 
+  // 올린 **뒤에** 한 번 더 센다 (리뷰 지적 — 위의 검사와 PUT 사이에 다른 업로드가 끼어들 수 있다).
+  // 자물쇠를 쓰지 않는 이유: 이 구간에는 sharp 와 R2 왕복이 들어 있어 몇 초가 걸린다. 그동안 DB 자물쇠를
+  // 붙들면 같은 사업장의 모든 업로드가 줄을 서고, 핸들러가 죽으면 세션 자물쇠가 남는다.
+  // 대신 **먼저 올리고 넘치면 방금 올린 것만 되돌린다** — 동시에 들어온 둘이 합쳐서 넘기면 둘 다 물러난다.
+  // 한도 판정이 늘 안전한 쪽으로 틀리고, 넘긴 채로 남는 일은 없다.
+  const after = await usedBytes(businessId, Number.MAX_SAFE_INTEGER).catch(() => used + image.totalBytes);
+  if (after > BUSINESS_IMAGE_QUOTA_BYTES) {
+    await Promise.all(keys.map((k) => deleteObject(k).catch(() => {})));
+    throw new HttpError(413, "QUOTA_EXCEEDED", { used: after - image.totalBytes, quota: BUSINESS_IMAGE_QUOTA_BYTES });
+  }
+
   const widths = image.variants.map((v) => v.width);
   return NextResponse.json({
     // 화면이 저장하는 건 **가장 큰 것**의 URL 하나. 나머지 폭은 URL 규약으로 되찾는다 (`variants.ts`)
@@ -87,7 +98,7 @@ export const POST = handle(async (req) => {
     base,
     widths,
     bytes: image.totalBytes,
-    used: used + image.totalBytes,
+    used: after,
     quota: BUSINESS_IMAGE_QUOTA_BYTES,
   });
 });
