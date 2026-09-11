@@ -46,12 +46,17 @@ export function ReservationDetailPanel({ detail, role, readOnly, resources }: { 
 
   /**
    * 동료 담당 예약을 건드리기 전에 한 번 묻는다 (L-32 결정).
-   * 표(`anyManager`)가 여는 것은 완료·노쇼·취소뿐이고, 그건 "대신 정리해 주는" 일이라 **눌러도 되는 일**이다.
-   * 다만 남의 일정이므로 말없이 지나가지 않는다 — 사장님은 원래 전체를 보므로 묻지 않는다.
+   *
+   * 승인·거절은 **담당까지 넘어온다**(서버의 `takeOver`) — 묻는 문장이 그 사실을 말해야 한다.
+   * "대신 처리" 와 "내가 맡는다" 는 다른 일이고, 뒤쪽은 그날 매장에 서는 사람이 바뀐다는 뜻이다.
+   * 사장님은 원래 전체를 보고 담당도 넘어오지 않으므로 묻지 않는다.
    */
   function confirmOthers(a: Action): boolean {
     if (role === "OWNER" || detail.mine) return true;
-    return confirm(`「${detail.resourceName}」님 담당 예약입니다.\n${a.label} 처리할까요?`);
+    // 담당자(사람)에게만 존칭을 붙인다 — 룸·장비에 "「대회의실」님" 은 어색하다 (리뷰 지적)
+    const who = detail.resourceIsStaff ? `「${detail.resourceName}」님` : `「${detail.resourceName}」`;
+    const takeOver = a.to === "CONFIRMED" || a.to === "REJECTED";
+    return confirm(takeOver ? `${who} 담당 예약입니다.\n${a.label}하면 담당이 나에게 넘어옵니다. 진행할까요?` : `${who} 담당 예약입니다.\n${a.label} 처리할까요?`);
   }
 
   async function run(a: Action, why: string) {
@@ -250,8 +255,11 @@ function transitionError(code: string): string | null {
       return "비활성 상태인 자원이에요. 먼저 다시 활성화해 주세요";
     case "PRODUCT_GONE":
       return "상품이 보관 처리돼 있어요. 상품을 되살린 뒤 다시 시도해 주세요";
+    case "NO_OWN_RESOURCE":
+      // 승인·거절은 담당을 넘겨받는 일이라, 넘겨받을 자리가 없으면 할 수 없다
+      return "승인 · 거절은 담당이 나에게 넘어오는 처리예요. 내 계정에 연결된 담당자 자원이 없어 대신 처리할 수 없어요";
     case "NOT_OWN_RESOURCE":
-      return "승인 · 거절은 담당자 본인만 할 수 있어요. 완료 · 노쇼 · 취소는 대신 처리할 수 있어요";
+      return "오판 정정(완료↔노쇼)은 사장님만 할 수 있어요";
     default:
       return null;
   }
