@@ -4,6 +4,7 @@
  * 승격 직후 첫 /admin 진입에서 TOTP 등록이 강제된다 (FR-AUTH-030).
  */
 import { config as loadEnv } from "dotenv";
+import { explainDbError, runtimeDbUrl } from "./_conn";
 
 loadEnv({ path: [".env.local", ".env"], quiet: true });
 
@@ -24,6 +25,8 @@ async function main() {
 }
 
 main().catch((e) => {
-  console.error("✗ 실패:", (e as Error).message);
+  // 이 스크립트는 런타임 풀(src/db/client.ts)로 붙는다 — 진단도 그 주소를 봐야 한다
+  console.error("✗ 실패:", explainDbError(e, runtimeDbUrl()));
+  console.error("  진단: npm run db:status");
   process.exit(1);
 });
