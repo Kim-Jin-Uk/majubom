@@ -36,19 +36,25 @@ describe("전이 표", () => {
     expect(Object.entries(RULES).filter(([, r]) => r.ownerOnly).map(([k]) => k).sort()).toEqual(["COMPLETED>NO_SHOW", "NO_SHOW>COMPLETED"]);
   });
 
-  it("담당이 아닌 매니저에게 열린 것은 사후 기록과 취소뿐 — 승인 · 거절은 아니다", () => {
+  it("담당이 아닌 매니저에게 열린 것 — 콘솔 전이 여섯 (오판 교정만 빼고)", () => {
     expect(Object.entries(RULES).filter(([, r]) => r.anyManager).map(([k]) => k).sort()).toEqual([
       "CONFIRMED>CANCELED_BY_BIZ",
       "CONFIRMED>COMPLETED",
       "CONFIRMED>NO_SHOW",
       "REQUESTED>CANCELED_BY_BIZ",
+      "REQUESTED>CONFIRMED",
+      "REQUESTED>REJECTED",
     ]);
-    // 표가 조용히 넓어지는 것을 막는다 — 승인은 매장이 손님에게 하는 약속이라 남의 담당 건에 대신 하지 않는다
-    expect(RULES["REQUESTED>CONFIRMED"].anyManager).toBeUndefined();
-    expect(RULES["REQUESTED>REJECTED"].anyManager).toBeUndefined();
-    // 오판 교정은 OWNER 전용이라 이 플래그와 무관하다
+    // 오판 교정은 OWNER 전용이라 이 플래그와 무관하다 — 둘이 함께 켜지면 규칙이 모순된다
     expect(RULES["NO_SHOW>COMPLETED"].anyManager).toBeUndefined();
     expect(RULES["COMPLETED>NO_SHOW"].anyManager).toBeUndefined();
+    for (const [k, r] of Object.entries(RULES)) expect(Boolean(r.anyManager && r.ownerOnly), k).toBe(false);
+  });
+
+  it("담당이 넘어오는 것은 승인 · 거절뿐 — 끝난 일의 기록은 담당을 옮기지 않는다", () => {
+    expect(Object.entries(RULES).filter(([, r]) => r.takeOver).map(([k]) => k).sort()).toEqual(["REQUESTED>CONFIRMED", "REQUESTED>REJECTED"]);
+    // 이관은 "남의 담당 건에 할 수 있다" 가 전제다 — anyManager 없이 takeOver 만 켜면 닿지 않는 코드가 된다
+    for (const [k, r] of Object.entries(RULES)) if (r.takeOver) expect(r.anyManager, k).toBe(true);
   });
 
   it("고객이 직접 할 수 있는 것은 취소뿐", () => {
