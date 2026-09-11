@@ -2842,3 +2842,9 @@ button {
   letter-spacing: 0.06em;
   color: var(--text);
 }
+
+/* 자원 목록의 종류 구분 — 담당자/공간/공용은 등록할 때 묻는 것도 예약에서 하는 일도 다르다 */
+.res-group {
+  margin: 0;
+  font-size: 15px;
+}
