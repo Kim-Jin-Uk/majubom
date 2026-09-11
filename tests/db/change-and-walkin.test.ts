@@ -94,10 +94,39 @@ describe.skipIf(!enabled)("예약 변경 · 워크인", () => {
     const f = await make();
     const a = await createReservation({ productId: f.productId, startAt: at(0), partySize: 1, customerNote: null }, { uid: f.customerId });
     await createReservation({ productId: f.productId, startAt: at(1), partySize: 1, customerNote: null }, { uid: f.customerId });
-    // 한도 2 를 채웠다 — 새 예약은 막히지만 변경은 된다
+    // 이 상품의 한도 2 를 채웠다 — 새 예약은 막히지만 변경은 된다
     await expect(createReservation({ productId: f.productId, startAt: at(3), partySize: 1, customerNote: null }, { uid: f.customerId })).rejects.toMatchObject({ status: 409 });
     const moved = await createReservation({ productId: f.productId, startAt: at(3), partySize: 1, customerNote: null, replacesReservationId: a.id }, { uid: f.customerId });
     expect(moved.status).toBe("CONFIRMED");
+  }, 30_000);
+
+  it("한도는 상품마다 따로 센다 — 한 상품을 채웠다고 다른 상품이 막히지 않는다", async () => {
+    const f = await make();
+    // 같은 사업장에 두 번째 상품을 둔다. 자원은 따로 준다 — 자원이 같으면 SLOT_TAKEN 과 구분이 안 된다
+    const [room2] = await db.insert(resources).values({ businessId: f.businessId, type: "SPACE", name: "룸2", capacity: 1 }).returning({ id: resources.id });
+    const [prd2] = await db
+      .insert(products)
+      .values({ businessId: f.businessId, name: "대여2", startMode: "FREE", slotIntervalMin: 60, durationMin: 60, capacityPerSlot: 1, maxPartySize: 1, resourceSelectMode: "NONE", status: "ACTIVE" })
+      .returning({ id: products.id });
+    await db.insert(productResources).values({ productId: prd2.id, resourceId: room2.id });
+
+    // 상품 1 의 한도(2)를 채운다
+    await createReservation({ productId: f.productId, startAt: at(10), partySize: 1, customerNote: null }, { uid: f.customerId });
+    await createReservation({ productId: f.productId, startAt: at(11), partySize: 1, customerNote: null }, { uid: f.customerId });
+    await expect(createReservation({ productId: f.productId, startAt: at(12), partySize: 1, customerNote: null }, { uid: f.customerId })).rejects.toMatchObject({
+      status: 409,
+      code: "TOO_MANY_ACTIVE",
+    });
+
+    // 상품 2 는 열려 있어야 한다. 사업장 단위로 세면 여기서 409 가 난다
+    const other = await createReservation({ productId: prd2.id, startAt: at(10), partySize: 1, customerNote: null }, { uid: f.customerId });
+    expect(other.status).toBe("CONFIRMED");
+    // 상품 2 도 자기 한도는 지킨다
+    await createReservation({ productId: prd2.id, startAt: at(11), partySize: 1, customerNote: null }, { uid: f.customerId });
+    await expect(createReservation({ productId: prd2.id, startAt: at(12), partySize: 1, customerNote: null }, { uid: f.customerId })).rejects.toMatchObject({
+      status: 409,
+      code: "TOO_MANY_ACTIVE",
+    });
   }, 30_000);
 
   it("워크인은 선행시간을 우회하지만 자원 충돌은 그대로 막는다", async () => {

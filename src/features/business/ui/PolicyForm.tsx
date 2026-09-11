@@ -19,7 +19,7 @@ const NUMS: Array<[NumKey, string, string, string]> = [
   ["minLeadTimeMin", "최소 예약 선행 시간", "분", "지금부터 이 시간 안쪽 슬롯은 예약할 수 없어요 (60 = 1시간 전까지만)"],
   ["maxAdvanceDays", "최대 예약 가능 기간", "일", "오늘부터 며칠 뒤까지 열어 둘지"],
   ["cancelDeadlineHours", "취소 마감", "시간 전", "이 시간 이후엔 고객이 직접 취소할 수 없어요. 이미 잡힌 예약에는 적용되지 않습니다"],
-  ["maxActivePerCustomer", "고객 1명당 동시 예약 수", "건", "확정·대기 예약을 합쳐 이 수까지"],
+  ["maxActivePerCustomer", "고객 1명당 같은 상품 동시 예약 수", "건", "상품 하나를 기준으로 확정·대기를 합쳐 이 수까지. 다른 상품은 따로 센다"],
   ["requestExpireHours", "대기 예약 자동 만료", "시간", "자동 확정을 껐을 때, 승인하지 않으면 이 시간 뒤 만료"],
   ["autoNoShowAfterHours", "노쇼 자동 처리", "시간 후", "예약 시각이 지나고 이 시간 뒤까지 처리하지 않으면 노쇼로 기록"],
 ];
