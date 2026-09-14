@@ -146,7 +146,9 @@ export async function setPattern(businessId: string, resourceIds: string[], inpu
         );
       }
       for (const d of input.days) {
-        const o = b.openingHours.find((x) => x.dow === d.dow);
+        // 영업시간 미정이면 하루 전체가 열린다 — 어느 요일도 "영업 안 함" 이 아니다 (`openingWindows` 와 같은 규칙)
+        const o = b.openingHours.length === 0 ? null : (b.openingHours.find((x) => x.dow === d.dow) ?? null);
+        if (b.openingHours.length === 0) continue;
         if (!o) warnings.push({ resourceId: rid, dow: d.dow, reason: "CLOSED_DAY" });
         else if (subtract([span(d.startTime, d.endTime)], [span(o.open, o.close)]).length > 0) warnings.push({ resourceId: rid, dow: d.dow, reason: "OUTSIDE_OPENING" });
       }

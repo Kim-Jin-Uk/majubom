@@ -167,10 +167,17 @@ describe.skipIf(!enabled)("공개 사업장 홈 (FR-SITE-010)", () => {
     expect(home!.reviews.recent[0].author, "실명이 그대로 나가면 저평점 고객에게 보복할 여지가 생긴다").toBe("김*님");
   }, 45_000);
 
+  it("영업시간을 안 정해도 공개된다 (9/14) — 대신 예약이 자동 확정되지 않는다", async () => {
+    const f = await make();
+    await db.update(businesses).set({ openingHours: [] }).where(eq(businesses.id, f.businessId));
+    expect(await loadPublicHome(f.businessId), "영업시간은 더 이상 공개 조건이 아니다").toBeTruthy();
+  }, 30_000);
+
   it("정보가 덜 찬 가게는 열지 않는다 — 콘솔은 '아직 공개 아님' 이라고 말하는데 홈만 열리면 안 된다", async () => {
     const f = await make();
     // 가입 직후의 임시 주소. 한 번 쓴 slug 는 영구 예약이라 이 상태로 공개되면 되물릴 수 없다
-    const patches: Array<Partial<typeof businesses.$inferInsert>> = [{ slug: `b-${randomUUID().slice(0, 8)}` }, { phone: null }, { address: null }, { openingHours: [] }];
+    // 영업시간은 **빠져 있다** — 9/14 부터 공개 조건이 아니다. 안 정한 매장은 하루 전체가 열리고 자동 확정만 꺼진다
+    const patches: Array<Partial<typeof businesses.$inferInsert>> = [{ slug: `b-${randomUUID().slice(0, 8)}` }, { phone: null }, { address: null }];
     for (const patch of patches) {
       const before = await db.select({ slug: businesses.slug, phone: businesses.phone, address: businesses.address, openingHours: businesses.openingHours }).from(businesses).where(eq(businesses.id, f.businessId));
       await db.update(businesses).set(patch).where(eq(businesses.id, f.businessId));

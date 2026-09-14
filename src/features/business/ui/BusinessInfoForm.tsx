@@ -21,6 +21,11 @@ function toRows(hours: OpeningHour[]): HourRow[] {
   });
 }
 
+/** 자주 쓰는 값. 프리셋을 누른 뒤에도 요일별로 마저 고칠 수 있다 — 잠그는 것이 아니라 채워 주는 것이다 */
+const PRESET_WEEKDAY = (): HourRow[] =>
+  [0, 1, 2, 3, 4, 5, 6].map((dow) => ({ enabled: dow >= 1 && dow <= 5, open: "10:00", close: "19:00", breaks: [] }));
+const PRESET_ALLDAY = (): HourRow[] => [0, 1, 2, 3, 4, 5, 6].map(() => ({ enabled: true, open: "00:00", close: "00:00", breaks: [] }));
+
 function fromRows(rows: HourRow[]): OpeningHour[] {
   return rows.flatMap((r, dow) => (r.enabled ? [{ dow, open: r.open, close: r.close, ...(r.breaks.length ? { breaks: r.breaks } : {}) }] : []));
 }
@@ -61,6 +66,11 @@ export function BusinessInfoForm({ initial, mode, readOnly, publicBase }: { init
     setErrors((x) => (x[k] ? { ...x, [k]: "" } : x));
   };
   const setRow = (i: number, patch: Partial<HourRow>) => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  /** 켜 둔 첫 요일 — "동일하게" 의 원본이 된다 */
+  const firstEnabled = rows.findIndex((r) => r.enabled);
+  /** 그 요일의 시간·휴게를 **켜져 있는 다른 요일**에만 복사한다. 꺼 둔 요일을 켜지 않는다 — 휴무는 사장님이 정한 것이다 */
+  const applyToAll = (from: number) =>
+    setRows((rs) => (from < 0 ? rs : rs.map((r) => (r.enabled ? { ...r, open: rs[from].open, close: rs[from].close, breaks: rs[from].breaks.map((b) => ({ ...b })) } : r))));
 
   async function save(e: FormEvent) {
     e.preventDefault();
@@ -134,7 +144,6 @@ export function BusinessInfoForm({ initial, mode, readOnly, publicBase }: { init
     !f.name.trim() && "상호",
     !f.phone.trim() && "매장 전화",
     !f.address.trim() && "주소",
-    !rows.some((r) => r.enabled) && "영업시간 1일 이상",
     savedSlug.startsWith("b-") && !slug.trim() && "공개 주소", // 칸에 적어 두면 저장 시 함께 저장된다
   ].filter((x): x is string => Boolean(x));
   const complete = missing.length === 0;
@@ -174,8 +183,33 @@ export function BusinessInfoForm({ initial, mode, readOnly, publicBase }: { init
           <textarea id="b-desc" className="textarea" maxLength={2000} value={f.description} onChange={set("description")} disabled={dis} />
         </Field>
 
-        <h2 style={{ marginTop: 6 }}>영업시간</h2>
+        <h2 style={{ marginTop: 6 }}>영업시간 <span className="muted" style={{ fontWeight: 400, fontSize: 13 }}>(선택)</span></h2>
         <p className="sub">요일을 켜고 시간을 정하세요. 마감이 시작보다 빠르면 다음 날 마감(심야 영업)으로 봅니다. 휴게시간은 하루 최대 2구간.</p>
+        {/* 한 요일만 채우고 나머지에 같은 값을 넣는 일이 대부분이다 — 일곱 번 입력하게 두지 않는다 */}
+        {!readOnly && (
+          <div className="hours-tools">
+            <span className="muted">빠른 설정</span>
+            <Button type="button" size="sm" onClick={() => applyToAll(firstEnabled)} disabled={dis || firstEnabled < 0}>
+              켜 둔 요일과 동일하게
+            </Button>
+            <Button type="button" size="sm" onClick={() => setRows(PRESET_WEEKDAY())} disabled={dis}>
+              평일 10–19 · 주말 휴무
+            </Button>
+            <Button type="button" size="sm" onClick={() => setRows(PRESET_ALLDAY())} disabled={dis}>
+              매일 종일
+            </Button>
+            <Button type="button" size="sm" onClick={() => setRows(toRows([]))} disabled={dis}>
+              모두 끄기
+            </Button>
+          </div>
+        )}
+        {/* 안 정해도 공개된다 — 대신 자동 확정이 꺼진다. 그 사실을 여기서 말하지 않으면 사장님은 왜 매번 승인해야 하는지 모른다 */}
+        {!rows.some((r) => r.enabled) && (
+          <Alert kind="info">
+            영업시간을 정하지 않으면 손님이 <b>하루 중 아무 시각이나</b> 고를 수 있어요. 그래서 이 상태에서는 예약이 바로 확정되지 않고
+            <b> 항상 승인 대기</b>로 들어옵니다 — 매장이 한 건씩 보고 확정해요.
+          </Alert>
+        )}
         <div className="hours">
           {rows.map((r, i) => (
             <div key={i} className="hours-row">

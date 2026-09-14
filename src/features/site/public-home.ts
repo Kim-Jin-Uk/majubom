@@ -132,7 +132,7 @@ export const loadPublicHome = cache(async (businessId: string): Promise<PublicHo
   // 공개 홈만 따로 열면, 사장님은 비공개인 줄 아는 사이 임시 주소(`b-xxxxxxx`)가 상호와 소개를 내보낸다.
   // 한 번 쓴 slug 는 영구 예약이라 그 임시 주소를 되물릴 수도 없다
   if (b.status !== "APPROVED" || !b.published) return null;
-  if (!isInfoComplete({ name: b.name, phone: b.phoneForGate, address: b.address, openingHours: b.openingHours, slug: b.slug })) return null;
+  if (!isInfoComplete({ name: b.name, phone: b.phoneForGate, address: b.address, slug: b.slug })) return null;
 
   const rows = await db
     .select({

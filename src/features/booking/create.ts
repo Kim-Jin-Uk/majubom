@@ -11,7 +11,7 @@ import { notifyReservation } from "./notify";
 import { peakOccupancy } from "./peak-occupancy";
 import { computeSlots, dateInRange, fixedStartMinutes } from "./slots";
 import { canceledTodayCount } from "./transitions";
-import { isSlotFailure, type Slot, type SlotContext } from "./slot-types";
+import { isSlotFailure, type ResourceType, type Slot, type SlotContext } from "./slot-types";
 import { localToInstant, toMs } from "./time";
 
 /**
@@ -263,6 +263,31 @@ async function withDeadlockRetry<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
+/**
+ * 그 자리에 **"언제 사람이 있다" 고 아무도 말하지 않았는가**. 그렇다면 자동 확정을 쓰지 않는다 (`autoConfirm` 무시) —
+ * 매장이 한 건씩 보고 확정해야 한다.
+ *
+ * 자원 종류에 따라 보는 것이 다르다.
+ * - **담당자(STAFF)**: 근무표가 그 선언이다. 근무표가 없으면 **영업시간이 있어도** 그 사람이 그 시간에 있다고
+ *   아무도 말한 적이 없다 — 영업시간은 "가게가 열려 있다" 지 "이 사람이 출근한다" 가 아니다.
+ *   그래서 영업시간을 먼저 보고 빠져나가면 안 된다 (리뷰 지적: 조기 반환이 이 경우를 통째로 건너뛰었다).
+ * - **룸·공용**: 사람이 없으므로 영업시간이 곧 "언제 쓸 수 있는가" 다.
+ *
+ * 순수 함수라 따로 테스트한다 — `create-status.test.ts`.
+ */
+export function isUnconstrained(input: { businessHoursSet: boolean; resourceType: ResourceType | undefined; hasWorkSchedule: boolean }): boolean {
+  if (input.resourceType === "STAFF") return !input.hasWorkSchedule;
+  return !input.businessHoursSet;
+}
+
+function unconstrainedFor(ctx: SlotContext, resourceId: string): boolean {
+  return isUnconstrained({
+    businessHoursSet: ctx.business.openingHours.length > 0,
+    resourceType: ctx.resources.find((x) => x.id === resourceId)?.type,
+    hasWorkSchedule: ctx.workSchedules.some((w) => w.resourceId === resourceId),
+  });
+}
+
 async function insertOne(
   ctx: SlotContext,
   businessId: string,
@@ -284,8 +309,15 @@ async function insertOne(
   // 명세: exclusive 는 "생성 시점 자원 기준" 스냅샷이다. capacityPerSlot 이 1 이어도 자원 정원이 N 이면 배타 제약을 쓸 수 없다(다른 상품이 같은 자원을 N 으로 쓴다)
   const exclusive = resourceCapacity === 1;
   const cap = Math.min(p.capacityPerSlot, resourceCapacity);
-  // 워크인은 즉시 확정. 취소 마감을 지난 변경은 autoConfirm 과 무관하게 매장 승인을 받는다 (FR-BOOK-050)
-  const status = mode.via === "WALK_IN" ? "CONFIRMED" : mode.forceRequested || !policy.autoConfirm ? "REQUESTED" : "CONFIRMED";
+  // 워크인은 즉시 확정. 취소 마감을 지난 변경은 autoConfirm 과 무관하게 매장 승인을 받는다 (FR-BOOK-050).
+  //
+  // **시간을 아무도 정하지 않았으면 자동 확정을 쓰지 않는다 (9/14 결정).** 그런 자리는 하루 전체가 열려 있어
+  // 손님이 새벽 3시를 고를 수 있다 — 매장이 한 건씩 보고 승인해야 한다. 안 그러면 아무도 없는 시각이 그대로 확정된다.
+  //
+  // 사업장 영업시간만 보면 안 된다. **담당자 근무표가 없는 경우도 같은 상태**다 — `resolveWorkDay` 의 `UNSET` —
+  // 영업시간은 정했지만 근무표를 아직 안 짠 새 담당자에게 바로 확정이 나가면 그 사람은 출근하지도 않는다 (리뷰 지적).
+  const unconstrained = unconstrainedFor(ctx, resourceId);
+  const status = mode.via === "WALK_IN" ? "CONFIRMED" : mode.forceRequested || unconstrained || !policy.autoConfirm ? "REQUESTED" : "CONFIRMED";
 
   return db.transaction(async (tx) => {
     // 락 순서는 언제나 고객 → 자원

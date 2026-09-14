@@ -5,10 +5,12 @@ import { sql } from "drizzle-orm";
  *
  * 정본은 `site/public-home.ts` 의 게이트다 — 거기서는 사업장 하나를 읽어 TS 로 판정한다(`isInfoComplete`).
  * 검색은 여러 사업장을 훑어 자르므로 그 판정이 WHERE 절에 있어야 한다. **같은 규칙의 두 번째 표현**이라
- * 어긋나면 검색이 비공개 사업장을 흘린다 — `tests/db/search.test.ts` 가 둘이 같은 답을 내는지 본다.
+ * 어긋나면 검색이 비공개 사업장을 흘린다 — `tests/db/search.test.ts` 가 열 가지 상태로 둘이 같은 답을 내는지 본다
+ * (영업시간 미정 포함: 그 조건을 SQL 에서 지웠으므로 한쪽만 되돌아가면 바로 갈린다).
  *
  * 조건(순서는 `loadPublicHome` 과 같다):
- *   승인됨 · 사업자가 내리지 않음 · 정보 완성(상호·전화·주소·영업시간 1일+·정식 slug) · 받을 자원 1개+
+ *   승인됨 · 사업자가 내리지 않음 · 정보 완성(상호·전화·주소·정식 slug) · 받을 자원 1개+
+ *   영업시간은 조건이 아니다 — 안 정한 매장은 하루 전체가 열리고 자동 확정만 꺼진다 (9/14 결정)
  *
  * `businesses` 별칭을 그대로 쓰므로 `businesses` 를 FROM 에 둔 쿼리에서만 붙인다.
  */
@@ -18,7 +20,6 @@ export const businessIsPublic = sql`
   and coalesce(nullif(btrim(businesses.name), ''), null) is not null
   and coalesce(nullif(btrim(businesses.phone), ''), null) is not null
   and coalesce(nullif(btrim(businesses.address), ''), null) is not null
-  and jsonb_array_length(businesses.opening_hours) > 0
   and businesses.slug not like 'b-%'
   and exists (select 1 from resources r where r.business_id = businesses.id and r.is_active)
 `;

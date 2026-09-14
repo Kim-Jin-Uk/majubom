@@ -231,6 +231,11 @@ export async function changeSlug(businessId: string, slug: string, actor: { uid:
 }
 
 /** 위저드 1단계 "매장 정보" 완료 판정 — 공개 조건 패널·사이드바에 쓴다 */
-export function isInfoComplete(b: Pick<BusinessSettings, "name" | "phone" | "address" | "openingHours" | "slug">): boolean {
-  return Boolean(b.name && b.phone && b.address && b.openingHours.length > 0 && !b.slug.startsWith("b-"));
+/**
+ * 공개 조건 (FR-BIZ-030). **영업시간은 더 이상 요구하지 않는다 (9/14 결정)** —
+ * 안 정한 매장은 하루 전체가 열리고(`openingWindows`), 대신 자동 확정이 꺼져 매장이 하나하나 승인한다(`create.ts`).
+ * 상호·전화·주소는 그대로 필수다. 손님이 "어디로 가야 하는지" 를 모르는 페이지는 열어 둘 이유가 없다.
+ */
+export function isInfoComplete(b: Pick<BusinessSettings, "name" | "phone" | "address" | "slug">): boolean {
+  return Boolean(b.name && b.phone && b.address && !b.slug.startsWith("b-"));
 }

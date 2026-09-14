@@ -26,7 +26,14 @@ export default async function PatternPage({ searchParams }: { searchParams: Prom
     <ConsoleShell current="schedule" viewer={{ name: v.name, role: v.membership.role }}>
       <h1>주간 근무 패턴</h1>
       <p className="sub" style={{ margin: 0 }}>요일별 출퇴근·휴게를 정하면 매주 반복돼요. 특정 날만 다르면 근무표에서 그 칸을 눌러 예외를 두세요.</p>
-      {settings.openingHours.length === 0 && <Alert kind="warn">영업시간이 아직 없어요. 근무는 저장되지만 예약은 영업시간 ∩ 근무시간에만 열려요 — 설정에서 영업시간을 먼저 정해 주세요.</Alert>}
+      {/* 9/14 이전에는 "영업시간을 먼저 정하라" 고 했다. 지금은 정반대다 — 미정이면 하루 전체가 열리고 자동 확정만 꺼진다.
+          옛 문구를 두면 근무표만 짜 둔 매장이 "정하지 않으면 예약이 안 열린다" 고 믿고 불필요하게 영업시간부터 채운다 (리뷰 지적) */}
+      {settings.openingHours.length === 0 && (
+        <Alert kind="info">
+          영업시간을 아직 정하지 않았어요. 그동안은 <b>여기 정한 근무시간</b>이 그대로 예약 가능 시간이 됩니다.
+          영업시간을 정하면 그때부터 <b>영업시간 ∩ 근무시간</b>으로 좁혀져요.
+        </Alert>
+      )}
       <PatternEditor staff={staff} selected={selected} view={view} today={today} readOnly={v.readOnly} />
     </ConsoleShell>
   );

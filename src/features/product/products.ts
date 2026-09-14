@@ -189,6 +189,9 @@ export function longestOpenSpanMin(hours: OpeningHour[]): number | null {
  */
 export function fixedTimeWarnings(days: FixedStartTime[], hours: OpeningHour[], durationMin: number): ProductWarning[] {
   const out: ProductWarning[] = [];
+  // 영업시간을 **정하지 않았으면** 하루 전체가 열린다 — 경고할 것이 없다 (`schedule/resolve.ts` 의 `openingWindows` 와 같은 규칙).
+  // 여기서 `.find()` 만 보면 모든 회차에 CLOSED_DAY 가 붙어 화면이 "표시되지 않습니다" 라고 거꾸로 안내한다
+  if (hours.length === 0) return out;
   for (const d of days) {
     const h = hours.find((x) => x.dow === d.dow);
     for (const t of d.times) {

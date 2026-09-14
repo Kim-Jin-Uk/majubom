@@ -1,5 +1,5 @@
 import type { Holiday, ISODate, OpeningHoursEntry, ResourceType, WorkException, WorkSchedule } from "@/features/booking/slot-types";
-import { dowOf, holidayApplies, holidayCut, intersect, resolveWorkDay, span, subtract, type Interval } from "./resolve";
+import { holidayApplies, holidayCut, intersect, resolveWorkDay, span, subtract, type Interval } from "./resolve";
 
 /**
  * "이 자원이 그날 예약을 받을 수 있는 구간" — 슬롯 계산(FR-BOOK-010)과 콘솔 지표(FR-BOOK-080 가동률·캘린더)가
@@ -32,10 +32,5 @@ export function operatingWindows(i: OperatingInput): Interval[] {
   return w;
 }
 
-/** 그날 영업 구간. `subtractBreaks=false` 는 FIXED 상품 전용 */
-export function openingWindows(openingHours: OperatingInput["openingHours"], date: ISODate, subtractBreaks: boolean): Interval[] {
-  const o = openingHours.find((x) => x.dow === dowOf(date));
-  if (!o) return [];
-  const base = [span(o.open, o.close)];
-  return subtractBreaks ? subtract(base, (o.breaks ?? []).map((b) => span(b.start, b.end))) : base;
-}
+// 영업 구간 판정은 `resolve.ts` 하나다 — `resolveWorkDay` 도 같은 규칙을 써야 해서 거기 있다
+export { openingWindows } from "./resolve";
