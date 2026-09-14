@@ -2866,3 +2866,75 @@ button {
   margin: 8px 0 12px;
   font-size: 13px;
 }
+
+/* 감사 로그 (#68). 조사는 여러 건을 훑는 일이라 한 줄을 최대한 낮게 잡고, 자세한 건 눌러서 편다 */
+.audit-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+.audit-filters .input,
+.audit-filters .select {
+  width: auto;
+  min-width: 130px;
+  flex: 1 1 130px;
+}
+.audit-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.audit-row + .audit-row {
+  border-top: 1px solid var(--border);
+}
+.audit-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 14px;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.audit-head:hover {
+  background: var(--surface-2);
+}
+.audit-at {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+  font-size: 13px;
+  min-width: 8.5em;
+}
+.audit-body {
+  padding: 4px 14px 14px;
+  background: var(--surface-2);
+}
+.audit-diff {
+  margin: 0;
+  display: grid;
+  grid-template-columns: minmax(7em, auto) 1fr;
+  gap: 4px 12px;
+  font-size: 13.5px;
+}
+.audit-diff > div {
+  display: contents;
+}
+.audit-diff dt {
+  color: var(--text-2);
+  font-family: ui-monospace, monospace;
+  font-size: 12.5px;
+}
+.audit-diff dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}

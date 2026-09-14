@@ -4,12 +4,13 @@ import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui";
 import { LogoutButton } from "@/features/auth/ui/LogoutButton";
 
-export type AdminNavKey = "home" | "applications" | "businesses";
+export type AdminNavKey = "home" | "applications" | "businesses" | "audit";
 
 const NAV: Array<{ key: AdminNavKey; href: string; label: string }> = [
   { key: "home", href: "/admin", label: "홈" },
   { key: "applications", href: "/admin/applications", label: "가입 심사" },
   { key: "businesses", href: "/admin/businesses", label: "사업장" },
+  { key: "audit", href: "/admin/audit", label: "감사 로그" },
 ];
 
 /**
