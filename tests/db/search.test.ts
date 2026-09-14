@@ -28,7 +28,9 @@ async function fixture() {
       slug: `find-${tag}`,
       name: `찾을가게 ${tag}`,
       bizRegNo: fakeBizRegNo(),
-      category: "nail",
+      // **이 파일 전용 업종**이다. `activeCategories()` 는 DB 전체를 세는데 vitest 는 파일을 병렬로 돌리므로,
+      // 다른 파일이 같은 업종을 쓰면 칩 개수 검사가 그때그때 흔들린다 (실제로 CI 에서 12 vs 11 로 깨졌다)
+      category: "pet",
       status: "APPROVED",
       timezone: "Asia/Seoul",
       phone: "02-000-0000",
@@ -81,7 +83,7 @@ describe.skipIf(!enabled)("공개 상품 검색", () => {
 
   it("업종으로 좁힌다", async () => {
     const f = await make();
-    expect((await searchProducts({ q: f.tag, category: "nail" })).length).toBe(1);
+    expect((await searchProducts({ q: f.tag, category: "pet" })).length).toBe(1);
     expect(await searchProducts({ q: f.tag, category: "hair" })).toEqual([]);
     // 없는 코드는 필터로 쓰지 않는다 — 오타 하나가 빈 화면이 되면 검색이 고장 난 것처럼 보인다
     expect((await searchProducts({ q: f.tag, category: "없는업종" })).length).toBe(1);
@@ -92,7 +94,7 @@ describe.skipIf(!enabled)("공개 상품 검색", () => {
     const [hit] = await searchProducts({ q: f.tag });
     expect(hit.slug).toBe(f.slug);
     expect(hit.productId).toBe(f.productId);
-    expect(hit.categoryLabel).toBe("네일 · 왁싱");
+    expect(hit.categoryLabel).toBe("반려동물 미용");
     expect(hit.durationMin).toBe(60);
   }, 30_000);
 
@@ -144,8 +146,9 @@ describe.skipIf(!enabled)("공개 상품 검색", () => {
 
   it("업종 칩은 공개 상품이 있는 업종만 낸다", async () => {
     const f = await make();
-    const countOf = async () => (await activeCategories()).find((c) => c.code === "nail")?.count ?? 0;
-    // 다른 테스트도 nail 을 쓸 수 있어 절대값을 못 쓴다 — 이 건이 빠질 때 **줄어드는지**를 본다
+    const countOf = async () => (await activeCategories()).find((c) => c.code === "pet")?.count ?? 0;
+    // 절대값은 못 쓴다 — 이 파일의 다른 테스트들이 만든 픽스처가 afterAll 까지 남아 있다.
+    // 업종을 이 파일 전용으로 두었으므로 **1 줄었다 되돌아오는지**는 결정적이다
     const before = await countOf();
     expect(before).toBeGreaterThan(0);
     await db.update(businesses).set({ status: "SUSPENDED" }).where(eq(businesses.id, f.businessId));

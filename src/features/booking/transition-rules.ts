@@ -31,6 +31,28 @@ export type Rule = {
   by: Array<TransitionActor["kind"]>;
   /** OWNER 만 (오판 교정) */
   ownerOnly?: boolean;
+  /**
+   * **담당이 아닌 매니저도** 할 수 있다 (FR-BOOK-030 완화 — `LATER.md` L-32).
+   *
+   * 기본은 "본인 담당 자원의 건만" 이다. 빠뜨렸을 때 좁은 쪽으로 틀리라고 그렇게 뒀다 —
+   * 새 전이를 추가한 날 남의 예약이 조용히 열리면 안 된다.
+   *
+   * 여는 것은 **사후 기록과 취소**(완료·노쇼·취소) 그리고 **승인·거절**이다.
+   * 앞의 셋은 동료가 자리에 없을 때 대신 정리해 주는 일이고, 안 하면 그 예약이 영원히 `CONFIRMED` 로 남아
+   * 노쇼 통계와 가동률을 망친다. 화면은 남의 담당 건일 때 "OOO 담당입니다" 를 먼저 묻는다.
+   */
+  anyManager?: boolean;
+  /**
+   * 남의 담당 건에 이 전이를 하면 **담당이 그 사람에게 넘어온다** (9/11 결정).
+   *
+   * 승인·거절에만 붙인다. 그건 매장이 손님에게 하는 **약속**이라, 약속한 사람과 그날 서는 사람이 달라지면
+   * 손님은 A 의 이름으로 확정 메일을 받고 매장에는 B 가 있다. 대신 승인한다는 것은 **내가 맡는다**는 뜻이다.
+   * 완료·노쇼·취소는 이미 끝난 일의 기록이라 담당을 옮길 이유가 없다.
+   *
+   * 옮길 자원이 없거나(담당자 자원 미연결) 그 시각에 차 있으면 전이 자체가 실패한다 — 승인만 되고
+   * 담당이 그대로 남는 상태를 만들지 않는다(같은 트랜잭션).
+   */
+  takeOver?: boolean;
   reasonRequired?: boolean;
   /** 추가 조건. 어기면 HttpError 를 던진다 */
   guard?: (r: TransitionSubject, now: Date) => void;
@@ -73,24 +95,26 @@ export function customerMailFor(to: ReservationStatus): ReservationMailEvent | n
 
 /** `${from}>${to}` */
 export const RULES: Record<string, Rule> = {
-  "REQUESTED>CONFIRMED": { by: ["CONSOLE"], revalidate: true },
-  "REQUESTED>REJECTED": { by: ["CONSOLE"], reasonRequired: true },
+  "REQUESTED>CONFIRMED": { by: ["CONSOLE"], revalidate: true, anyManager: true, takeOver: true },
+  "REQUESTED>REJECTED": { by: ["CONSOLE"], reasonRequired: true, anyManager: true, takeOver: true },
   "REQUESTED>CANCELED_BY_USER": { by: ["CUSTOMER"] },
-  "REQUESTED>CANCELED_BY_BIZ": { by: ["CONSOLE", "SYSTEM", "ADMIN"], reasonRequired: true },
+  "REQUESTED>CANCELED_BY_BIZ": { by: ["CONSOLE", "SYSTEM", "ADMIN"], reasonRequired: true, anyManager: true },
   "REQUESTED>EXPIRED": { by: ["SYSTEM"] },
   "CONFIRMED>CANCELED_BY_USER": { by: ["CUSTOMER"], guard: CANCEL_DEADLINE },
   // 명세 표의 이 행에는 시스템이 없다 — 일괄 취소(휴무 등록 등)가 건드리는 것은 REQUESTED 까지다.
   // 운영자(ADMIN)는 예외다: 사업장을 차단하면 확정 예약도 지킬 수 없고, 손님이 빈 가게에 가는 것보다
   // 사유가 적힌 취소 메일을 받는 편이 낫다 (FR-ADM-020 "예약 일괄 취소 여부 선택")
-  "CONFIRMED>CANCELED_BY_BIZ": { by: ["CONSOLE", "ADMIN"], reasonRequired: true },
+  "CONFIRMED>CANCELED_BY_BIZ": { by: ["CONSOLE", "ADMIN"], reasonRequired: true, anyManager: true },
   "CONFIRMED>COMPLETED": {
     by: ["CONSOLE"],
+    anyManager: true,
     guard: (r, now) => {
       if (now < r.startAt) throw new HttpError(409, "TOO_EARLY", { startAt: r.startAt.toISOString() });
     },
   },
   "CONFIRMED>NO_SHOW": {
     by: ["CONSOLE", "SYSTEM"],
+    anyManager: true,
     guard: (r, now) => {
       if (now < r.endAt) throw new HttpError(409, "TOO_EARLY", { endAt: r.endAt.toISOString() });
     },
