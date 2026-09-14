@@ -4,6 +4,7 @@ import { auditLogs, businesses, users } from "@/db/schema";
 import { z } from "zod";
 import { HttpError } from "@/features/auth/errors";
 import { isoDateSchema } from "@/lib/dates";
+import { localToInstant } from "@/features/booking/time";
 
 /**
  * 감사 로그 조회 (FR-ADM-040, #68). **읽기 전용이다** — 적재는 `lib/audit.ts` 가 한다.
@@ -70,9 +71,22 @@ export function nextCursorOf(rows: Array<{ at: Date; id: string }>, pageSize: nu
   return last ? `${last.at.toISOString()}|${last.id}` : null;
 }
 
+/**
+ * 기간 필터의 경계. **UTC 자정이 아니라 KST 자정이다** — 운영자가 달력에서 고른 "9월 14일" 은
+ * 한국 시각의 하루지, 09:00 에 시작하는 하루가 아니다. UTC 로 자르면 그날 오전 9시 이전 기록이
+ * 통째로 빠지고 다음 날 새벽 기록이 섞여 든다. 화면이 KST 로 그리므로 필터도 같은 기준이어야 한다.
+ *
+ * 변환은 슬롯 계산과 같은 변환기를 쓴다(`localToInstant`) — 오프셋을 직접 더하면 규칙이 두 군데가 된다.
+ */
+const AUDIT_TZ = "Asia/Seoul";
+
+export function startOfDay(date: string): Date {
+  return new Date(localToInstant(date, 0, AUDIT_TZ));
+}
+
 /** `to` 는 그날을 **포함**한다 — 사람이 "9/14까지" 라고 쓸 때 9/14 를 빼면 놀란다 */
 export function endOfDayExclusive(date: string): Date {
-  return new Date(new Date(`${date}T00:00:00Z`).getTime() + 86_400_000);
+  return new Date(localToInstant(date, 1440, AUDIT_TZ));
 }
 
 export async function listAuditLogs(q: AuditQuery = {}): Promise<{ items: AuditRow[]; nextCursor: string | null }> {
@@ -99,7 +113,7 @@ export async function listAuditLogs(q: AuditQuery = {}): Promise<{ items: AuditR
     .where(
       and(
         q.action ? eq(auditLogs.action, q.action as never) : undefined,
-        q.from ? gte(auditLogs.createdAt, new Date(`${q.from}T00:00:00Z`)) : undefined,
+        q.from ? gte(auditLogs.createdAt, startOfDay(q.from)) : undefined,
         q.to ? lt(auditLogs.createdAt, endOfDayExclusive(q.to)) : undefined,
         actorTerm ? or(sql`${users.name} ilike ${`%${actorTerm}%`}`, sql`${users.email} ilike ${`%${actorTerm}%`}`) : undefined,
         bizTerm ? or(sql`${businesses.name} ilike ${`%${bizTerm}%`}`, sql`${businesses.slug} ilike ${`%${bizTerm}%`}`) : undefined,

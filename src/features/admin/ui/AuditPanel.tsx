@@ -133,7 +133,7 @@ export function AuditPanel({ initial }: { initial: Page }) {
             </option>
           ))}
         </select>
-        <Input aria-label="사업장" placeholder="사업장 이름·주소" value={f.business} onChange={set("business")} />
+        <Input aria-label="사업장" placeholder="사업장 이름·공개 주소" value={f.business} onChange={set("business")} />
         <Input aria-label="행위자" placeholder="행위자 이름·이메일" value={f.actor} onChange={set("actor")} />
         <Input aria-label="시작일" type="date" value={f.from} onChange={set("from")} />
         <Input aria-label="종료일" type="date" value={f.to} onChange={set("to")} />

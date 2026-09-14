@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { endOfDayExclusive, nextCursorOf, parseCursor } from "./audit";
+import { endOfDayExclusive, nextCursorOf, parseCursor, startOfDay } from "./audit";
 
 /**
  * 감사 로그 조회에서 실수하기 쉬운 두 곳 — **커서**와 **끝 날짜**.
@@ -46,8 +46,14 @@ describe("nextCursorOf", () => {
   });
 });
 
-describe("endOfDayExclusive", () => {
-  it("그날을 포함하려면 다음 날 00:00 미만이어야 한다", () => {
-    expect(endOfDayExclusive("2026-09-14").toISOString()).toBe("2026-09-15T00:00:00.000Z");
+describe("기간 경계", () => {
+  // 운영자가 고른 "9월 14일" 은 한국 시각의 하루다. UTC 로 자르면 그날 오전 9시 이전이 통째로 빠지고
+  // 다음 날 새벽이 섞여 든다 — 조사에서 "그날 아침에 아무 일도 없었다" 로 읽힌다
+  it("시작은 KST 자정이다", () => {
+    expect(startOfDay("2026-09-14").toISOString()).toBe("2026-09-13T15:00:00.000Z");
+  });
+
+  it("그날을 포함하려면 다음 KST 자정 미만이어야 한다", () => {
+    expect(endOfDayExclusive("2026-09-14").toISOString()).toBe("2026-09-14T15:00:00.000Z");
   });
 });
