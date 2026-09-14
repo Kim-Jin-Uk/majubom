@@ -219,7 +219,7 @@ export async function transitionReservation(
 ): Promise<TransitionResult> {
   const now = opts.now ?? new Date();
   const result = await db.transaction(async (tx) => {
-    let r = await load(id, tx);
+    const r = await load(id, tx);
     assertVisible(r, actor);
     const rule = RULES[`${r.status}>${to}`];
     if (!rule) throw new HttpError(409, "INVALID_TRANSITION", { from: r.status, to });
@@ -228,31 +228,6 @@ export async function transitionReservation(
     if (rule.reasonRequired && !reason) throw new HttpError(400, "REASON_REQUIRED");
     rule.guard?.(r, now);
 
-    // **동료 담당** 건을 승인·거절하면 담당이 넘어온다 (`takeOver`). 같은 트랜잭션이라
-    // 옮길 자리가 없으면 전이도 함께 실패한다 — 승인만 되고 담당이 그대로 남는 상태를 만들지 않는다.
-    //
-    // `resourceMemberId !== null` 이 중요하다. 룸·공용 자원은 담당이 **없어서** null 인데,
-    // 그것까지 "동료 담당" 으로 읽으면 손님이 고른 적 없는 매니저의 개인 자원으로 룸 예약이 조용히 옮겨진다
-    // (STAFF 와 SPACE 를 섞어 연결한 상품에서 실제로 통과한다 — `RESOURCE_NOT_LINKED` 가 못 막는다).
-    // 거절도 같은 경로라, 무관한 매니저의 일정이 차 있으면 룸 예약 거절이 SLOT_TAKEN 으로 실패할 수 있다. (리뷰 지적)
-    // 담당이 없는 자원에는 옮길 "원래 담당" 이 없으므로 이관 없이 전이만 한다.
-    if (rule.takeOver && actor.kind === "CONSOLE" && actor.role !== "OWNER" && r.resourceMemberId !== null && r.resourceMemberId !== actor.memberId) {
-      const mine = await ownResourceId(actor.businessId, actor.memberId);
-      // 담당자 자원이 없는 매니저(점장 등)는 대신 승인할 수 없다 — 넘겨받을 자리가 없다
-      if (!mine) throw new HttpError(409, "NO_OWN_RESOURCE");
-      // 거절은 그 자리에서 끝나는 전이라 빈자리를 묻지 않는다 (`endsReservation`)
-      await moveReservationResource(
-        tx,
-        r,
-        mine,
-        { uid: actor.uid, role: actor.role, businessId: actor.businessId },
-        opts.meta,
-        to === "CONFIRMED" ? "승인하며 담당 이관" : "거절하며 담당 이관",
-        to !== "CONFIRMED",
-      );
-      // 자원이 바뀌었으니 다시 읽는다 — 아래 재검증(`validateExisting`)이 **옮긴 자원**을 봐야 한다
-      r = await load(id, tx);
-    }
 
     if (rule.revalidate) await validateExisting(r, tx);
 
@@ -274,6 +249,35 @@ export async function transitionReservation(
 
     const actorId = actor.kind === "SYSTEM" ? null : actor.uid;
     await tx.insert(reservationLogs).values({ reservationId: id, fromStatus: r.status, toStatus: to, actorId, reason });
+
+    /**
+     * **동료 담당** 건을 승인·거절하면 담당이 넘어온다 (`takeOver`).
+     *
+     * **상태를 바꾼 뒤에 옮긴다.** 순서가 반대면 아직 `REQUESTED` 인 예약을 옮기게 되는데,
+     * DB 의 `no_overlap` EXCLUDE 술어가 `status in (REQUESTED, CONFIRMED)` 라 내 자리가 그 시각에 차 있으면
+     * **거절조차 23P01 로 막힌다** — 앱에서 빈자리 검사를 건너뛰어도 소용없다(CI 가 잡았다).
+     * 거절로 먼저 넘어가면 그 술어에서 빠지므로 옮길 수 있고, 승인은 반대로 그 자리를 계속 쓰므로
+     * EXCLUDE 와 `validateExisting` 이 둘 다 제자리에서 겹침을 막는다.
+     *
+     * 같은 트랜잭션이라 옮길 자리가 없으면 전이도 함께 롤백된다 — 승인만 되고 담당이 그대로 남지 않는다.
+     *
+     * `resourceMemberId !== null` 이 중요하다. 룸·공용 자원은 담당이 **없어서** null 인데, 그것까지 "동료 담당" 으로
+     * 읽으면 손님이 고른 적 없는 매니저의 개인 자원으로 룸 예약이 조용히 옮겨진다 (리뷰 지적).
+     */
+    if (rule.takeOver && actor.kind === "CONSOLE" && actor.role !== "OWNER" && r.resourceMemberId !== null && r.resourceMemberId !== actor.memberId) {
+      const mine = await ownResourceId(actor.businessId, actor.memberId);
+      // 담당자 자원이 없는 매니저(점장 등)는 대신 승인할 수 없다 — 넘겨받을 자리가 없다
+      if (!mine) throw new HttpError(409, "NO_OWN_RESOURCE");
+      await moveReservationResource(
+        tx,
+        { ...r, status: to },
+        mine,
+        { uid: actor.uid, role: actor.role, businessId: actor.businessId },
+        opts.meta,
+        to === "CONFIRMED" ? "승인하며 담당 이관" : "거절하며 담당 이관",
+        to !== "CONFIRMED",
+      );
+    }
     await writeAudit(
       {
         action: "RESERVATION_STATUS_CHANGE",
