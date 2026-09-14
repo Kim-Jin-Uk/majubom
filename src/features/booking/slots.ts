@@ -1,5 +1,5 @@
 import { addDays, dowOf, effectiveOpeningHours, productWindows, span, toMin, type Interval, type OpeningLike } from "@/features/schedule/resolve";
-import { openingWindows, operatingWindows } from "@/features/schedule/operating";
+import { operatingWindows } from "@/features/schedule/operating";
 import { countsTowardOccupancy, peakOccupancy } from "./peak-occupancy";
 import type { ExcludedSlot, FixedExclusionReason, ISODate, Slot, SlotBusiness, SlotContext, SlotQuery, SlotResource, SlotResult } from "./slot-types";
 import { todayIn } from "@/lib/dates";

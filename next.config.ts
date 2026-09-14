@@ -21,6 +21,12 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  /**
+   * 빌드 산출물 위치. `next dev` 는 `.next/dev/lock` 으로 **같은 디렉터리의 두 번째 서버를 막는데**,
+   * E2E 는 개발 서버가 떠 있는 채로도 돌아야 한다. `NEXT_DIST_DIR` 로 갈라 두면 둘이 공존한다
+   * (E2E 는 `.next-e2e` 를 쓴다 — `playwright.config.ts`). 지정이 없으면 평소대로 `.next`.
+   */
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   poweredByHeader: false,
   async headers() {
     return [{ source: "/(.*)", headers: securityHeaders }];

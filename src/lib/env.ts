@@ -54,6 +54,12 @@ export const serverEnvSchema = z.object({
   AUTH_GOOGLE_ID: z.string().min(1).optional(),
   AUTH_GOOGLE_SECRET: z.string().min(1).optional(),
 
+  /**
+   * **로컬·CI 전용**: ADMIN 2단계 인증(TOTP)을 건너뛴다. 인증 앱을 붙일 수 없는 곳에서 `/admin` 을 열기 위한 것이다.
+   * production 에서는 아래 superRefine 이 부팅을 막는다 — 실수로 배포 설정에 넣으면 서비스가 시작되지 않는다.
+   */
+  AUTH_DEV_SKIP_TOTP: z.stringbool().default(false),
+
   // 메일 (Resend). 키가 없으면 콘솔 폴백 — production 에서는 필수
   RESEND_API_KEY: z.string().min(1).optional(),
   MAIL_FROM: z.string().min(3).default("마주,봄 <onboarding@resend.dev>"),
@@ -73,6 +79,10 @@ export const serverEnvSchema = z.object({
   };
   pair("AUTH_KAKAO_ID", "AUTH_KAKAO_SECRET");
   pair("AUTH_GOOGLE_ID", "AUTH_GOOGLE_SECRET");
+  // 운영자 계정이 비밀번호 하나로 열리는 상태다 — 켠 채로 배포되느니 부팅에 실패하는 편이 낫다
+  if (env.NODE_ENV === "production" && env.AUTH_DEV_SKIP_TOTP) {
+    ctx.addIssue({ code: "custom", path: ["AUTH_DEV_SKIP_TOTP"], message: "production 에서는 켤 수 없습니다 — ADMIN 2단계 인증을 끄는 로컬 전용 스위치입니다" });
+  }
   if (env.NODE_ENV === "production" && !env.RESEND_API_KEY) {
     ctx.addIssue({ code: "custom", path: ["RESEND_API_KEY"], message: "production 에서는 RESEND_API_KEY 가 필수다 (OTP·초대·재설정 메일)" });
   }

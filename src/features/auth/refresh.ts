@@ -1,6 +1,7 @@
 import { decode, encode, type JWT } from "@auth/core/jwt";
 import type { NextRequest } from "next/server";
 import { requestMeta } from "@/lib/request-meta";
+import { skipTotp } from "./dev-flags";
 import { ACCESS_TTL_SEC, ADMIN_PREFIXES, CONSOLE_PREFIXES, COOKIE_REFRESH, COOKIE_SESSION, RECHECK_PREFIXES, REFRESH_TTL_SEC } from "./constants";
 import { clearedRefreshCookie, clearedSessionCookie, refreshCookie } from "./cookies";
 import { consoleAccess, loadPrincipal, principalEquals, userLoginDenial, type AccessDenial, type Principal } from "./principal";
@@ -106,7 +107,7 @@ export async function refreshSession(req: NextRequest): Promise<RefreshOutcome> 
       token.name = fresh.name;
       // ADMIN 권한이 사라졌거나 새로 생겼으면 mfa 상태를 다시 계산한다
       if (fresh.globalRole !== "ADMIN") token.mfa = "ok";
-      else if (principal?.globalRole !== "ADMIN") token.mfa = "pending";
+      else if (principal?.globalRole !== "ADMIN") token.mfa = skipTotp() ? "ok" : "pending";
       changed = true;
       principal = fresh;
     }

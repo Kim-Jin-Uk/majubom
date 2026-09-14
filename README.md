@@ -33,6 +33,7 @@ npm run dev
 | 명령 | 하는 일 |
 |---|---|
 | `npm run verify` | typecheck + lint + test — **push 전에 한 번** |
+| `npm run e2e` | Playwright E2E (첫 실행 전 `npx playwright install chromium`) |
 | `npm test` | vitest 유닛 (슬롯 계산 40건 포함 — FR-BOOK-010 구현 완료) |
 | `npm run test:rules:emu` | Firestore 보안 규칙 테스트 (에뮬레이터 기동 포함, Java 필요) |
 | `npm run db:generate` | 스키마 변경 → 마이그레이션 SQL 생성 |
@@ -99,6 +100,18 @@ gcloud scheduler jobs create http majubom-expire-requests \
 `uuid` 건은 고치기 전에도 실제 위험은 없었다 — 권고문이 말하는 것은 v3/v5/v6 에 `buf` 를 넘길 때이고,
 `gaxios` 는 multipart 경계에 `v4()` 만 쓴다. 게다가 우리는 `firebase-admin/app` 과 `/auth` 만 import 해서
 `@google-cloud/storage` 가 아예 적재되지 않는다. 그래도 프로덕션 트리에 있는 유일한 건이라 닫는 쪽을 골랐다.
+
+### E2E
+
+`npm run e2e` — Playwright 가 **개발 서버를 직접 띄워** 화면으로만 확인한다(DB 를 직접 읽지 않는다).
+`verify` 가 규칙을 본다면 E2E 는 **그 규칙들이 한 화면에 붙어 실제로 되는가**를 본다 — 버튼이 이유 없이 잠기거나
+안내가 옛 규칙을 말하는 회귀는 유닛 테스트로 잡히지 않는다. CI 의 `e2e` 잡에서도 돈다.
+
+- 서버는 `.next-e2e` 를 쓴다. `next dev` 는 같은 디렉터리의 두 번째 서버를 막으므로, 개발 서버를 띄운 채로도 돌게 갈라 뒀다.
+- 주소는 `127.0.0.1` 이 아니라 **`localhost`** 다 — Next dev 가 둘을 다른 출처로 보고 요청을 막는다.
+- 시드는 임시 주소(`b-…`) 상태라 공개 홈이 열리지 않는다. `e2e/setup.ts` 가 화면에서 정식 주소를 정한 뒤 나머지가 돈다.
+- **`AUTH_DEV_SKIP_TOTP=true`** 로 ADMIN 2단계를 건너뛴다. 인증 앱을 붙일 수 없어서다 —
+  **production 에서는 `serverEnv` 가 이 조합을 거부해 부팅이 실패한다**(`lib/env.ts`). 로컬에서 `/admin` 을 열 때도 같은 값을 쓴다.
 
 ### 인증
 
