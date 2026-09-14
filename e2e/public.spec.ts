@@ -50,6 +50,6 @@ test.describe("손님", () => {
     await login(page, ACCOUNTS.customer);
     await page.goto("/me/reservations");
     await expect(page.getByRole("heading", { name: "내 예약" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: /다가오는 예약/ })).toBeVisible();
+    await expect(page.getByRole("tab", { name: /다가오는 예약/ })).toBeVisible();
   });
 });

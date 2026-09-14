@@ -20,7 +20,7 @@ type OnChange = (patch: Partial<Selection>) => void;
 
 // ─────────────────────────── [1] 상품 · 이용 시간 · 인원 ───────────────────────────
 
-export function StepProduct({ data, sel, product, onChange }: { data: BookingWidgetData; sel: Selection; product: WidgetProduct | null; onChange: OnChange }) {
+export function StepProduct({ data, sel, product, onChange, locked }: { data: BookingWidgetData; sel: Selection; product: WidgetProduct | null; onChange: OnChange; locked?: boolean }) {
   if (!product) {
     return (
       <section className="bw-panel">
@@ -55,9 +55,13 @@ export function StepProduct({ data, sel, product, onChange }: { data: BookingWid
   return (
     <section className="bw-panel">
       <h2 tabIndex={-1}>{product.name}</h2>
-      <button type="button" className="bw-link" onClick={() => onChange({ productId: null })}>
-        다른 상품 고르기
-      </button>
+      {/* 예약 변경 중에는 상품을 바꿀 수 없다 — 서버가 원 예약과 같은 상품만 받는다(PRODUCT_MISMATCH).
+          링크를 열어 두면 끝에 가서야 막히고, 그때는 고른 시간까지 다시 골라야 한다 */}
+      {!locked && (
+        <button type="button" className="bw-link" onClick={() => onChange({ productId: null })}>
+          다른 상품 고르기
+        </button>
+      )}
 
       {needsDuration(product) && (
         <fieldset className="bw-field">

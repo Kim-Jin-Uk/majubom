@@ -24,6 +24,14 @@ import { ANY_RESOURCE, change, effectiveDuration, readSelection, resourcePick, s
  */
 const LABELS: Record<Step, string> = { 1: "상품", 2: "날짜", 3: "시간", 4: "담당자", 5: "확인" };
 
+/** 예약 변경 맥락을 주소에 다시 실어 준다. 모듈 밖의 순수 함수라 effect 의존성에 걸리지 않는다 */
+function withReplaces(q: string, replaces: string | null): string {
+  if (!replaces) return q;
+  const sp = new URLSearchParams(q);
+  sp.set("replaces", replaces);
+  return sp.toString();
+}
+
 /** 생성 실패 코드 → 손님 문구. 모르는 코드는 공통 문구(`describeError`)로 떨어진다 */
 const PLACE_ERROR: Record<string, string> = {
   INVALID_START_TIME: "그 시각은 지금 예약을 받지 않아요. 시간을 다시 골라 주세요",
@@ -34,6 +42,10 @@ const PLACE_ERROR: Record<string, string> = {
   TOO_MANY_ACTIVE: "이 상품으로 잡아 두신 예약이 이미 많아요. 하나를 취소한 뒤 다시 시도해 주세요",
   CANCEL_ABUSE: "오늘 취소가 잦아 잠시 예약이 제한됐어요. 내일 다시 시도해 주세요",
   UNAUTHENTICATED: "로그인이 풀렸어요. 다시 로그인해 주세요",
+  // 예약 변경(FR-BOOK-050)에서만 나오는 것들 — 화면이 막고 있지만 주소를 직접 고치면 닿는다
+  NOT_FOUND: "바꾸려던 예약을 찾을 수 없어요. 이미 취소됐거나 끝난 예약일 수 있어요",
+  PRODUCT_MISMATCH: "예약 변경은 같은 상품 안에서만 돼요. 다른 상품은 새로 예약해 주세요",
+  ALREADY_STARTED: "이미 시작한 예약은 변경할 수 없어요. 매장으로 연락해 주세요",
 };
 
 export function BookingWidget({ data, signedIn }: { data: BookingWidgetData; signedIn: boolean }) {
@@ -43,6 +55,14 @@ export function BookingWidget({ data, signedIn }: { data: BookingWidgetData; sig
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
+
+  /**
+   * **예약 변경**(FR-BOOK-050)으로 들어온 경우의 원 예약 id. 선택이 아니라 *맥락*이라 `Selection` 에 두지 않고
+   * 주소에서 그대로 들고 다닌다 — 단계를 옮길 때마다 새로 만드는 쿼리에 다시 실어 준다.
+   * 값의 유효성은 서버가 본다(남의 예약·끝난 예약은 404).
+   */
+  const replaces = params.get("replaces");
+  const withCtx = (q: string): string => withReplaces(q, replaces);
 
   const sel = useMemo(() => readSelection(params, data.products), [params, data.products]);
   const product = useMemo(() => data.products.find((p) => p.id === sel.productId) ?? null, [data.products, sel.productId]);
@@ -98,7 +118,7 @@ export function BookingWidget({ data, signedIn }: { data: BookingWidgetData; sig
     acted.current = true;
     const next = change(sel, patch, product);
     const nextProduct = data.products.find((p) => p.id === next.productId) ?? null;
-    const q = selectionQuery(next, nextProduct);
+    const q = withCtx(selectionQuery(next, nextProduct));
     const href = q ? `${pathname}?${q}` : pathname;
     // **단계가 바뀔 때만** 방문 기록을 남긴다 (#85). 칩 하나 누를 때마다 쌓으면 뒤로가기 다섯 번이
     // 1단계 안에서만 왔다 갔다 하고, 손님은 위젯을 벗어나지 못한다
@@ -146,13 +166,13 @@ export function BookingWidget({ data, signedIn }: { data: BookingWidgetData; sig
         startAt: s.startAt,
       };
       setNote(s.customerNote ?? "");
-      const q = selectionQuery(restored, p);
+      const q = withReplaces(selectionQuery(restored, p), replaces);
       router.replace(q ? `${pathname}?${q}` : pathname, { scroll: false });
     });
     return () => {
       alive = false;
     };
-  }, [selectionId, pathname, router, data.products]);
+  }, [selectionId, pathname, router, data.products, replaces]);
 
   async function submit() {
     if (!product || !sel.startAt || !sel.date) return;
@@ -166,6 +186,7 @@ export function BookingWidget({ data, signedIn }: { data: BookingWidgetData; sig
       durationMin: effectiveDuration(product, sel),
       resourceId: sel.resourceId && sel.resourceId !== ANY_RESOURCE ? sel.resourceId : undefined,
       customerNote: note.trim() || undefined,
+      replacesReservationId: replaces ?? undefined,
     };
 
     if (!signedIn) {
@@ -176,7 +197,8 @@ export function BookingWidget({ data, signedIn }: { data: BookingWidgetData; sig
         setPlaceError(describeError(r));
         return;
       }
-      const back = `${pathname}?sel=${encodeURIComponent(r.data.selectionId)}`;
+      // `replaces` 는 선택 토큰에 들어가지 않는다 — 주소에 같이 실어 돌아올 때 되찾는다
+      const back = `${pathname}?${withCtx(`sel=${encodeURIComponent(r.data.selectionId)}`)}`;
       // 로그인 왕복은 전체 내비게이션이다 — 새 세션 쿠키로 프록시와 RSC 를 처음부터 다시 태운다
       hardNavigate(`/login?next=${encodeURIComponent(back)}`);
       return;
@@ -187,7 +209,7 @@ export function BookingWidget({ data, signedIn }: { data: BookingWidgetData; sig
     if (r.ok) {
       setPlaced({ kind: r.data.status, code: r.data.code, startAt: r.data.startAt, endAt: r.data.endAt, resourceId: r.data.resourceId });
       // 뒤로가기가 확인 화면으로 돌아가 다시 누르는 것을 막는다
-      const q = new URLSearchParams(selectionQuery(sel, product));
+      const q = new URLSearchParams(withCtx(selectionQuery(sel, product)));
       q.set("done", r.data.code);
       router.replace(`${pathname}?${q}`, { scroll: false });
       return;
@@ -227,6 +249,11 @@ export function BookingWidget({ data, signedIn }: { data: BookingWidgetData; sig
         <span className="bw-top-name">{data.businessName}</span>
       </header>
 
+      {/* 바꾸는 중이라는 사실을 처음부터 말한다 — 마지막에 알면 "원래 예약은 어떻게 되나" 를 모른 채 누른다 */}
+      {replaces && !placed && !doneCode && (
+        <Alert kind="info">예약을 <b>변경</b>하는 중이에요. 새 시간이 잡히면 기존 예약은 자동으로 취소됩니다.</Alert>
+      )}
+
       {!placed && !doneCode && (
       <ol className="bw-steps" aria-label="예약 단계">
         {([1, 2, 3, 4] as Step[])
@@ -258,7 +285,7 @@ export function BookingWidget({ data, signedIn }: { data: BookingWidgetData; sig
         </section>
       ) : (
         <>
-      {step === 1 && <StepProduct data={data} sel={sel} product={product} onChange={apply} />}
+      {step === 1 && <StepProduct data={data} sel={sel} product={product} onChange={apply} locked={Boolean(replaces)} />}
       {step === 2 && product && (
         <StepDate
           product={product}
