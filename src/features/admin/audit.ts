@@ -1,6 +1,6 @@
 import { and, desc, eq, gte, lt, or, sql } from "drizzle-orm";
 import { db } from "@/db/client";
-import { auditLogs, businesses, users } from "@/db/schema";
+import { auditActionEnum, auditLogs, businesses, users } from "@/db/schema";
 import { z } from "zod";
 import { HttpError } from "@/features/auth/errors";
 import { isoDateSchema } from "@/lib/dates";
@@ -29,7 +29,7 @@ export type AuditRow = {
 };
 
 export type AuditQuery = {
-  action?: string;
+  action?: (typeof auditActionEnum.enumValues)[number];
   /** 사업장 이름·slug 부분 일치 */
   business?: string;
   /** 행위자 이름·이메일 부분 일치 */
@@ -44,7 +44,9 @@ export type AuditQuery = {
 export const AUDIT_PAGE = 50;
 
 export const auditQuerySchema = z.object({
-  action: z.string().max(40).optional(),
+  // **enum 으로 좁힌다.** 자유 문자열로 두면 오타가 그대로 Postgres 까지 가서 enum 캐스팅 오류로 500 이 된다 —
+  // 잘못 부른 쪽의 실수인데 서버가 고장 난 것처럼 보인다 (리뷰 지적)
+  action: z.enum(auditActionEnum.enumValues).optional(),
   business: z.string().trim().max(80).optional(),
   actor: z.string().trim().max(80).optional(),
   from: isoDateSchema.optional(),
@@ -112,7 +114,7 @@ export async function listAuditLogs(q: AuditQuery = {}): Promise<{ items: AuditR
     .leftJoin(businesses, eq(businesses.id, auditLogs.businessId))
     .where(
       and(
-        q.action ? eq(auditLogs.action, q.action as never) : undefined,
+        q.action ? eq(auditLogs.action, q.action) : undefined,
         q.from ? gte(auditLogs.createdAt, startOfDay(q.from)) : undefined,
         q.to ? lt(auditLogs.createdAt, endOfDayExclusive(q.to)) : undefined,
         actorTerm ? or(sql`${users.name} ilike ${`%${actorTerm}%`}`, sql`${users.email} ilike ${`%${actorTerm}%`}`) : undefined,

@@ -84,7 +84,8 @@ function fmtAt(at: string | Date): string {
   return new Date(at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "short", timeStyle: "short" });
 }
 
-type Page = { items: Row[]; nextCursor: string | null; actions: Array<{ action: string; count: number }> };
+type Action = { action: string; count: number };
+type Page = { items: Row[]; nextCursor: string | null; actions: Action[] };
 
 export function AuditPanel({ initial }: { initial: Page }) {
   const [page, setPage] = useState<Page>(initial);
@@ -101,14 +102,19 @@ export function AuditPanel({ initial }: { initial: Page }) {
 
   async function load(extra: Record<string, string> = {}, append = false) {
     setBusy(true);
-    const r = await apiGet<Page>(`/api/admin/audit?${query(extra)}`);
+    const r = await apiGet<Omit<Page, "actions"> & { actions?: Action[] }>(`/api/admin/audit?${query(extra)}`);
     setBusy(false);
     if (!r.ok) {
       setErr(describeError(r));
       return;
     }
     setErr(null);
-    setPage((prev) => (append ? { ...r.data, items: [...prev.items, ...r.data.items] } : r.data));
+    // 이어 읽기 응답에는 행위 목록이 없다(서버가 다시 세지 않는다) — 갖고 있던 것을 그대로 쓴다
+    setPage((prev) => ({
+      ...r.data,
+      items: append ? [...prev.items, ...r.data.items] : r.data.items,
+      actions: r.data.actions ?? prev.actions,
+    }));
   }
 
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF((x) => ({ ...x, [k]: e.target.value }));

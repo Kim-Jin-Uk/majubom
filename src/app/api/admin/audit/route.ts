@@ -14,6 +14,8 @@ export const GET = handle(async (req) => {
   const raw = Object.fromEntries([...u.searchParams.entries()].filter(([, v]) => v !== ""));
   const parsed = auditQuerySchema.safeParse(raw);
   if (!parsed.success) throw new HttpError(400, "INVALID_QUERY", { issues: parsed.error.issues });
-  const [page, actions] = await Promise.all([listAuditLogs(parsed.data), usedActions()]);
-  return NextResponse.json({ ...page, actions });
+  // **"더 보기" 에서는 행위 목록을 다시 세지 않는다.** 전체 테이블 groupBy 라 로그가 커지면 무거워지는데,
+  // 이어 읽기 중에 필터 선택지가 바뀔 일도 없다 — 첫 조회에서만 센다 (리뷰 지적)
+  const [page, actions] = await Promise.all([listAuditLogs(parsed.data), parsed.data.cursor ? null : usedActions()]);
+  return NextResponse.json(actions ? { ...page, actions } : page);
 });
