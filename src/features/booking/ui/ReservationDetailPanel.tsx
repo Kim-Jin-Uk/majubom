@@ -261,7 +261,9 @@ function transitionError(code: string): string | null {
       // 승인·거절은 담당을 넘겨받는 일이라, 넘겨받을 자리가 없으면 할 수 없다
       return "승인 · 거절은 담당이 나에게 넘어오는 처리예요. 내 계정에 연결된 담당자 자원이 없어 대신 처리할 수 없어요";
     case "NOT_OWN_RESOURCE":
-      return "오판 정정(완료↔노쇼)은 사장님만 할 수 있어요";
+      // 지금 표에서는 닿지 않는다(콘솔 전이는 오판 교정만 빼고 전부 anyManager 다. 그쪽은 OWNER_ONLY 로 따로 던진다).
+      // 나중에 담당 전용 전이가 생기면 이 문구가 쓰인다 — 그때 엉뚱한 말이 나가지 않게 일반형으로 둔다
+      return "내가 담당하는 예약만 할 수 있는 처리예요";
     default:
       return null;
   }

@@ -166,6 +166,12 @@ export async function moveReservationResource(
   actor: { uid: string; role: "OWNER" | "MANAGER"; businessId: string },
   meta: RequestMeta | undefined,
   reason: string,
+  /**
+   * **종결 전이와 함께 옮길 때만** 참. 거절처럼 그 자리에서 끝나는 예약은 옮긴 자원을 점유하지 않으므로
+   * 빈자리 검사를 하지 않는다 — 하면 "마침 내가 그 시각에 다른 확정 건이 있다" 는 이유로 **거절 자체가
+   * `SLOT_TAKEN` 으로 막힌다.** 남의 예약을 거절하지도 못하게 되는 셈이다 (리뷰 지적).
+   */
+  endsReservation = false,
 ): Promise<void> {
   if (cur.resourceId === toResourceId) return;
   // 상품에 연결되지 않은 자원은 409 다(그 자원은 존재하고 고칠 수 있는 상태의 문제). 남의 사업장 자원은 404 — 존재를 알리지 않는다
@@ -185,9 +191,10 @@ export async function moveReservationResource(
     .limit(1);
   if (!linked) throw new HttpError(409, "RESOURCE_NOT_LINKED");
 
-  // 자원 단위 직렬화 후 그 자리가 비어 있는지 — 생성·승인과 같은 잣대
+  // 자원 단위 직렬화 후 그 자리가 비어 있는지 — 생성·승인과 같은 잣대.
+  // 종결 전이(거절)는 점유가 남지 않으므로 빈자리를 묻지 않는다. 잠금은 그대로 잡는다 — 아래 조건부 UPDATE 를 지킨다
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${toResourceId}))`);
-  await validateExisting({ ...cur, resourceId: toResourceId, resourceCapacity: target.capacity, exclusive: target.capacity === 1 }, tx);
+  if (!endsReservation) await validateExisting({ ...cur, resourceId: toResourceId, resourceCapacity: target.capacity, exclusive: target.capacity === 1 }, tx);
 
   const rows = await tx
     .update(reservations)
@@ -233,7 +240,16 @@ export async function transitionReservation(
       const mine = await ownResourceId(actor.businessId, actor.memberId);
       // 담당자 자원이 없는 매니저(점장 등)는 대신 승인할 수 없다 — 넘겨받을 자리가 없다
       if (!mine) throw new HttpError(409, "NO_OWN_RESOURCE");
-      await moveReservationResource(tx, r, mine, { uid: actor.uid, role: actor.role, businessId: actor.businessId }, opts.meta, to === "CONFIRMED" ? "승인하며 담당 이관" : "거절하며 담당 이관");
+      // 거절은 그 자리에서 끝나는 전이라 빈자리를 묻지 않는다 (`endsReservation`)
+      await moveReservationResource(
+        tx,
+        r,
+        mine,
+        { uid: actor.uid, role: actor.role, businessId: actor.businessId },
+        opts.meta,
+        to === "CONFIRMED" ? "승인하며 담당 이관" : "거절하며 담당 이관",
+        to !== "CONFIRMED",
+      );
       // 자원이 바뀌었으니 다시 읽는다 — 아래 재검증(`validateExisting`)이 **옮긴 자원**을 봐야 한다
       r = await load(id, tx);
     }

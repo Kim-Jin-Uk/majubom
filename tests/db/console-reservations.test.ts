@@ -185,6 +185,23 @@ describe.skipIf(!enabled)("예약 콘솔 (FR-BOOK-080)", () => {
     expect(logs.filter((m) => m.from !== null && m.to !== null)).toEqual([{ from: f.theirs, to: f.mine }]);
   }, 30_000);
 
+  it("내 자리가 그 시각에 차 있어도 동료 건을 거절할 수 있다 — 거절은 자리를 점유하지 않는다", async () => {
+    const f = await make();
+    const seen = { kind: "CONSOLE" as const, uid: f.mgrActor.uid, role: "MANAGER" as const, memberId: f.mgrActor.memberId, businessId: f.businessId, canViewAll: true };
+    // 같은 시각: 내 자리에 확정 건 하나, 동료 자리에 대기 건 하나
+    const busy = await createReservation({ productId: f.productId, startAt: at(30), partySize: 1, resourceId: f.mine, customerNote: null }, { uid: f.customerId });
+    await transitionReservation(busy.id, "CONFIRMED", { kind: "CONSOLE", ...f.ownerActor });
+    const theirs = await createReservation({ productId: f.productId, startAt: at(30), partySize: 1, resourceId: f.theirs, customerNote: null }, { uid: f.customerId });
+
+    // 승인은 막힌다 — 넘겨받으면 내 자리가 겹친다
+    await expect(transitionReservation(theirs.id, "CONFIRMED", seen)).rejects.toMatchObject({ status: 409, code: "SLOT_TAKEN" });
+    // 거절은 된다. 그 자리에서 끝나는 전이라 점유가 남지 않는다
+    await transitionReservation(theirs.id, "REJECTED", seen, { reason: "그 시간은 어려워요" });
+    const [after] = await db.select({ status: reservations.status, resourceId: reservations.resourceId }).from(reservations).where(eq(reservations.id, theirs.id));
+    expect(after.status).toBe("REJECTED");
+    expect(after.resourceId, "거절해도 담당은 처리한 사람에게 넘어온다").toBe(f.mine);
+  }, 30_000);
+
   it("담당이 없는 자원(룸)은 이관하지 않는다 — 손님이 고른 적 없는 자리로 옮기지 않는다", async () => {
     const f = await make();
     // `room` 은 담당(memberId)이 없는 SPACE 자원이다
