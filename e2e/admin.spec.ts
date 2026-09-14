@@ -25,7 +25,10 @@ test.describe("관리자", () => {
     await page.goto("/admin");
     // TOTP 등록 화면으로 튕기지 않는다
     await expect(page).not.toHaveURL(/\/login\/totp/);
-    await expect(page.getByRole("heading", { name: /관리자/ })).toBeVisible();
+    // 홈은 지표 대시보드다. 집계 쿼리가 여럿이라 이 한 줄이 그 전부를 실제 DB 에 태워 본다
+    await expect(page.getByRole("heading", { name: "서비스 지표" })).toBeVisible();
+    await expect(page.getByText("일별 예약 추이 (30일)")).toBeVisible();
+    await expect(page.getByText("품질 지표 (이번 달)")).toBeVisible();
 
     await page.goto("/admin/businesses");
     await expect(page.getByText("봄 네일")).toBeVisible();
