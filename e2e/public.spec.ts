@@ -14,14 +14,17 @@ test.describe("손님", () => {
 
     await expect(page.getByRole("link", { name: /젤네일/ })).toBeVisible();
 
-    // 동네로도 찾는다
+    // 동네로도 찾는다. **주소에 검색어가 실렸는지 먼저 본다** — 걸러지지 않은 전체 목록에도 젤네일이 있어서,
+    // 결과만 보면 검색어를 잃은 채 통과한다(실제로 그런 적이 있다)
     await page.getByLabel("검색어").fill("강남");
     await page.getByRole("button", { name: "검색" }).click();
+    await expect(page).toHaveURL(/[?&]q=/);
     await expect(page.getByRole("link", { name: /젤네일/ })).toBeVisible();
 
     // 없는 말은 빈 결과를 안내한다 — 고장 난 것처럼 보이면 안 된다
     await page.getByLabel("검색어").fill("없는말입니다zzz");
     await page.getByRole("button", { name: "검색" }).click();
+    await expect(page).toHaveURL(/[?&]q=/);
     await expect(page.getByText(/조건에 맞는 상품이 없어요/)).toBeVisible();
   });
 

@@ -45,8 +45,15 @@ export function SearchPanel({
 
   return (
     <>
+      {/*
+        **하이드레이션 전에 눌러도 검색이 된다.** `action`·`name` 없이 `onSubmit` 만 두면 그 전에 제출된 폼이
+        빈 GET 으로 `/` 에 가서 검색어를 통째로 잃는다 — 화면은 멀쩡히 전체 목록이라 사라진 줄도 모른다.
+        (CI 가 느린 환경에서 이걸 잡았다.) 업종 칩은 주소를 바꾸는 버튼이라 같이 실어 보낸다.
+      */}
       <form
         className="search-bar"
+        action="/"
+        method="get"
         onSubmit={(e: FormEvent) => {
           e.preventDefault();
           go({ q: draft });
@@ -54,12 +61,14 @@ export function SearchPanel({
         role="search"
       >
         <Input
+          name="q"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder="상품·가게 이름이나 동네로 검색"
           aria-label="검색어"
           style={{ flex: 1 }}
         />
+        {category && <input type="hidden" name="category" value={category} />}
         <Button type="submit" variant="primary">
           검색
         </Button>

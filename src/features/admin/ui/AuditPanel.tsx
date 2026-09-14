@@ -75,6 +75,15 @@ function DiffView({ diff }: { diff: Record<string, unknown> | null }) {
 
 /** 서버 컴포넌트에서 넘어오면 `at` 은 Date, API 응답으로 오면 문자열이다 — 둘 다 `new Date()` 가 받는다 */
 type Row = Omit<AuditRow, "at"> & { at: string | Date };
+/**
+ * **타임존을 반드시 박는다.** 생략하면 서버는 UTC, 브라우저는 KST 로 그려 하이드레이션이 깨진다
+ * (CI 가 잡았다 — 로컬은 양쪽 다 KST 라 안 보인다). 관리자 화면은 사업장별이 아니라 전역이므로
+ * 사업장 타임존이 아니라 운영 기준시(`Asia/Seoul`)다 — 기기 설정이 달라도 운영자끼리 같은 시각을 본다.
+ */
+function fmtAt(at: string | Date): string {
+  return new Date(at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "short", timeStyle: "short" });
+}
+
 type Page = { items: Row[]; nextCursor: string | null; actions: Array<{ action: string; count: number }> };
 
 export function AuditPanel({ initial }: { initial: Page }) {
@@ -140,7 +149,7 @@ export function AuditPanel({ initial }: { initial: Page }) {
           {page.items.map((r) => (
             <li key={r.id} className="audit-row">
               <button type="button" className="audit-head" onClick={() => setOpen(open === r.id ? null : r.id)} aria-expanded={open === r.id}>
-                <span className="audit-at">{new Date(r.at).toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "short" })}</span>
+                <span className="audit-at">{fmtAt(r.at)}</span>
                 <b>{ACTION_TEXT[r.action] ?? r.action}</b>
                 <span className="muted">
                   {r.actorName ?? "시스템"}
