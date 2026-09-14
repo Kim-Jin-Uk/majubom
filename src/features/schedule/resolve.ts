@@ -247,6 +247,15 @@ export function resolveWorkDay(input: ResolveInput): ResolvedDay {
  *
  * 상품 시간이 비어 있으면(기본) 사업장 영업시간으로 떨어지고, 그것도 비어 있으면 하루 전체다.
  */
+/**
+ * 그 상품에 **실제로 적용되는** 영업시간. 상품 시간이 있으면 그것, 없으면 사업장 것.
+ * `productWindows` 와 같은 규칙인데, 구간이 아니라 **원본 항목**이 필요한 곳이 있다 —
+ * 자정을 넘겨 여는지(`stillRunning`) 같은 판정은 `open`/`close` 문자열을 봐야 한다.
+ */
+export function effectiveOpeningHours(productHours: OpeningLike[] | undefined, businessHours: OpeningLike[]): OpeningLike[] {
+  return productHours && productHours.length > 0 ? productHours : businessHours;
+}
+
 export function productWindows(productHours: OpeningLike[] | undefined, businessHours: OpeningLike[], date: ISODate, subtractBreaks: boolean): Interval[] {
   return openingWindows(productHours && productHours.length > 0 ? productHours : businessHours, date, subtractBreaks);
 }

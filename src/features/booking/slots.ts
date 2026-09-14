@@ -1,4 +1,4 @@
-import { addDays, dowOf, productWindows, span, toMin, type Interval, type OpeningLike } from "@/features/schedule/resolve";
+import { addDays, dowOf, effectiveOpeningHours, productWindows, span, toMin, type Interval, type OpeningLike } from "@/features/schedule/resolve";
 import { openingWindows, operatingWindows } from "@/features/schedule/operating";
 import { countsTowardOccupancy, peakOccupancy } from "./peak-occupancy";
 import type { ExcludedSlot, FixedExclusionReason, ISODate, Slot, SlotBusiness, SlotContext, SlotQuery, SlotResource, SlotResult } from "./slot-types";
@@ -55,10 +55,12 @@ export function firstBookableDate(biz: OpeningOwner, nowMs: number): ISODate {
  * 조회·생성이 **같은 규칙**을 쓰게 한 날짜 범위 판정. 두 곳에 따로 적어 두면 언젠가 한쪽만 고쳐져
  * "위젯에는 보이는데 예약은 안 되는 시각" 이 생긴다.
  */
-export function dateInRange(biz: SlotBusiness, date: ISODate, nowMs: number): boolean {
+export function dateInRange(biz: SlotBusiness, date: ISODate, nowMs: number, productHours?: OpeningLike[]): boolean {
   const today = todayIn(biz.timezone, new Date(nowMs));
   if (date > addDays(today, biz.policy.maxAdvanceDays)) return false;
-  return date >= today || stillRunning(biz, date, nowMs);
+  // **상품 시간이 있으면 그것으로 본다.** 사업장만 보면, 자정을 넘겨 여는 심야 상품이 00:30 에
+  // "어제" 로 걸러져 예약이 안 된다 — 이 기능의 대표 예시에서 바로 터진다 (리뷰 지적)
+  return date >= today || stillRunning({ openingHours: effectiveOpeningHours(productHours, biz.openingHours), timezone: biz.timezone }, date, nowMs);
 }
 
 /**
@@ -132,7 +134,7 @@ export function computeSlots(ctx: SlotContext, q: SlotQuery): SlotResult {
   const isFixed = p.startMode === "FIXED";
   // 0) 날짜 범위 정책 — 범위 밖은 오류가 아니라 빈 결과. FIXED 는 응답 형태를 지키려고 빈 excluded 를 함께 준다
   const nowMs = toMs(ctx.now);
-  if (!dateInRange(biz, q.date, nowMs)) return isFixed ? { slots: [], excluded: [] } : { slots: [] };
+  if (!dateInRange(biz, q.date, nowMs, p.openingHours)) return isFixed ? { slots: [], excluded: [] } : { slots: [] };
 
   // FIXED 는 영업시간 브레이크를 차감하지 않는다(fixedIgnoreBreaks 기본 true). 근무표 휴게는 늘 차감된다 (가정 A4).
   // 상품에 고유 시간이 있으면 그것이 사업장 영업시간을 **대신한다** (`productWindows`)

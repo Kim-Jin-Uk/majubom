@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { productWindows } from "./resolve";
+import { effectiveOpeningHours, productWindows } from "./resolve";
 
 /**
  * 상품 시간은 사업장 영업시간을 **대신한다** — 교집합이 아니다 (9/14 결정).
@@ -42,5 +42,38 @@ describe("productWindows", () => {
       { start: 840, end: 1080 },
     ]);
     expect(productWindows(withBreak, BIZ, MON, false)).toEqual([{ start: 600, end: 1080 }]);
+  });
+});
+
+/**
+ * 자정을 넘겨 여는 심야 상품의 "어제" 판정 — 이 기능의 대표 예시에서 바로 터졌던 자리다 (리뷰 지적).
+ *
+ * 날짜 범위 판정(`dateInRange`/`stillRunning`)이 사업장 영업시간만 보면, 20:00~02:00 클래스를
+ * 00:30 에 조회할 때 그 영업일이 "어제" 로 걸러져 **예약이 아예 안 된다.**
+ * 판정의 입력을 고르는 것이 `effectiveOpeningHours` 다 — 여기서 상품 시간이 이기는지 본다.
+ */
+describe("effectiveOpeningHours", () => {
+  const BIZ_DAY = [1, 2, 3, 4, 5].map((dow) => ({ dow, open: "10:00", close: "19:00" }));
+  const NIGHT_CLASS = [1, 2, 3, 4, 5].map((dow) => ({ dow, open: "20:00", close: "02:00" }));
+
+  it("상품 시간이 있으면 그것을 쓴다 — 자정 넘김 여부가 상품 기준으로 판정된다", () => {
+    expect(effectiveOpeningHours(NIGHT_CLASS, BIZ_DAY)).toBe(NIGHT_CLASS);
+  });
+
+  it("비어 있으면 사업장 것을 쓴다", () => {
+    expect(effectiveOpeningHours([], BIZ_DAY)).toBe(BIZ_DAY);
+    expect(effectiveOpeningHours(undefined, BIZ_DAY)).toBe(BIZ_DAY);
+  });
+
+  it("`productWindows` 와 같은 것을 고른다 — 구간과 원본이 다른 기준을 보면 안 된다", () => {
+    const cases: Array<[typeof BIZ_DAY, typeof BIZ_DAY]> = [
+      [NIGHT_CLASS, BIZ_DAY],
+      [[], BIZ_DAY],
+      [[], []],
+    ];
+    for (const [prod, biz] of cases) {
+      const picked = effectiveOpeningHours(prod, biz);
+      expect(productWindows(prod, biz, MON, true)).toEqual(productWindows(picked, [], MON, true));
+    }
   });
 });

@@ -79,6 +79,8 @@ export const loadBookingWidget = cache(async (businessId: string): Promise<Booki
       capacityPerSlot: products.capacityPerSlot,
       maxPartySize: products.maxPartySize,
       resourceSelectMode: products.resourceSelectMode,
+      // 달력 하한 계산용 — 손님 화면에는 내보내지 않는다(상품 목록 타입에 없다)
+      openingHours: products.openingHours,
     })
     .from(products)
     .where(and(eq(products.businessId, businessId), eq(products.status, "ACTIVE")))
@@ -118,8 +120,14 @@ export const loadBookingWidget = cache(async (businessId: string): Promise<Booki
     businessName: home.name,
     timezone: home.timezone,
     today: todayIn(home.timezone),
-    firstDate: firstBookableDate({ openingHours: home.openingHours, timezone: home.timezone }, Date.now()),
+    // 달력의 하한은 **어느 상품이든 열려 있는 가장 이른 날**이다. 상품마다 시간이 다를 수 있으므로
+    // 사업장 영업시간만 보면, 자정을 넘겨 여는 심야 상품의 "어제" 칸을 손님이 누를 수조차 없다.
+    // 하한을 넓게 잡아도 그날 슬롯이 없는 상품은 달력이 비활성으로 그린다(`dayState`) — 반대는 복구할 방법이 없다
+    firstDate: list
+      .map((p) => firstBookableDate({ openingHours: p.openingHours.length ? p.openingHours : home.openingHours, timezone: home.timezone }, Date.now()))
+      .reduce((a, b) => (a < b ? a : b), todayIn(home.timezone)),
     policy: { minLeadTimeMin: policy.minLeadTimeMin, maxAdvanceDays: policy.maxAdvanceDays, cancelDeadlineHours: policy.cancelDeadlineHours, autoConfirm: policy.autoConfirm },
-    products: list,
+    // 상품 시간은 달력 하한을 구하는 데만 썼다 — 손님 화면이 쓰지 않으므로 페이로드에서 뺀다
+    products: list.map(({ openingHours: _hours, ...p }) => p),
   };
 });
