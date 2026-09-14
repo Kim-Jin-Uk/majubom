@@ -84,6 +84,9 @@ function fmtAt(at: string | Date): string {
   return new Date(at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "short", timeStyle: "short" });
 }
 
+type Filters = { action: string; business: string; actor: string; from: string; to: string };
+const EMPTY: Filters = { action: "", business: "", actor: "", from: "", to: "" };
+
 type Action = { action: string; count: number };
 type Page = { items: Row[]; nextCursor: string | null; actions: Action[] };
 
@@ -92,23 +95,30 @@ export function AuditPanel({ initial }: { initial: Page }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
-  const [f, setF] = useState({ action: "", business: "", actor: "", from: "", to: "" });
+  /**
+   * 입력 중인 필터(`f`)와 **조회에 실제로 쓰인 필터**(`applied`)를 나눠 둔다.
+   * 하나로 두면 조사 중에 칸을 고쳐 놓고 "더 보기" 를 눌렀을 때 **새 조건 + 옛 커서**가 섞여 나간다 —
+   * 커서는 직전 페이지 마지막 행의 시각인데 조건이 달라졌으니, 그 사이에 있어야 할 행이 조용히 빠진다 (리뷰 지적).
+   */
+  const [f, setF] = useState<Filters>(EMPTY);
+  const [applied, setApplied] = useState<Filters>(EMPTY);
 
-  function query(extra: Record<string, string> = {}) {
+  function query(base: Filters, extra: Record<string, string> = {}) {
     const sp = new URLSearchParams();
-    for (const [k, v] of Object.entries({ ...f, ...extra })) if (v) sp.set(k, v);
+    for (const [k, v] of Object.entries({ ...base, ...extra })) if (v) sp.set(k, v);
     return sp.toString();
   }
 
-  async function load(extra: Record<string, string> = {}, append = false) {
+  async function load(base: Filters, extra: Record<string, string> = {}, append = false) {
     setBusy(true);
-    const r = await apiGet<Omit<Page, "actions"> & { actions?: Action[] }>(`/api/admin/audit?${query(extra)}`);
+    const r = await apiGet<Omit<Page, "actions"> & { actions?: Action[] }>(`/api/admin/audit?${query(base, extra)}`);
     setBusy(false);
     if (!r.ok) {
       setErr(describeError(r));
       return;
     }
     setErr(null);
+    setApplied(base);
     // 이어 읽기 응답에는 행위 목록이 없다(서버가 다시 세지 않는다) — 갖고 있던 것을 그대로 쓴다
     setPage((prev) => ({
       ...r.data,
@@ -127,7 +137,7 @@ export function AuditPanel({ initial }: { initial: Page }) {
         className="audit-filters"
         onSubmit={(e) => {
           e.preventDefault();
-          void load();
+          void load(f);
         }}
       >
         <select className="select" aria-label="행위" value={f.action} onChange={set("action")}>
@@ -179,7 +189,7 @@ export function AuditPanel({ initial }: { initial: Page }) {
 
       {page.nextCursor && (
         <div className="actions actions--center" style={{ marginTop: 12 }}>
-          <Button type="button" loading={busy} onClick={() => void load({ cursor: page.nextCursor! }, true)}>
+          <Button type="button" loading={busy} onClick={() => void load(applied, { cursor: page.nextCursor! }, true)}>
             더 보기
           </Button>
         </div>

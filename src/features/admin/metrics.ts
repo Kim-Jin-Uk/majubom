@@ -23,7 +23,7 @@ export type AdminMetrics = {
   reservationsThisMonth: number;
   /** 최근 30일, 빈 날도 0 으로 채워 넣는다 */
   daily: Array<{ date: string; count: number }>;
-  topBusinesses: Array<{ name: string; count: number }>;
+  topBusinesses: Array<{ id: string; name: string; count: number }>;
   statusMix: Array<{ status: string; count: number }>;
   quality: {
     /** 승인·거절·만료로 결론이 난 신청 중 승인된 비율 */
@@ -90,12 +90,14 @@ export async function loadAdminMetrics(now = new Date()): Promise<AdminMetrics> 
       select to_char(${reservations.createdAt} at time zone ${METRICS_TZ}, 'YYYY-MM-DD') as date, count(*)::int as count
       from ${reservations} where ${reservations.createdAt} >= ${trendStart}
       group by 1 order by 1`),
+    // **id 로 묶는다.** 상호는 unique 가 아니다 — 이름으로 묶으면 동명 사업장 둘의 예약이 한 줄로 합쳐져
+    // 있지도 않은 1위가 만들어진다 (리뷰 지적)
     db
-      .select({ name: businesses.name, n: count() })
+      .select({ id: businesses.id, name: businesses.name, n: count() })
       .from(reservations)
       .innerJoin(businesses, eq(businesses.id, reservations.businessId))
       .where(gte(reservations.createdAt, monthStart))
-      .groupBy(businesses.name)
+      .groupBy(businesses.id, businesses.name)
       .orderBy(sql`count(*) desc`)
       .limit(10),
     db.select({ status: reservations.status, n: count() }).from(reservations).where(gte(reservations.createdAt, monthStart)).groupBy(reservations.status),
@@ -149,7 +151,7 @@ export async function loadAdminMetrics(now = new Date()): Promise<AdminMetrics> 
     dau: rows<{ n: number }>(dau)[0]?.n ?? 0,
     reservationsThisMonth: monthTotal,
     daily: fillDaily(rows<{ date: string; count: number }>(daily), keys),
-    topBusinesses: top.map((t) => ({ name: t.name, count: t.n })),
+    topBusinesses: top.map((t) => ({ id: t.id, name: t.name, count: t.n })),
     statusMix: mix.map((m) => ({ status: m.status, count: m.n })).sort((a, b) => b.count - a.count),
     quality: {
       confirmRate: rate(approved, decidedTotal),

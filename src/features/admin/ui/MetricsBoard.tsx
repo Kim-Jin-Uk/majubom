@@ -65,7 +65,7 @@ export function MetricsBoard({ m }: { m: AdminMetrics }) {
           ) : (
             <ol className="metric-rank">
               {m.topBusinesses.map((t) => (
-                <li key={t.name}>
+                <li key={t.id}>
                   <span className="metric-rank__name">{t.name}</span>
                   <span className="metric-rank__bar" style={{ width: `${(t.count / topPeak) * 100}%` }} />
                   <b>{t.count}</b>
