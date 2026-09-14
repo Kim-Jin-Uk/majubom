@@ -60,14 +60,18 @@ describe("businessInfoSchema 보강 (리뷰 반영)", () => {
 });
 
 describe("isInfoComplete (1단계 완료 판정)", () => {
-  it("상호·전화·주소·영업시간 1일·임시 아닌 slug 가 모두 있어야 한다", async () => {
+  it("상호·전화·주소·임시 아닌 slug 가 모두 있어야 한다", async () => {
     const { isInfoComplete } = await import("./settings");
-    const ok = { name: "봄", phone: "0233334444", address: "서울", openingHours: [{ dow: 1, open: "10:00", close: "20:00" }], slug: "bom" };
+    const ok = { name: "봄", phone: "0233334444", address: "서울", slug: "bom" };
     expect(isInfoComplete(ok)).toBe(true);
     expect(isInfoComplete({ ...ok, phone: null })).toBe(false);
     expect(isInfoComplete({ ...ok, address: null })).toBe(false);
-    expect(isInfoComplete({ ...ok, openingHours: [] })).toBe(false);
     expect(isInfoComplete({ ...ok, slug: "b-abc12345" })).toBe(false);
+  });
+
+  it("영업시간은 공개 조건이 아니다 (9/14) — 안 정한 매장도 열리고, 대신 자동 확정이 꺼진다", async () => {
+    const { isInfoComplete } = await import("./settings");
+    expect(isInfoComplete({ name: "봄", phone: "0233334444", address: "서울", slug: "bom" })).toBe(true);
   });
 });
 

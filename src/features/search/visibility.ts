@@ -8,7 +8,8 @@ import { sql } from "drizzle-orm";
  * 어긋나면 검색이 비공개 사업장을 흘린다 — `tests/db/search.test.ts` 가 둘이 같은 답을 내는지 본다.
  *
  * 조건(순서는 `loadPublicHome` 과 같다):
- *   승인됨 · 사업자가 내리지 않음 · 정보 완성(상호·전화·주소·영업시간 1일+·정식 slug) · 받을 자원 1개+
+ *   승인됨 · 사업자가 내리지 않음 · 정보 완성(상호·전화·주소·정식 slug) · 받을 자원 1개+
+ *   영업시간은 조건이 아니다 — 안 정한 매장은 하루 전체가 열리고 자동 확정만 꺼진다 (9/14 결정)
  *
  * `businesses` 별칭을 그대로 쓰므로 `businesses` 를 FROM 에 둔 쿼리에서만 붙인다.
  */
@@ -18,7 +19,6 @@ export const businessIsPublic = sql`
   and coalesce(nullif(btrim(businesses.name), ''), null) is not null
   and coalesce(nullif(btrim(businesses.phone), ''), null) is not null
   and coalesce(nullif(btrim(businesses.address), ''), null) is not null
-  and jsonb_array_length(businesses.opening_hours) > 0
   and businesses.slug not like 'b-%'
   and exists (select 1 from resources r where r.business_id = businesses.id and r.is_active)
 `;

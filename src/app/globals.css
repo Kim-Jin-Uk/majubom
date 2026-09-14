@@ -2856,3 +2856,13 @@ button {
   color: var(--text-2);
   line-height: 1.55;
 }
+
+/* 영업시간 빠른 설정 — 한 요일만 채우고 나머지에 같은 값을 넣는 일이 대부분이다 */
+.hours-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 12px;
+  font-size: 13px;
+}

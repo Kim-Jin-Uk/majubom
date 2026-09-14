@@ -284,8 +284,12 @@ async function insertOne(
   // 명세: exclusive 는 "생성 시점 자원 기준" 스냅샷이다. capacityPerSlot 이 1 이어도 자원 정원이 N 이면 배타 제약을 쓸 수 없다(다른 상품이 같은 자원을 N 으로 쓴다)
   const exclusive = resourceCapacity === 1;
   const cap = Math.min(p.capacityPerSlot, resourceCapacity);
-  // 워크인은 즉시 확정. 취소 마감을 지난 변경은 autoConfirm 과 무관하게 매장 승인을 받는다 (FR-BOOK-050)
-  const status = mode.via === "WALK_IN" ? "CONFIRMED" : mode.forceRequested || !policy.autoConfirm ? "REQUESTED" : "CONFIRMED";
+  // 워크인은 즉시 확정. 취소 마감을 지난 변경은 autoConfirm 과 무관하게 매장 승인을 받는다 (FR-BOOK-050).
+  //
+  // **영업시간을 안 정한 매장은 자동 확정을 쓰지 않는다 (9/14 결정).** 그런 매장은 하루 전체가 열려 있어
+  // 손님이 새벽 3시를 고를 수 있다 — 매장이 한 건씩 보고 승인해야 한다. 안 그러면 아무도 없는 시각이 그대로 확정된다.
+  const hoursUnset = ctx.business.openingHours.length === 0;
+  const status = mode.via === "WALK_IN" ? "CONFIRMED" : mode.forceRequested || hoursUnset || !policy.autoConfirm ? "REQUESTED" : "CONFIRMED";
 
   return db.transaction(async (tx) => {
     // 락 순서는 언제나 고객 → 자원

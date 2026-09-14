@@ -1,5 +1,5 @@
 import type { Holiday, ISODate, OpeningHoursEntry, ResourceType, WorkException, WorkSchedule } from "@/features/booking/slot-types";
-import { dowOf, holidayApplies, holidayCut, intersect, resolveWorkDay, span, subtract, type Interval } from "./resolve";
+import { dowOf, holidayApplies, holidayCut, intersect, resolveWorkDay, span, subtract, WHOLE_DAY, type Interval } from "./resolve";
 
 /**
  * "이 자원이 그날 예약을 받을 수 있는 구간" — 슬롯 계산(FR-BOOK-010)과 콘솔 지표(FR-BOOK-080 가동률·캘린더)가
@@ -32,8 +32,16 @@ export function operatingWindows(i: OperatingInput): Interval[] {
   return w;
 }
 
-/** 그날 영업 구간. `subtractBreaks=false` 는 FIXED 상품 전용 */
+/**
+ * 그날 영업 구간. `subtractBreaks=false` 는 FIXED 상품 전용.
+ *
+ * **"정하지 않음" 과 "그날은 쉼" 은 다르다.**
+ * - `openingHours` 가 통째로 비어 있으면 영업시간을 아직 안 정한 것이다 → 하루 전체를 연다.
+ *   그런 사업장은 손님이 아무 시각이나 고를 수 있고, 매장이 하나하나 승인한다 (`create.ts` 의 `autoConfirm` 무시).
+ * - 항목은 있는데 그 요일이 없으면 **그날은 휴무**다 → 빈 구간. 월~금만 적은 매장의 토요일이 그렇다.
+ */
 export function openingWindows(openingHours: OperatingInput["openingHours"], date: ISODate, subtractBreaks: boolean): Interval[] {
+  if (openingHours.length === 0) return WHOLE_DAY;
   const o = openingHours.find((x) => x.dow === dowOf(date));
   if (!o) return [];
   const base = [span(o.open, o.close)];

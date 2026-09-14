@@ -16,7 +16,12 @@ import type { Dow, Holiday, ISODate, OpeningHoursEntry, TimeRange, WorkException
  */
 export type Interval = { start: number; end: number };
 
-export type DaySource = "HOLIDAY_BUSINESS" | "HOLIDAY_RESOURCE" | "OFF" | "MODIFIED" | "EXTRA" | "SCHEDULE" | "NONE";
+/**
+ * 그 바탕이 어디서 왔는가. `NONE` 과 `UNSET` 을 나누는 이유 —
+ * `NONE` 은 "근무표는 있는데 그 요일이 없다"(그날은 쉰다), `UNSET` 은 "근무표를 아예 안 짰다"(정하지 않았다).
+ * 둘을 같은 빈 구간으로 접으면 근무표를 안 짠 매장이 예약을 하나도 못 받는다.
+ */
+export type DaySource = "HOLIDAY_BUSINESS" | "HOLIDAY_RESOURCE" | "OFF" | "MODIFIED" | "EXTRA" | "SCHEDULE" | "NONE" | "UNSET";
 
 export type ResolvedDay = {
   date: ISODate;
@@ -154,6 +159,9 @@ export type ResolveInput = {
   holidays: Holiday[];
 };
 
+/** 하루 전체 (00:00~24:00). "정하지 않음" 의 바탕이다 */
+export const WHOLE_DAY: Interval[] = [{ start: 0, end: 1440 }];
+
 export function resolveWorkDay(input: ResolveInput): ResolvedDay {
   const { date, resourceId } = input;
   const dow = dowOf(date);
@@ -176,8 +184,19 @@ export function resolveWorkDay(input: ResolveInput): ResolvedDay {
     source = "MODIFIED";
   } else {
     const s = scheduleFor(resourceId, date, dow, input.schedules);
-    base = s ? subtract([span(s.startTime, s.endTime)], (s.breaks ?? []).map((b: TimeRange) => span(b.start, b.end))) : [];
-    source = s ? "SCHEDULE" : "NONE";
+    if (s) {
+      base = subtract([span(s.startTime, s.endTime)], (s.breaks ?? []).map((b: TimeRange) => span(b.start, b.end)));
+      source = "SCHEDULE";
+    } else if (input.schedules.some((x) => x.resourceId === resourceId)) {
+      // 근무표는 있는데 그 요일이 없다 → **그날은 쉰다**
+      base = [];
+      source = "NONE";
+    } else {
+      // 근무표를 아예 안 짠 담당자 → 정하지 않은 것이다. 하루 전체를 바탕으로 두고 영업시간이 마저 자른다.
+      // "정하지 않음" 과 "그날은 쉼" 을 같은 빈 구간으로 접으면, 근무표를 안 짠 매장은 예약을 하나도 못 받는다
+      base = [...WHOLE_DAY];
+      source = "UNSET";
+    }
   }
   // + EXTRA (OFF 보다 위 — OFF+EXTRA 공존이면 근무 = EXTRA 만)
   const extras = exs.filter((e) => e.kind === "EXTRA" && e.startTime && e.endTime).map((e) => span(e.startTime!, e.endTime!));
