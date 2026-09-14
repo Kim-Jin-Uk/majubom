@@ -85,7 +85,7 @@ export default async function OnboardingStep({ params }: { params: Promise<{ ste
           </div>
         </>
       ) : (
-        <ProductForm businessId={bid} resources={resources} initial={null} mode="wizard" limited={false} readOnly={!v.isOwner || v.readOnly} />
+        <ProductForm businessId={bid} businessHours={b.openingHours} resources={resources} initial={null} mode="wizard" limited={false} readOnly={!v.isOwner || v.readOnly} />
       );
   } else if (n === 4) {
     // 밝기(#76)는 지금 고를 수 있다. 로고·색상은 빌더(에픽 #15)와 함께 열린다

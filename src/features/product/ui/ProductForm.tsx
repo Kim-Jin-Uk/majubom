@@ -6,6 +6,9 @@ import { useRef, useState, type FormEvent } from "react";
 import { Img } from "@/components/Img";
 import { Alert, Button, Field, Input } from "@/components/ui";
 import type { ResourceItem } from "@/features/business/resources";
+import { fromRows, HoursEditor, toRows, type HourRow } from "@/features/business/ui/HoursEditor";
+import { HoursConflictNotice, type ConflictItem } from "@/features/business/ui/HoursConflictNotice";
+import type { OpeningHour } from "@/db/schema";
 import { guessPreset, PRESETS, type PresetKey } from "@/features/product/presets";
 import type { ProductDetail, ProductWarning } from "@/features/product/products";
 import { MAX_FIXED_TIMES_PER_DAY, MAX_IMAGES, SLOT_INTERVALS } from "@/features/product/schema";
@@ -98,10 +101,37 @@ const ERR_TEXT: Record<string, string> = {
  * 상품 등록·수정 (FR-PRD-010 · 020, #32 #34 #35). 프리셋 카드 → 3스위치 값 자동 채움 → 고급 설정에서 조정.
  * limited: 매니저(editProduct) — 설명·사진·상태만 편집 가능, 나머지는 읽기 전용으로 보인다.
  */
-export function ProductForm({ businessId, resources, initial, mode, limited, readOnly }: { businessId: string; resources: ResourceItem[]; initial: ProductDetail | null; mode: "wizard" | "page"; limited: boolean; readOnly: boolean }) {
+export function ProductForm({
+  businessId,
+  businessHours,
+  resources,
+  initial,
+  mode,
+  limited,
+  readOnly,
+}: {
+  businessId: string;
+  /** 사업장 영업시간 — "영업시간과 동일" 토글의 기준이자, 토글을 끌 때 채워 넣는 초기값 */
+  businessHours: OpeningHour[];
+  resources: ResourceItem[];
+  initial: ProductDetail | null;
+  mode: "wizard" | "page";
+  limited: boolean;
+  readOnly: boolean;
+}) {
   const router = useRouter();
   const [preset, setPreset] = useState<PresetKey | null>(initial ? guessPreset(initial) : null);
   // 위저드의 첫 상품은 공개 상태로 시작한다 — 공개 조건(활성 상품 ≥ 1)을 채우는 게 이 단계의 목적. 홈페이지 자체는 승인 전엔 열리지 않는다
+  /**
+   * "영업시간과 동일" — **기본은 켜짐**이고, 켜져 있으면 값을 보내지 않는다(빈 배열).
+   * 그래서 사업장 영업시간을 바꾸면 이 상품도 같이 바뀐다(스냅샷이 아니라 연동이다).
+   *
+   * 사업장 영업시간이 없으면 켤 수 없다 — 켜 봐야 따라갈 값이 없고, 그 상태로 두면 하루 전체가 열린다.
+   */
+  const canFollow = businessHours.length > 0;
+  const [followBusiness, setFollowBusiness] = useState(initial ? (initial.openingHours?.length ?? 0) === 0 && canFollow : canFollow);
+  const [conflicts, setConflicts] = useState<ConflictItem[]>([]);
+  const [hourRows, setHourRows] = useState<HourRow[]>(() => toRows(initial?.openingHours?.length ? initial.openingHours : businessHours));
   const [d, setD] = useState<Draft>(() => (initial ? fromDetail(initial) : mode === "wizard" ? { ...EMPTY, status: "ACTIVE" } : EMPTY));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState<{ kind: "ok" | "error" | "warn"; text: string } | null>(null);
@@ -156,6 +186,8 @@ export function ProductForm({ businessId, resources, initial, mode, limited, rea
       priceDisplay: d.priceDisplay || null,
       resourceIds: d.resourceIds,
       resourceSelectMode: d.resourceSelectMode,
+      // 토글이 켜져 있으면 **빈 배열** — 값을 담지 않는 것 자체가 "영업시간과 동일" 이다
+      openingHours: followBusiness ? [] : fromRows(hourRows),
       status: d.status,
       confirmAffected,
     };
@@ -180,9 +212,14 @@ export function ProductForm({ businessId, resources, initial, mode, limited, rea
         setErrors(fe);
         const first = r.issues[0];
         setMsg({ kind: "error", text: first ? `${first.message}` : "입력 내용을 확인해 주세요" });
+      } else if (r.error === "HOURS_CONFLICT") {
+        // 무엇이 걸리는지 보여 준다 — 영업시간 쪽과 같은 규칙이다
+        setConflicts(((r.data?.reservations as ConflictItem[] | undefined) ?? []));
+        setMsg(null);
       } else setMsg({ kind: "error", text: ERR_TEXT[r.error] ?? describeError(r) });
       return;
     }
+    setConflicts([]);
     const w = r.data.warnings ?? [];
     if (initial) {
       setWarnings(w);
@@ -480,6 +517,46 @@ export function ProductForm({ businessId, resources, initial, mode, limited, rea
           <div className="info-box">정리 시간은 예약 시간에서 빼지 않아요. 고객은 14:00~16:00을 그대로 쓰고, 다음 예약은 16:{String(Number(d.bufferAfterMin)).padStart(2, "0")}부터 열려요.</div>
         )}
       </section>
+
+      {!limited && (
+        <section style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <h2>예약 가능 시간</h2>
+          <HoursConflictNotice items={conflicts} what="예약 가능 시간" />
+          {/*
+            기본은 "영업시간과 동일" 이고, 그때는 값을 **저장하지 않는다** — 사업장 영업시간을 그때그때 따른다.
+            그래서 나중에 영업시간을 바꾸면 이 상품도 같이 바뀐다. 복사해 두면 그 연결이 끊긴다.
+          */}
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={followBusiness}
+              disabled={readOnly || !canFollow}
+              onChange={(e) => {
+                setFollowBusiness(e.target.checked);
+                // 끌 때 사업장 영업시간을 **시작점으로** 채워 준다 — 빈 표에서 일곱 요일을 다시 찍게 두지 않는다
+                if (!e.target.checked && fromRows(hourRows).length === 0) setHourRows(toRows(businessHours));
+              }}
+            />
+            영업시간과 동일
+          </label>
+          {followBusiness ? (
+            <p className="sub">
+              사업장 영업시간을 따릅니다. <b>영업시간을 바꾸면 이 상품도 같이 바뀝니다</b> — 따로 저장해 두지 않아요.
+            </p>
+          ) : (
+            <>
+              <p className="sub">이 상품만의 시간이에요. 사업장 영업시간과 달라도 됩니다 — 심야 클래스처럼 영업시간 밖도 열 수 있어요.</p>
+              <HoursEditor rows={hourRows} onChange={setHourRows} disabled={readOnly} idPrefix="상품" />
+            </>
+          )}
+          {!canFollow && (
+            <Alert kind="warn">
+              사업장 영업시간이 아직 없어서 <b>&ldquo;영업시간과 동일&rdquo;을 쓸 수 없어요.</b> 이 상품의 예약 가능 시간을 직접 정해 주세요 —
+              비워 두면 손님이 하루 중 아무 시각이나 고르게 됩니다.
+            </Alert>
+          )}
+        </section>
+      )}
 
       <section style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         <h2>정원</h2>

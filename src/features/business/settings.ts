@@ -8,6 +8,7 @@ import type { RequestMeta } from "@/lib/request-meta";
 import { phoneSchema } from "@/features/auth/validation";
 import { timeSchema, toMin } from "./hours";
 import { RESERVED_SLUGS } from "./slug-rules";
+import { conflictsForBusinessHours } from "./hours-conflict";
 import { BUSINESS_CATEGORY_CODES } from "./policy-defaults";
 
 /**
@@ -18,38 +19,10 @@ import { BUSINESS_CATEGORY_CODES } from "./policy-defaults";
  * slug: 영소문자+숫자+하이픈 3~30자. 바꾸면 옛 slug 는 business_slug_history 에 영구 예약(다른 사업장이 못 쓴다) — 구 URL 301 의 근거.
  */
 export { timeSchema, toMin } from "./hours";
+import { openingHoursSchema } from "./hours";
 
-export const openingHourSchema = z
-  .object({
-    dow: z.number().int().min(0).max(6),
-    open: timeSchema,
-    close: timeSchema,
-    breaks: z.array(z.object({ start: timeSchema, end: timeSchema })).max(2, "휴게시간은 최대 2구간입니다").optional(),
-  })
-  .superRefine((h, ctx) => {
-    const open = toMin(h.open);
-    let close = toMin(h.close);
-    if (close <= open) close += 24 * 60; // 익일 마감
-    if (close - open > 24 * 60) ctx.addIssue({ code: "custom", path: ["close"], message: "영업시간은 24시간을 넘을 수 없습니다" });
-    const spans = (h.breaks ?? []).map((b) => {
-      let s = toMin(b.start);
-      let e = toMin(b.end);
-      if (s < open) s += 24 * 60; // 자정 넘긴 브레이크 (예: 01:00~02:00, 영업 20:00~04:00)
-      if (e <= s) e += 24 * 60;
-      return { s, e };
-    });
-    spans.forEach((b, i) => {
-      if (b.s < open || b.e > close) ctx.addIssue({ code: "custom", path: ["breaks", i], message: "휴게시간은 영업시간 안에 있어야 합니다" });
-    });
-    if (spans.length === 2 && spans[0].s < spans[1].e && spans[1].s < spans[0].e) {
-      ctx.addIssue({ code: "custom", path: ["breaks"], message: "휴게시간 두 구간이 겹칩니다" });
-    }
-  });
-
-export const openingHoursSchema = z
-  .array(openingHourSchema)
-  .max(7)
-  .refine((arr) => new Set(arr.map((h) => h.dow)).size === arr.length, "같은 요일이 두 번 들어 있습니다");
+// 영업시간 스키마는 화면·상품과 공용이라 순수 모듈에 있다 (`hours.ts`) — 여기서 다시 적지 않는다
+export { openingHourSchema, openingHoursSchema } from "./hours";
 
 // 주소 규칙은 화면과 공용이라 순수 모듈에 있다 (`slug-rules.ts`) — 여기서 다시 적지 않는다
 export { slugSchema } from "./slug-rules";
@@ -188,6 +161,20 @@ export async function updateBusinessInfo(businessId: string, input: BusinessInfo
       diff[k] = { from: auditValue(k, a), to: auditValue(k, b) };
     }
     if (Object.keys(diff).length === 0) return;
+
+    /**
+     * **영업시간을 줄여 기존 예약이 밖으로 나가면 막는다 (9/14 결정).**
+     *
+     * 이미 잡힌 예약은 영업시간을 바꿔도 그대로 남는다 — 손님은 "그 시간에 영업하지 않는 가게" 의 예약을
+     * 들고 있게 된다. 휴무 등록(하루짜리 예외)은 경고 후 강행을 허용하지만, 영업시간은 매장의 기본값이라
+     * 한 번 줄이면 그 뒤 모든 슬롯이 바뀐다. 사장님이 그 예약을 먼저 정리하게 한다.
+     *
+     * 넓히는 방향은 걸리지 않는다(기존 예약이 전부 안에 있다). 상품 시간을 따로 정한 상품도 영향을 받지 않는다.
+     */
+    if (diff.openingHours) {
+      const conflicts = await conflictsForBusinessHours(businessId, next.openingHours, before.timezone, new Date(), tx);
+      if (conflicts.length > 0) throw new HttpError(409, "HOURS_CONFLICT", { reservations: conflicts });
+    }
 
     await tx.update(businesses).set(next).where(eq(businesses.id, businessId));
     // 배치·마이그레이션 등 행위자가 없는 경로도 있으므로 actor 는 선택이다

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { timeSchema, toMin } from "@/features/business/hours";
+import { openingHoursSchema, timeSchema, toMin } from "@/features/business/hours";
 
 /**
  * 예약 상품 입력 (FR-PRD-010, #32). 업종별 모델 없이 세 스위치의 조합:
@@ -36,6 +36,14 @@ export const productInputSchema = z
     capacityPerSlot: z.number().int().min(1, "슬롯당 정원은 1 이상").max(500),
     maxPartySize: z.number().int().min(1, "1건 최대 인원은 1 이상").max(500),
     priceDisplay: z.string().trim().max(50, "가격 표기는 50자 이내").optional().nullable(),
+    /**
+     * 이 상품만의 영업시간. **빈 배열 = "영업시간과 동일"** — 저장하지 않고 사업장 영업시간을 그때그때 따른다.
+     * 사업장 영업시간이 비어 있으면 이 값이 **필수**다 — 안 그러면 하루 전체가 열린다.
+     * 그 판정은 **서버가** 한다(`products.ts` `checkAgainstBusiness`) — 클라이언트가 보낸 값을 믿을 수 없다.
+     */
+    // 사업장 쪽(`openingHoursSchema`)과 같은 규칙을 쓴다 — 같은 요일이 두 번 들어오면 `.find()` 가 조용히 첫 항목만 본다.
+    // 화면은 요일당 한 행이라 이런 값이 나올 수 없지만, API 를 직접 부르면 들어온다 (리뷰 지적)
+    openingHours: openingHoursSchema.default([]),
     resourceIds: z.array(z.uuid()).min(1, "담당 자원을 하나 이상 골라 주세요").max(50),
     resourceSelectMode: z.enum(["REQUIRED", "OPTIONAL", "AUTO", "NONE"]),
     status: z.enum(["DRAFT", "ACTIVE", "HIDDEN"]).default("DRAFT"),

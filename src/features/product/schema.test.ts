@@ -54,3 +54,31 @@ describe("normalizeFixedStartTimes", () => {
     ]);
   });
 });
+
+describe("상품 예약 가능 시간", () => {
+  const base = {
+    name: "젤네일",
+    startMode: "FREE" as const,
+    slotIntervalMin: 30 as const,
+    durationMin: 60,
+    capacityPerSlot: 1,
+    maxPartySize: 1,
+    resourceIds: ["11111111-1111-4111-8111-111111111111"],
+    resourceSelectMode: "OPTIONAL" as const,
+  };
+
+  it("비워 두면 '영업시간과 동일' 이다 — 기본값이 빈 배열", () => {
+    const r = productInputSchema.safeParse(base);
+    expect(r.success && r.data.openingHours).toEqual([]);
+  });
+
+  it("같은 요일이 두 번 들어오면 거부한다 — .find() 가 조용히 첫 항목만 보게 두지 않는다", () => {
+    const dup = { ...base, openingHours: [{ dow: 1, open: "10:00", close: "12:00" }, { dow: 1, open: "18:00", close: "20:00" }] };
+    expect(productInputSchema.safeParse(dup).success).toBe(false);
+  });
+
+  it("사업장과 같은 시간 규칙을 쓴다 — 휴게는 영업 안, 자정 넘김 허용", () => {
+    expect(productInputSchema.safeParse({ ...base, openingHours: [{ dow: 1, open: "20:00", close: "02:00" }] }).success).toBe(true);
+    expect(productInputSchema.safeParse({ ...base, openingHours: [{ dow: 1, open: "10:00", close: "12:00", breaks: [{ start: "14:00", end: "15:00" }] }] }).success).toBe(false);
+  });
+});

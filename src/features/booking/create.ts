@@ -165,7 +165,7 @@ async function place(input: CreateReservationInput, customerId: string, mode: Pl
       if (wantedMs < now.getTime() + policy.minLeadTimeMin * 60_000) throw new HttpError(400, "LEAD_TIME", { minLeadTimeMin: policy.minLeadTimeMin });
       // 조회와 **같은 함수**로 판정한다. 따로 적어 두면 언젠가 한쪽만 고쳐져
       // "위젯에는 보이는데 예약은 안 되는 시각" 이 생긴다 — 지금 영업 중인 어제(가정 A7)가 바로 그 자리였다
-      if (!dates.some((d) => dateInRange(ctx.business, d, now.getTime()))) throw new HttpError(400, "OUT_OF_RANGE", { maxAdvanceDays: policy.maxAdvanceDays });
+      if (!dates.some((d) => dateInRange(ctx.business, d, now.getTime(), ctx.product.openingHours))) throw new HttpError(400, "OUT_OF_RANGE", { maxAdvanceDays: policy.maxAdvanceDays });
     }
     throw new HttpError(409, "SLOT_TAKEN", { alternatives: nearest(found.all, wantedMs) });
   }
@@ -271,18 +271,20 @@ async function withDeadlockRetry<T>(fn: () => Promise<T>): Promise<T> {
  * - **담당자(STAFF)**: 근무표가 그 선언이다. 근무표가 없으면 **영업시간이 있어도** 그 사람이 그 시간에 있다고
  *   아무도 말한 적이 없다 — 영업시간은 "가게가 열려 있다" 지 "이 사람이 출근한다" 가 아니다.
  *   그래서 영업시간을 먼저 보고 빠져나가면 안 된다 (리뷰 지적: 조기 반환이 이 경우를 통째로 건너뛰었다).
- * - **룸·공용**: 사람이 없으므로 영업시간이 곧 "언제 쓸 수 있는가" 다.
+ * - **룸·공용**: 사람이 없으므로 영업시간(또는 그것을 대신하는 **상품 시간**)이 곧 "언제 쓸 수 있는가" 다.
  *
  * 순수 함수라 따로 테스트한다 — `create-status.test.ts`.
  */
-export function isUnconstrained(input: { businessHoursSet: boolean; resourceType: ResourceType | undefined; hasWorkSchedule: boolean }): boolean {
+export function isUnconstrained(input: { businessHoursSet: boolean; productHoursSet: boolean; resourceType: ResourceType | undefined; hasWorkSchedule: boolean }): boolean {
   if (input.resourceType === "STAFF") return !input.hasWorkSchedule;
-  return !input.businessHoursSet;
+  // 룸·공용은 상품 시간이 있으면 그것이 사업장 영업시간을 대신하므로, 둘 중 하나만 있어도 범위가 정해진다
+  return !input.businessHoursSet && !input.productHoursSet;
 }
 
 function unconstrainedFor(ctx: SlotContext, resourceId: string): boolean {
   return isUnconstrained({
     businessHoursSet: ctx.business.openingHours.length > 0,
+    productHoursSet: (ctx.product.openingHours?.length ?? 0) > 0,
     resourceType: ctx.resources.find((x) => x.id === resourceId)?.type,
     hasWorkSchedule: ctx.workSchedules.some((w) => w.resourceId === resourceId),
   });

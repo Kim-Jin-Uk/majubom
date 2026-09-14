@@ -1,4 +1,4 @@
-import { addDays, dowOf, span, toMin, type Interval, type OpeningLike } from "@/features/schedule/resolve";
+import { addDays, dowOf, effectiveOpeningHours, productWindows, span, toMin, type Interval, type OpeningLike } from "@/features/schedule/resolve";
 import { openingWindows, operatingWindows } from "@/features/schedule/operating";
 import { countsTowardOccupancy, peakOccupancy } from "./peak-occupancy";
 import type { ExcludedSlot, FixedExclusionReason, ISODate, Slot, SlotBusiness, SlotContext, SlotQuery, SlotResource, SlotResult } from "./slot-types";
@@ -55,10 +55,12 @@ export function firstBookableDate(biz: OpeningOwner, nowMs: number): ISODate {
  * 조회·생성이 **같은 규칙**을 쓰게 한 날짜 범위 판정. 두 곳에 따로 적어 두면 언젠가 한쪽만 고쳐져
  * "위젯에는 보이는데 예약은 안 되는 시각" 이 생긴다.
  */
-export function dateInRange(biz: SlotBusiness, date: ISODate, nowMs: number): boolean {
+export function dateInRange(biz: SlotBusiness, date: ISODate, nowMs: number, productHours?: OpeningLike[]): boolean {
   const today = todayIn(biz.timezone, new Date(nowMs));
   if (date > addDays(today, biz.policy.maxAdvanceDays)) return false;
-  return date >= today || stillRunning(biz, date, nowMs);
+  // **상품 시간이 있으면 그것으로 본다.** 사업장만 보면, 자정을 넘겨 여는 심야 상품이 00:30 에
+  // "어제" 로 걸러져 예약이 안 된다 — 이 기능의 대표 예시에서 바로 터진다 (리뷰 지적)
+  return date >= today || stillRunning({ openingHours: effectiveOpeningHours(productHours, biz.openingHours), timezone: biz.timezone }, date, nowMs);
 }
 
 /**
@@ -67,7 +69,16 @@ export function dateInRange(biz: SlotBusiness, date: ISODate, nowMs: number): bo
  * 승인되지 않은 휴가 신청(PENDING)은 호출자(`context.ts`)가 걸러 넣는다.
  */
 const resourceWindows = (ctx: SlotContext, date: ISODate, r: SlotResource, opening: Interval[]): Interval[] =>
-  operatingWindows({ date, resource: r, opening, openingHours: ctx.business.openingHours, schedules: ctx.workSchedules, exceptions: ctx.workExceptions, holidays: ctx.holidays });
+  operatingWindows({
+    date,
+    resource: r,
+    opening,
+    // `resolveWorkDay` 안에서도 같은 기준을 봐야 한다 — 상품 시간이 있으면 그것이 이 상품의 영업시간이다
+    openingHours: (ctx.product.openingHours?.length ?? 0) > 0 ? ctx.product.openingHours! : ctx.business.openingHours,
+    schedules: ctx.workSchedules,
+    exceptions: ctx.workExceptions,
+    holidays: ctx.holidays,
+  });
 
 /**
  * FIXED 회차 시각 → 영업일 기준 분. 자정을 넘겨 영업하는 날의 이른 시각은 익일이다 (`{dow:2,"01:00"}` = 수요일 새벽 1시).
@@ -78,7 +89,8 @@ export function fixedStartMinutes(ctx: SlotContext, date: ISODate): number[] {
   const dow = dowOf(date);
   const times = (ctx.product.fixedStartTimes ?? []).filter((x) => x.dow === dow).flatMap((x) => x.times);
   if (times.length === 0) return [];
-  const o = ctx.business.openingHours.find((x) => x.dow === dow);
+  const hours = (ctx.product.openingHours?.length ?? 0) > 0 ? ctx.product.openingHours! : ctx.business.openingHours;
+  const o = hours.find((x) => x.dow === dow);
   const dayEnd = o ? span(o.open, o.close).end : 1440;
   const openStart = o ? toMin(o.open) : 0;
   const shifted = times.map((t) => {
@@ -122,10 +134,11 @@ export function computeSlots(ctx: SlotContext, q: SlotQuery): SlotResult {
   const isFixed = p.startMode === "FIXED";
   // 0) 날짜 범위 정책 — 범위 밖은 오류가 아니라 빈 결과. FIXED 는 응답 형태를 지키려고 빈 excluded 를 함께 준다
   const nowMs = toMs(ctx.now);
-  if (!dateInRange(biz, q.date, nowMs)) return isFixed ? { slots: [], excluded: [] } : { slots: [] };
+  if (!dateInRange(biz, q.date, nowMs, p.openingHours)) return isFixed ? { slots: [], excluded: [] } : { slots: [] };
 
-  // FIXED 는 영업시간 브레이크를 차감하지 않는다(fixedIgnoreBreaks 기본 true). 근무표 휴게는 늘 차감된다 (가정 A4)
-  const opening = openingWindows(ctx.business.openingHours, q.date, !(isFixed && (p.fixedIgnoreBreaks ?? true)));
+  // FIXED 는 영업시간 브레이크를 차감하지 않는다(fixedIgnoreBreaks 기본 true). 근무표 휴게는 늘 차감된다 (가정 A4).
+  // 상품에 고유 시간이 있으면 그것이 사업장 영업시간을 **대신한다** (`productWindows`)
+  const opening = productWindows(p.openingHours, ctx.business.openingHours, q.date, !(isFixed && (p.fixedIgnoreBreaks ?? true)));
 
   const resources = ctx.resources
     .filter((r) => p.resourceIds.includes(r.id) && r.isActive && (!q.resourceId || r.id === q.resourceId))
