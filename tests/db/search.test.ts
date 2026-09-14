@@ -126,6 +126,12 @@ describe.skipIf(!enabled)("공개 상품 검색", () => {
     expect(await agree("전화번호 없음")).toBe(false);
     await db.update(businesses).set({ phone: "02-000-0000" }).where(eq(businesses.id, f.businessId));
 
+    // 영업시간 미정은 **공개를 막지 않는다** (9/14). 이 조건을 SQL 에서 지웠으므로 TS 게이트와 같은 답인지 여기서 본다 —
+    // 한쪽만 되돌리면 검색과 공개 홈이 갈린다 (리뷰 지적: 아홉 상태에 이 케이스가 없었다)
+    await db.update(businesses).set({ openingHours: [] }).where(eq(businesses.id, f.businessId));
+    expect(await agree("영업시간 미정"), "영업시간은 더 이상 공개 조건이 아니다").toBe(true);
+    await db.update(businesses).set({ openingHours: [1, 2, 3].map((dow) => ({ dow, open: "10:00", close: "19:00" })) }).where(eq(businesses.id, f.businessId));
+
     // 사업자가 홈을 내렸다
     await db.insert(sitePages).values({ businessId: f.businessId, draftData: { sections: [] }, theme: { primaryColor: "#14a86b", fontScale: 1, radius: 12, containerWidth: 1080 }, isPublished: false });
     expect(await agree("홈 내림")).toBe(false);
