@@ -64,6 +64,13 @@
       "when": 1789003038496,
       "tag": "0008_booking_selections",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1789352599790,
+      "tag": "0009_product_opening_hours",
+      "breakpoints": true
     }
   ]
 }

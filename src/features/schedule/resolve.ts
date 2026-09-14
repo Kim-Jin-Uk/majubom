@@ -238,6 +238,19 @@ export function resolveWorkDay(input: ResolveInput): ResolvedDay {
  * `operating.ts` 가 아니라 여기 있는 이유: `resolveWorkDay` 도 이 규칙을 써야 하는데
  * `operating.ts` 는 이 파일을 import 한다(반대 방향은 순환이다).
  */
+/**
+ * 그 **상품**이 그날 여는 구간.
+ *
+ * 상품에 시간이 정해져 있으면 사업장 영업시간 **대신** 그것을 쓴다 — 교집합이 아니다.
+ * 교집합으로 두면 "영업 10–19, 클래스 20–22" 를 아예 만들 수 없다. 영업시간과 맞추고 싶은 사장님은
+ * 화면의 **"영업시간과 동일"** 토글을 켜 두면 되고, 그때는 값을 저장하지 않아 영업시간이 바뀌면 같이 바뀐다.
+ *
+ * 상품 시간이 비어 있으면(기본) 사업장 영업시간으로 떨어지고, 그것도 비어 있으면 하루 전체다.
+ */
+export function productWindows(productHours: OpeningLike[] | undefined, businessHours: OpeningLike[], date: ISODate, subtractBreaks: boolean): Interval[] {
+  return openingWindows(productHours && productHours.length > 0 ? productHours : businessHours, date, subtractBreaks);
+}
+
 export function openingWindows(openingHours: OpeningLike[], date: ISODate, subtractBreaks: boolean): Interval[] {
   if (openingHours.length === 0) return WHOLE_DAY;
   const o = openingHours.find((x) => x.dow === dowOf(date));

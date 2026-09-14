@@ -43,6 +43,8 @@ export type ProductDetail = ProductListItem & {
   bufferBeforeMin: number;
   bufferAfterMin: number;
   resourceSelectMode: "REQUIRED" | "OPTIONAL" | "AUTO" | "NONE";
+  /** 빈 배열이면 "영업시간과 동일"(연동) — 화면의 토글이 켜진 상태다 */
+  openingHours: OpeningHour[];
   resourceIds: string[];
   /** 미래 REQUESTED/CONFIRMED 예약 수 — 수정 화면의 경고에 쓴다 */
   futureReservations: number;
@@ -117,6 +119,7 @@ export async function getProduct(businessId: string, productId: string): Promise
     maxPartySize: p.maxPartySize,
     priceDisplay: p.priceDisplay,
     resourceSelectMode: p.resourceSelectMode,
+    openingHours: p.openingHours,
     status: p.status,
     sortOrder: p.sortOrder,
     resources: res,
@@ -230,12 +233,23 @@ async function checkAgainstBusiness(businessId: string, input: ProductInput, q: 
 
   const [b] = await q.select({ openingHours: businesses.openingHours }).from(businesses).where(eq(businesses.id, businessId)).limit(1);
   if (!b) throw new HttpError(404, "NOT_FOUND");
-  const span = longestOpenSpanMin(b.openingHours);
-  if (span !== null && input.durationMin > span) issues.push({ path: ["durationMin"], message: `소요 시간이 영업시간(최대 ${span}분)보다 깁니다` });
+
+  // 상품 시간이 있으면 **그것이 이 상품의 영업시간**이다 — 사업장 영업시간을 대신한다(교집합이 아니다).
+  // 화면의 "영업시간과 동일" 토글이 켜져 있으면 빈 배열로 오고, 그때는 사업장 값을 그대로 따른다(연동).
+  const effectiveHours = input.openingHours.length > 0 ? input.openingHours : b.openingHours;
+
+  // **사업장 영업시간이 없으면 상품 시간이 필수다.** 둘 다 비면 하루 전체가 열려 아무 시각이나 예약된다 —
+  // 화면도 그 상태에서는 "영업시간과 동일" 토글을 켤 수 없게 막는다. 판정은 클라이언트가 보낸 값이 아니라 여기서 한다
+  if (b.openingHours.length === 0 && input.openingHours.length === 0) {
+    issues.push({ path: ["openingHours"], message: "사업장 영업시간이 없어요. 이 상품의 예약 가능 시간을 정해 주세요" });
+  }
+
+  const span = longestOpenSpanMin(effectiveHours);
+  if (span !== null && input.durationMin > span) issues.push({ path: ["durationMin"], message: `소요 시간이 예약 가능 시간(최대 ${span}분)보다 깁니다` });
   if (issues.length) throw new HttpError(400, "INVALID_BODY", { issues, fields: [...new Set(issues.map((i) => String(i.path[0])))] });
 
   const fixed = input.startMode === "FIXED" ? normalizeFixedStartTimes(input.fixedStartTimes ?? []) : null;
-  const warnings = fixed ? fixedTimeWarnings(fixed, b.openingHours, input.durationMin) : [];
+  const warnings = fixed ? fixedTimeWarnings(fixed, effectiveHours, input.durationMin) : [];
   return { resourceRows, warnings, fixed };
 }
 
@@ -245,6 +259,8 @@ function columnsOf(input: ProductInput, fixed: FixedStartTime[] | null) {
     name: input.name,
     description: input.description ?? null,
     images: input.images,
+    // 빈 배열이면 "영업시간과 동일" — 값을 담지 않는 것 자체가 연동이다
+    openingHours: input.openingHours,
     startMode: input.startMode,
     slotIntervalMin: free ? input.slotIntervalMin! : null,
     fixedStartTimes: free ? null : fixed,

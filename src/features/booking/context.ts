@@ -143,6 +143,8 @@ export async function loadBookingContext(productId: string, from: string, to: st
       capacityPerSlot: p.capacityPerSlot,
       maxPartySize: p.maxPartySize,
       resourceSelectMode: p.resourceSelectMode,
+      // 빈 배열이면 "영업시간과 동일" 이다 — 엔진이 사업장 영업시간으로 떨어진다 (`productWindows`)
+      openingHours: p.openingHours.map((o) => ({ dow: asDow(o.dow), open: o.open, close: o.close, breaks: o.breaks })),
       resourceIds,
     },
     resources: rs,

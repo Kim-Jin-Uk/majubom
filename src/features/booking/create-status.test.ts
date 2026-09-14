@@ -12,32 +12,39 @@ describe("isUnconstrained", () => {
   describe("담당자(STAFF) — 근무표가 그 선언이다", () => {
     it("근무표가 없으면 영업시간이 있어도 제약 없음이다", () => {
       // 영업시간은 "가게가 열려 있다" 지 "이 사람이 출근한다" 가 아니다
-      expect(isUnconstrained({ businessHoursSet: true, resourceType: "STAFF", hasWorkSchedule: false })).toBe(true);
-      expect(isUnconstrained({ businessHoursSet: false, resourceType: "STAFF", hasWorkSchedule: false })).toBe(true);
+      expect(isUnconstrained({ businessHoursSet: true, productHoursSet: false, resourceType: "STAFF", hasWorkSchedule: false })).toBe(true);
+      expect(isUnconstrained({ businessHoursSet: false, productHoursSet: false, resourceType: "STAFF", hasWorkSchedule: false })).toBe(true);
     });
 
     it("근무표가 있으면 영업시간이 없어도 제약이 있다 — 그 사람이 언제 있는지 말했다", () => {
-      expect(isUnconstrained({ businessHoursSet: false, resourceType: "STAFF", hasWorkSchedule: true })).toBe(false);
-      expect(isUnconstrained({ businessHoursSet: true, resourceType: "STAFF", hasWorkSchedule: true })).toBe(false);
+      expect(isUnconstrained({ businessHoursSet: false, productHoursSet: false, resourceType: "STAFF", hasWorkSchedule: true })).toBe(false);
+      expect(isUnconstrained({ businessHoursSet: true, productHoursSet: false, resourceType: "STAFF", hasWorkSchedule: true })).toBe(false);
     });
   });
 
   describe("룸·공용 — 사람이 없으므로 영업시간이 곧 이용 가능 시간이다", () => {
     it("영업시간이 있으면 제약이 있다", () => {
       for (const t of ["SPACE", "SHARED"] as const) {
-        expect(isUnconstrained({ businessHoursSet: true, resourceType: t, hasWorkSchedule: false }), t).toBe(false);
+        expect(isUnconstrained({ businessHoursSet: true, productHoursSet: false, resourceType: t, hasWorkSchedule: false }), t).toBe(false);
       }
     });
 
     it("영업시간이 없으면 제약 없음이다", () => {
       for (const t of ["SPACE", "SHARED"] as const) {
-        expect(isUnconstrained({ businessHoursSet: false, resourceType: t, hasWorkSchedule: false }), t).toBe(true);
+        expect(isUnconstrained({ businessHoursSet: false, productHoursSet: false, resourceType: t, hasWorkSchedule: false }), t).toBe(true);
       }
     });
   });
 
+  it("상품에 시간이 있으면 룸·공용은 영업시간이 없어도 제약이 있다", () => {
+    // 상품 시간이 사업장 영업시간을 대신하므로 범위가 정해져 있다
+    expect(isUnconstrained({ businessHoursSet: false, productHoursSet: true, resourceType: "SPACE", hasWorkSchedule: false })).toBe(false);
+    // 담당자는 다르다 — 상품이 20~22시에 열려도 "그 사람이 그때 있다" 는 말은 아니다
+    expect(isUnconstrained({ businessHoursSet: false, productHoursSet: true, resourceType: "STAFF", hasWorkSchedule: false })).toBe(true);
+  });
+
   it("자원을 못 찾으면 영업시간으로 판단한다 — 담당자가 아닌 것과 같게 본다", () => {
-    expect(isUnconstrained({ businessHoursSet: true, resourceType: undefined, hasWorkSchedule: false })).toBe(false);
-    expect(isUnconstrained({ businessHoursSet: false, resourceType: undefined, hasWorkSchedule: false })).toBe(true);
+    expect(isUnconstrained({ businessHoursSet: true, productHoursSet: false, resourceType: undefined, hasWorkSchedule: false })).toBe(false);
+    expect(isUnconstrained({ businessHoursSet: false, productHoursSet: false, resourceType: undefined, hasWorkSchedule: false })).toBe(true);
   });
 });

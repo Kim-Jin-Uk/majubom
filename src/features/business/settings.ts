@@ -18,38 +18,10 @@ import { BUSINESS_CATEGORY_CODES } from "./policy-defaults";
  * slug: 영소문자+숫자+하이픈 3~30자. 바꾸면 옛 slug 는 business_slug_history 에 영구 예약(다른 사업장이 못 쓴다) — 구 URL 301 의 근거.
  */
 export { timeSchema, toMin } from "./hours";
+import { openingHoursSchema } from "./hours";
 
-export const openingHourSchema = z
-  .object({
-    dow: z.number().int().min(0).max(6),
-    open: timeSchema,
-    close: timeSchema,
-    breaks: z.array(z.object({ start: timeSchema, end: timeSchema })).max(2, "휴게시간은 최대 2구간입니다").optional(),
-  })
-  .superRefine((h, ctx) => {
-    const open = toMin(h.open);
-    let close = toMin(h.close);
-    if (close <= open) close += 24 * 60; // 익일 마감
-    if (close - open > 24 * 60) ctx.addIssue({ code: "custom", path: ["close"], message: "영업시간은 24시간을 넘을 수 없습니다" });
-    const spans = (h.breaks ?? []).map((b) => {
-      let s = toMin(b.start);
-      let e = toMin(b.end);
-      if (s < open) s += 24 * 60; // 자정 넘긴 브레이크 (예: 01:00~02:00, 영업 20:00~04:00)
-      if (e <= s) e += 24 * 60;
-      return { s, e };
-    });
-    spans.forEach((b, i) => {
-      if (b.s < open || b.e > close) ctx.addIssue({ code: "custom", path: ["breaks", i], message: "휴게시간은 영업시간 안에 있어야 합니다" });
-    });
-    if (spans.length === 2 && spans[0].s < spans[1].e && spans[1].s < spans[0].e) {
-      ctx.addIssue({ code: "custom", path: ["breaks"], message: "휴게시간 두 구간이 겹칩니다" });
-    }
-  });
-
-export const openingHoursSchema = z
-  .array(openingHourSchema)
-  .max(7)
-  .refine((arr) => new Set(arr.map((h) => h.dow)).size === arr.length, "같은 요일이 두 번 들어 있습니다");
+// 영업시간 스키마는 화면·상품과 공용이라 순수 모듈에 있다 (`hours.ts`) — 여기서 다시 적지 않는다
+export { openingHourSchema, openingHoursSchema } from "./hours";
 
 // 주소 규칙은 화면과 공용이라 순수 모듈에 있다 (`slug-rules.ts`) — 여기서 다시 적지 않는다
 export { slugSchema } from "./slug-rules";

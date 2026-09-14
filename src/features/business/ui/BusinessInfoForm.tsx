@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { Alert, Button, Field, Input } from "@/components/ui";
+import { fromRows, HoursEditor, toRows, type HourRow } from "./HoursEditor";
 import type { OpeningHour } from "@/db/schema";
 import { BUSINESS_CATEGORIES } from "@/features/business/policy-defaults";
 import { checkSlugInput, isTempSlug } from "@/features/business/slug-rules";
@@ -11,24 +12,6 @@ import type { BusinessSettings } from "@/features/business/settings";
 import { apiPatch, describeError, fieldErrors } from "@/lib/client-api";
 
 const DOW = ["일", "월", "화", "수", "목", "금", "토"];
-/** 편집용 행 — 휴무는 enabled=false. breaks 는 빈 문자열 허용(저장 시 걸러낸다) */
-type HourRow = { enabled: boolean; open: string; close: string; breaks: Array<{ start: string; end: string }> };
-
-function toRows(hours: OpeningHour[]): HourRow[] {
-  return Array.from({ length: 7 }, (_, dow) => {
-    const h = hours.find((x) => x.dow === dow);
-    return h ? { enabled: true, open: h.open, close: h.close, breaks: h.breaks ?? [] } : { enabled: false, open: "10:00", close: "20:00", breaks: [] };
-  });
-}
-
-/** 자주 쓰는 값. 프리셋을 누른 뒤에도 요일별로 마저 고칠 수 있다 — 잠그는 것이 아니라 채워 주는 것이다 */
-const PRESET_WEEKDAY = (): HourRow[] =>
-  [0, 1, 2, 3, 4, 5, 6].map((dow) => ({ enabled: dow >= 1 && dow <= 5, open: "10:00", close: "19:00", breaks: [] }));
-const PRESET_ALLDAY = (): HourRow[] => [0, 1, 2, 3, 4, 5, 6].map(() => ({ enabled: true, open: "00:00", close: "00:00", breaks: [] }));
-
-function fromRows(rows: HourRow[]): OpeningHour[] {
-  return rows.flatMap((r, dow) => (r.enabled ? [{ dow, open: r.open, close: r.close, ...(r.breaks.length ? { breaks: r.breaks } : {}) }] : []));
-}
 
 const SLUG_ERR: Record<string, string> = {
   SLUG_TAKEN: "다른 사업장이 쓰고 있거나 썼던 주소입니다",
@@ -37,10 +20,6 @@ const SLUG_ERR: Record<string, string> = {
   SLUG_LIMIT: "주소는 30일에 3번까지만 바꿀 수 있어요",
 };
 
-/**
- * 위저드 1단계 · 설정 화면 공용: 매장 정보 + 영업시간 + 공개 주소(slug).
- * slug 는 별도 저장 — 바꾸면 옛 주소가 영구 예약되는 되돌리기 어려운 변경이라 한 폼에 섞지 않는다.
- */
 export function BusinessInfoForm({ initial, mode, readOnly, publicBase }: { initial: BusinessSettings; mode: "wizard" | "settings"; readOnly: boolean; publicBase: string }) {
   const router = useRouter();
   const [f, setF] = useState({
@@ -185,24 +164,6 @@ export function BusinessInfoForm({ initial, mode, readOnly, publicBase }: { init
 
         <h2 style={{ marginTop: 6 }}>영업시간 <span className="muted" style={{ fontWeight: 400, fontSize: 13 }}>(선택)</span></h2>
         <p className="sub">요일을 켜고 시간을 정하세요. 마감이 시작보다 빠르면 다음 날 마감(심야 영업)으로 봅니다. 휴게시간은 하루 최대 2구간.</p>
-        {/* 한 요일만 채우고 나머지에 같은 값을 넣는 일이 대부분이다 — 일곱 번 입력하게 두지 않는다 */}
-        {!readOnly && (
-          <div className="hours-tools">
-            <span className="muted">빠른 설정</span>
-            <Button type="button" size="sm" onClick={() => applyToAll(firstEnabled)} disabled={dis || firstEnabled < 0}>
-              켜 둔 요일과 동일하게
-            </Button>
-            <Button type="button" size="sm" onClick={() => setRows(PRESET_WEEKDAY())} disabled={dis}>
-              평일 10–19 · 주말 휴무
-            </Button>
-            <Button type="button" size="sm" onClick={() => setRows(PRESET_ALLDAY())} disabled={dis}>
-              매일 종일
-            </Button>
-            <Button type="button" size="sm" onClick={() => setRows(toRows([]))} disabled={dis}>
-              모두 끄기
-            </Button>
-          </div>
-        )}
         {/* 안 정해도 공개된다 — 대신 자동 확정이 꺼진다. 그 사실을 여기서 말하지 않으면 사장님은 왜 매번 승인해야 하는지 모른다 */}
         {!rows.some((r) => r.enabled) && (
           <Alert kind="info">
@@ -210,41 +171,7 @@ export function BusinessInfoForm({ initial, mode, readOnly, publicBase }: { init
             <b> 항상 승인 대기</b>로 들어옵니다 — 매장이 한 건씩 보고 확정해요.
           </Alert>
         )}
-        <div className="hours">
-          {rows.map((r, i) => (
-            <div key={i} className="hours-row">
-              <label className="check" style={{ height: 38 }}>
-                <input type="checkbox" checked={r.enabled} onChange={(e) => setRow(i, { enabled: e.target.checked })} disabled={dis} />
-                {DOW[i]}요일
-              </label>
-              {r.enabled ? (
-                <div className="times">
-                  <Input type="time" aria-label={`${DOW[i]}요일 시작`} value={r.open} onChange={(e) => setRow(i, { open: e.target.value })} disabled={dis} required />
-                  <span>~</span>
-                  <Input type="time" aria-label={`${DOW[i]}요일 마감`} value={r.close} onChange={(e) => setRow(i, { close: e.target.value })} disabled={dis} required />
-                  {r.breaks.map((b, bi) => (
-                    <span key={bi} className="times" style={{ gap: 6 }}>
-                      <span className="muted">휴게 {bi + 1}</span>
-                      <Input type="time" aria-label={`${DOW[i]}요일 휴게 ${bi + 1} 시작`} value={b.start} onChange={(e) => setRow(i, { breaks: r.breaks.map((x, k) => (k === bi ? { ...x, start: e.target.value } : x)) })} disabled={dis} />
-                      <span>~</span>
-                      <Input type="time" aria-label={`${DOW[i]}요일 휴게 ${bi + 1} 끝`} value={b.end} onChange={(e) => setRow(i, { breaks: r.breaks.map((x, k) => (k === bi ? { ...x, end: e.target.value } : x)) })} disabled={dis} />
-                      <Button type="button" size="sm" onClick={() => setRow(i, { breaks: r.breaks.filter((_, k) => k !== bi) })} disabled={dis} aria-label={`${DOW[i]}요일 휴게 ${bi + 1} 삭제`}>
-                        ✕
-                      </Button>
-                    </span>
-                  ))}
-                  {r.breaks.length < 2 && (
-                    <Button type="button" size="sm" onClick={() => setRow(i, { breaks: [...r.breaks, { start: "13:00", end: "14:00" }] })} disabled={dis}>
-                      + 휴게시간
-                    </Button>
-                  )}
-                </div>
-              ) : (
-                <span className="closed">휴무</span>
-              )}
-            </div>
-          ))}
-        </div>
+        <HoursEditor rows={rows} onChange={setRows} disabled={dis} idPrefix="영업" />
         <h2 style={{ marginTop: 6 }}>공개 주소</h2>
         <p className="sub">
           고객이 예약하러 오는 주소입니다. 영소문자·숫자·하이픈 3~30자. <b>한 번 쓴 주소는 바꾼 뒤에도 다른 사업장이 쓸 수 없고</b>, 옛 주소로 들어온 손님은 새 주소로 안내됩니다.
