@@ -11,6 +11,11 @@ describe("longestOpenSpanMin", () => {
 });
 
 describe("fixedTimeWarnings (고정 회차 vs 영업시간, 브레이크 무시)", () => {
+  it("영업시간을 정하지 않았으면 경고할 것이 없다 — 하루 전체가 열린다 (9/14)", () => {
+    // `.find()` 만 보면 모든 회차에 CLOSED_DAY 가 붙어 화면이 "표시되지 않습니다" 로 거꾸로 안내한다
+    expect(fixedTimeWarnings([{ dow: 1, times: ["03:00"] }, { dow: 6, times: ["23:00"] }], [], 60)).toEqual([]);
+  });
+
   const hours = [{ dow: 1, open: "10:00", close: "20:00", breaks: [{ start: "13:00", end: "14:00" }] }, { dow: 5, open: "20:00", close: "02:00" }];
   it("회차 전체가 영업 구간 안이면 경고 없음 — 브레이크와 겹쳐도 OK", () => {
     expect(fixedTimeWarnings([{ dow: 1, times: ["10:00", "13:00", "19:00"] }], hours, 60)).toEqual([]);

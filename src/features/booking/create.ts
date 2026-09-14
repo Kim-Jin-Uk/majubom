@@ -263,6 +263,20 @@ async function withDeadlockRetry<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
+/**
+ * 그 자리의 시간 범위를 **아무도 정하지 않았는가**. 정해진 것이 하나도 없으면 하루 전체가 열려 있다는 뜻이라,
+ * 자동 확정을 쓰지 않는다 (`autoConfirm` 무시).
+ *
+ * 두 갈래를 다 본다 — 사업장 영업시간, 그리고 담당자의 근무표.
+ * 담당자(STAFF)가 아닌 자원(룸·공용)은 근무표라는 개념이 없으므로 영업시간만 본다.
+ */
+function isUnconstrained(ctx: SlotContext, resourceId: string): boolean {
+  if (ctx.business.openingHours.length > 0) return false;
+  const r = ctx.resources.find((x) => x.id === resourceId);
+  if (r?.type !== "STAFF") return true;
+  return !ctx.workSchedules.some((w) => w.resourceId === resourceId);
+}
+
 async function insertOne(
   ctx: SlotContext,
   businessId: string,
@@ -286,10 +300,13 @@ async function insertOne(
   const cap = Math.min(p.capacityPerSlot, resourceCapacity);
   // 워크인은 즉시 확정. 취소 마감을 지난 변경은 autoConfirm 과 무관하게 매장 승인을 받는다 (FR-BOOK-050).
   //
-  // **영업시간을 안 정한 매장은 자동 확정을 쓰지 않는다 (9/14 결정).** 그런 매장은 하루 전체가 열려 있어
+  // **시간을 아무도 정하지 않았으면 자동 확정을 쓰지 않는다 (9/14 결정).** 그런 자리는 하루 전체가 열려 있어
   // 손님이 새벽 3시를 고를 수 있다 — 매장이 한 건씩 보고 승인해야 한다. 안 그러면 아무도 없는 시각이 그대로 확정된다.
-  const hoursUnset = ctx.business.openingHours.length === 0;
-  const status = mode.via === "WALK_IN" ? "CONFIRMED" : mode.forceRequested || hoursUnset || !policy.autoConfirm ? "REQUESTED" : "CONFIRMED";
+  //
+  // 사업장 영업시간만 보면 안 된다. **담당자 근무표가 없는 경우도 같은 상태**다 — `resolveWorkDay` 의 `UNSET` —
+  // 영업시간은 정했지만 근무표를 아직 안 짠 새 담당자에게 바로 확정이 나가면 그 사람은 출근하지도 않는다 (리뷰 지적).
+  const unconstrained = isUnconstrained(ctx, resourceId);
+  const status = mode.via === "WALK_IN" ? "CONFIRMED" : mode.forceRequested || unconstrained || !policy.autoConfirm ? "REQUESTED" : "CONFIRMED";
 
   return db.transaction(async (tx) => {
     // 락 순서는 언제나 고객 → 자원
