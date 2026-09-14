@@ -35,6 +35,8 @@ dump.sql
 # ── 빌드 산출물 ────────────────────────────────────────
 node_modules/
 .next/
+# E2E 전용 빌드 산출물 — 개발 서버의 .next 와 갈라 두어야 두 서버가 공존한다 (playwright.config.ts)
+.next-e2e/
 out/
 build/
 dist/
@@ -68,3 +70,5 @@ Thumbs.db
 npm-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+/blob-report/
+/playwright/.cache/

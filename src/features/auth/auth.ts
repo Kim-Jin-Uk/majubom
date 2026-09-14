@@ -17,6 +17,7 @@ import { loadPrincipal, userLoginDenial, type Principal } from "./principal";
 import { createSession, revokeSession } from "./session-store";
 import "./types";
 import { emailSchema } from "./validation";
+import { skipTotp } from "./dev-flags";
 
 /**
  * Auth.js v5 (FR-AUTH-030). 설계 요약 — 자세한 건 src/features/auth/README.md.
@@ -110,7 +111,8 @@ async function establish(token: Record<string, unknown>, principal: Principal, m
   token.sid = rt.sid;
   token.accessExp = nowSec() + ACCESS_TTL_SEC;
   token.p = principal;
-  token.mfa = principal.globalRole === "ADMIN" ? "pending" : "ok";
+  // 로컬·E2E 에서는 TOTP 를 건너뛸 수 있다 (프로덕션에서는 어떤 값을 넣어도 꺼진다 — `dev-flags.ts`)
+  token.mfa = principal.globalRole === "ADMIN" && !skipTotp() ? "pending" : "ok";
   token.name = principal.name;
   delete token.pending;
   delete token.email; // 쿠키에 이메일을 두지 않는다

@@ -128,6 +128,6 @@ export const loadBookingWidget = cache(async (businessId: string): Promise<Booki
       .reduce((a, b) => (a < b ? a : b), todayIn(home.timezone)),
     policy: { minLeadTimeMin: policy.minLeadTimeMin, maxAdvanceDays: policy.maxAdvanceDays, cancelDeadlineHours: policy.cancelDeadlineHours, autoConfirm: policy.autoConfirm },
     // 상품 시간은 달력 하한을 구하는 데만 썼다 — 손님 화면이 쓰지 않으므로 페이로드에서 뺀다
-    products: list.map(({ openingHours: _hours, ...p }) => p),
+    products: list.map((p) => ({ ...p, openingHours: undefined })),
   };
 });

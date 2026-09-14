@@ -1,15 +1,14 @@
 import { and, asc, eq, gte, ilike, inArray, lt, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db/client";
-import { productResources, products, reservationLogs, reservations, resources, users } from "@/db/schema";
+import { products, reservationLogs, reservations, resources, users } from "@/db/schema";
 import { HttpError } from "@/features/auth/errors";
-import { writeAudit } from "@/lib/audit";
 import { isoDateSchema } from "@/lib/dates";
 import type { RequestMeta } from "@/lib/request-meta";
 import type { ReservationStatus } from "./slot-types";
 import { formatInstant, localToInstant } from "./time";
 import { ownResourceId } from "@/features/schedule/work-exceptions";
-import { moveReservationResource, validateExisting } from "./transitions";
+import { moveReservationResource } from "./transitions";
 
 /**
  * 예약 콘솔의 읽기 계층 (FR-BOOK-080, #58). 목록·상세·담당자 변경.

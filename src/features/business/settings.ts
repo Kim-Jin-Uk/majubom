@@ -6,7 +6,6 @@ import { HttpError } from "@/features/auth/errors";
 import { hashPii, writeAudit } from "@/lib/audit";
 import type { RequestMeta } from "@/lib/request-meta";
 import { phoneSchema } from "@/features/auth/validation";
-import { timeSchema, toMin } from "./hours";
 import { RESERVED_SLUGS } from "./slug-rules";
 import { conflictsForBusinessHours } from "./hours-conflict";
 import { BUSINESS_CATEGORY_CODES } from "./policy-defaults";

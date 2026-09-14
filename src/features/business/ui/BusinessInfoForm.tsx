@@ -6,7 +6,6 @@ import { useState, type FormEvent } from "react";
 import { Alert, Button, Field, Input } from "@/components/ui";
 import { fromRows, HoursEditor, toRows, type HourRow } from "./HoursEditor";
 import { HoursConflictNotice, type ConflictItem } from "./HoursConflictNotice";
-import type { OpeningHour } from "@/db/schema";
 import { BUSINESS_CATEGORIES } from "@/features/business/policy-defaults";
 import { checkSlugInput, isTempSlug } from "@/features/business/slug-rules";
 import type { BusinessSettings } from "@/features/business/settings";
@@ -46,13 +45,6 @@ export function BusinessInfoForm({ initial, mode, readOnly, publicBase }: { init
     setF((x) => ({ ...x, [k]: e.target.value }));
     setErrors((x) => (x[k] ? { ...x, [k]: "" } : x));
   };
-  const setRow = (i: number, patch: Partial<HourRow>) => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)));
-  /** 켜 둔 첫 요일 — "동일하게" 의 원본이 된다 */
-  const firstEnabled = rows.findIndex((r) => r.enabled);
-  /** 그 요일의 시간·휴게를 **켜져 있는 다른 요일**에만 복사한다. 꺼 둔 요일을 켜지 않는다 — 휴무는 사장님이 정한 것이다 */
-  const applyToAll = (from: number) =>
-    setRows((rs) => (from < 0 ? rs : rs.map((r) => (r.enabled ? { ...r, open: rs[from].open, close: rs[from].close, breaks: rs[from].breaks.map((b) => ({ ...b })) } : r))));
-
   async function save(e: FormEvent) {
     e.preventDefault();
     setBusy(true);

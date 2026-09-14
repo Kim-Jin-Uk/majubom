@@ -80,6 +80,80 @@ jobs:
       - name: Build
         run: npm run build
 
+  # ── E2E (Playwright) ───────────────────────────────────────────────────────
+  # `verify` 가 규칙을 본다면 여기서는 **그 규칙들이 한 화면에 붙어 실제로 되는가**를 본다.
+  # required status check 에 넣는다 — 화면이 조용히 깨지는 회귀(버튼이 이유 없이 잠김, 안내가 옛 규칙을 말함)를
+  # 유닛 테스트로는 못 잡는다. 대신 시나리오를 적게 유지해 게이트가 느려지지 않게 한다.
+  e2e:
+    name: e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: majubom_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d majubom_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/majubom_test
+      DATABASE_URL_UNPOOLED: postgresql://postgres:postgres@localhost:5432/majubom_test
+      # 개발 서버로 띄운다 — `next build` 는 몇 분을 먹는데 E2E 가 보는 것은 빌드 산출물이 아니라 흐름이다
+      NODE_ENV: development
+      # 1기 게이트(noindex·Basic Auth)가 끼어들면 시나리오가 전부 막힌다
+      GATE_ENABLED: "false"
+      # 인증 앱을 붙일 수 없으므로 ADMIN 2단계를 건너뛴다.
+      # **production 에서는 lib/env.ts 가 이 조합을 거부해 부팅이 실패한다** — 여기서만 켜진다
+      AUTH_DEV_SKIP_TOTP: "true"
+      AUTH_SECRET: e2e-only-secret-e2e-only-secret-32
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm install -g npm@11
+      - run: npm ci
+
+      - name: Apply migrations
+        run: npm run db:migrate
+
+      # 시나리오가 기대는 사업장·상품·자원·계정. 임시 주소(b-…) 상태로 만들어지므로
+      # Playwright 의 setup 프로젝트가 화면에서 정식 주소를 정한다
+      - name: Seed test data
+        run: npm run db:seed:test
+
+      # 관리자 시나리오용. 시드는 ADMIN 을 만들지 않는다(운영자 1인 전제라 승격이 별도 절차다)
+      - name: Create admin account
+        env:
+          ADMIN_PASSWORD: test1234
+        run: npm run admin:create -- admin@example.com "관리자"
+
+      # 브라우저만 받는다(`--with-deps` 는 apt 로 몇 분을 더 먹는다). ubuntu 러너에는 의존 라이브러리가 이미 있다
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: E2E
+        run: npm run e2e
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
   # ── Firestore 보안 규칙 (에뮬레이터 + @firebase/rules-unit-testing) ─────────
   firestore-rules:
     name: firestore-rules
