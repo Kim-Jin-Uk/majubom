@@ -73,3 +73,60 @@ test.describe("내 예약", () => {
     await expect(page.locator("a.myres", { hasText: code })).toBeVisible();
   });
 });
+
+/**
+ * 마이페이지 (#90). 프로필 · 알림 채널 · 설치된 기기가 한 장에 있다.
+ */
+test.describe("내 정보", () => {
+  test("이름을 바꾸면 저장되고 다시 열어도 남아 있다", async ({ page }) => {
+    await login(page, ACCOUNTS.customer);
+    await page.goto("/me");
+    const name = page.getByLabel("이름");
+    const before = await name.inputValue();
+    await name.fill("김고객2");
+    await page.getByRole("button", { name: "저장", exact: true }).click();
+    await expect(page.getByText("저장했어요")).toBeVisible();
+
+    await page.reload();
+    await expect(page.getByLabel("이름")).toHaveValue("김고객2");
+    // 뒤따르는 시나리오가 쓰는 이름이라 되돌려 놓는다
+    await page.getByLabel("이름").fill(before);
+    await page.getByRole("button", { name: "저장", exact: true }).click();
+    await expect(page.getByText("저장했어요")).toBeVisible();
+  });
+
+  test("꼭 알아야 하는 알림의 앱 안 채널은 끌 수 없고, 마케팅은 꺼져 있다", async ({ page }) => {
+    await login(page, ACCOUNTS.customer);
+    await page.goto("/me");
+
+    // 예약이 취소됐다는 사실을 알 길이 아예 없어지면 안 된다
+    const locked = page.getByLabel("예약 앱 안");
+    await expect(locked).toBeChecked();
+    await expect(locked).toBeDisabled();
+
+    // 마케팅은 옵트인 — 켜는 것이 사용자의 행동이어야 한다
+    // 스위치는 누르는 즉시 저장한다 — 서버 응답으로 상태가 바뀌므로 `check()` 가 아니라 클릭하고 기다린다
+    const marketing = page.getByLabel("혜택·소식 메일");
+    await expect(marketing).not.toBeChecked();
+    await marketing.click();
+    await expect(marketing).toBeChecked();
+
+    await page.reload();
+    await expect(page.getByLabel("혜택·소식 메일")).toBeChecked();
+
+    // 되돌려 둔다 — 이 시나리오가 남긴 상태가 다음 실행의 첫 단언을 깨뜨리면 안 된다
+    await page.getByLabel("혜택·소식 메일").click();
+    await expect(page.getByLabel("혜택·소식 메일")).not.toBeChecked();
+  });
+
+  test("사업장 구성원이 아니면 근무 알림 줄이 없다", async ({ page }) => {
+    await login(page, ACCOUNTS.customer);
+    await page.goto("/me");
+    // 끌 수도 없는 줄을 보여 줄 이유가 없다
+    await expect(page.getByLabel("근무 메일")).toHaveCount(0);
+
+    await login(page, ACCOUNTS.manager);
+    await page.goto("/me");
+    await expect(page.getByLabel("근무 메일")).toBeVisible();
+  });
+});

@@ -3112,3 +3112,53 @@ a.myres:hover {
 .resdt__log li .sub {
   font-variant-numeric: tabular-nums;
 }
+
+/* 알림 채널 설정 (#90). 그룹 한 줄에 채널 셋 — 표로 만들면 좁은 화면에서 가로 스크롤이 생긴다 */
+.pref-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+}
+.pref-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-2);
+}
+.pref-list li:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.pref-head {
+  display: grid;
+  gap: 2px;
+  min-width: 12em;
+  flex: 1;
+}
+.pref-head .sub {
+  font-size: 13px;
+}
+.pref-switches {
+  display: flex;
+  gap: 12px;
+}
+.pref-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 14px;
+  cursor: pointer;
+}
+/* 끌 수 없는 채널은 눌러 봐야 소용없다는 것이 보여야 한다 — 회색으로만 두면 고장으로 읽힌다 */
+.pref-switch.locked {
+  cursor: not-allowed;
+  color: var(--text-3);
+}
+.pref-switch input {
+  accent-color: var(--primary);
+}
