@@ -79,6 +79,11 @@ export interface SlotProduct {
   fixedStartTimes: FixedStartTimesEntry[] | null;
   /** FIXED 상품이 영업시간 브레이크를 차감하지 않는지. 기본 true (FR-PRD-010) */
   fixedIgnoreBreaks?: boolean;
+  /**
+   * 이 상품만의 영업시간. **빈 배열·없음 = 정하지 않음** → 사업장 영업시간을 그대로 따른다.
+   * 값이 있으면 그 상품에 한해 사업장 영업시간 **대신** 이것을 쓴다 (심야 클래스·점심 전용 시술).
+   */
+  openingHours?: OpeningHoursEntry[];
   /** FREE일 때 필수, FIXED면 null(무시) */
   slotIntervalMin: SlotIntervalMin | null;
   /** 이용 시간 스위치 — 기본 소요 시간(분). `durationOptions`가 있으면 그중 기본값 */

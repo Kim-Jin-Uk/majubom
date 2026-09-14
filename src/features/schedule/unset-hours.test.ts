@@ -49,6 +49,21 @@ describe("근무표를 짜지 않았을 때", () => {
   });
 });
 
+describe("콘솔 지표도 같은 답을 낸다", () => {
+  it("영업시간 미정이면 근무표 화면에서도 휴무가 아니다 — 슬롯만 열리고 지표가 닫히면 안 된다", () => {
+    const day = resolveWorkDay({ date: MON, resourceId: "r1", openingHours: [], ...EMPTY });
+    expect(day.closed, "미정은 휴무가 아니다").toBe(false);
+    expect(day.bookable, "예약 가능 구간도 하루 전체").toEqual(WHOLE);
+  });
+
+  it("월~금만 적었으면 토요일은 근무표에서도 휴무다", () => {
+    const weekdays = [1, 2, 3, 4, 5].map((dow) => ({ dow, open: "10:00", close: "19:00" }));
+    const sat = resolveWorkDay({ date: SAT, resourceId: "r1", openingHours: weekdays, ...EMPTY });
+    expect(sat.closed).toBe(true);
+    expect(sat.bookable).toEqual([]);
+  });
+});
+
 describe("둘 다 비었을 때 — 0~24시가 전부 열린다", () => {
   it("담당자 자원", () => {
     const opening = openingWindows([], MON, true);
