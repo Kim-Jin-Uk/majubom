@@ -119,7 +119,9 @@ export async function getScheduleGrid(businessId: string, from: string, to: stri
 
   const dayMeta = dates.map((date) => {
     const dow = new Date(`${date}T00:00:00Z`).getUTCDay();
-    const open = b.openingHours.some((o) => o.dow === dow);
+    // 영업시간을 **정하지 않은** 사업장은 하루 전체가 열려 있다 — `.some()` 만 보면 늘 false 라
+    // 캘린더 헤더가 매일 "영업 안 함" 을 표시한다. 슬롯 엔진과 답이 달라지는 자리다 (리뷰 지적)
+    const open = b.openingHours.length === 0 || b.openingHours.some((o) => o.dow === dow);
     const bizHoliday = hols.find((h) => h.resourceId === null && h.isFullDay && holidayApplies(h, date)) ?? null;
     return {
       date,

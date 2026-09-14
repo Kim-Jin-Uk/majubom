@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { check, index, integer, jsonb, pgTable, primaryKey, text, uuid, varchar } from "drizzle-orm/pg-core";
 import { timestamps, uuidPk } from "./_common";
-import { businesses, type OpeningHour } from "./businesses";
+import { businesses } from "./businesses";
 import { productStatusEnum, resourceSelectModeEnum, startModeEnum } from "./enums";
 import { resources } from "./resources";
 
@@ -25,12 +25,6 @@ export const products = pgTable(
     description: text("description"),
     /** URL 배열, 최대 5장 (앱 검증). */
     images: jsonb("images").$type<string[]>().notNull().default([]),
-    /**
-     * 이 상품만의 영업시간. **빈 배열 = 정하지 않음** → 사업장 영업시간을 그대로 따른다.
-     * 값이 있으면 그 상품에 한해 사업장 영업시간 대신 이것을 쓴다 (심야 클래스·점심 전용 시술 등).
-     * 형식은 `businesses.opening_hours` 와 같다 — 화면의 "영업시간과 동일" 버튼이 그대로 복사한다.
-     */
-    openingHours: jsonb("opening_hours").$type<OpeningHour[]>().notNull().default([]),
     startMode: startModeEnum("start_mode").notNull(),
     fixedStartTimes: jsonb("fixed_start_times").$type<FixedStartTime[]>(),
     slotIntervalMin: integer("slot_interval_min"),
