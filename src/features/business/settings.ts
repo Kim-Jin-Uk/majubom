@@ -8,6 +8,7 @@ import type { RequestMeta } from "@/lib/request-meta";
 import { phoneSchema } from "@/features/auth/validation";
 import { timeSchema, toMin } from "./hours";
 import { RESERVED_SLUGS } from "./slug-rules";
+import { conflictsForBusinessHours } from "./hours-conflict";
 import { BUSINESS_CATEGORY_CODES } from "./policy-defaults";
 
 /**
@@ -160,6 +161,20 @@ export async function updateBusinessInfo(businessId: string, input: BusinessInfo
       diff[k] = { from: auditValue(k, a), to: auditValue(k, b) };
     }
     if (Object.keys(diff).length === 0) return;
+
+    /**
+     * **영업시간을 줄여 기존 예약이 밖으로 나가면 막는다 (9/14 결정).**
+     *
+     * 이미 잡힌 예약은 영업시간을 바꿔도 그대로 남는다 — 손님은 "그 시간에 영업하지 않는 가게" 의 예약을
+     * 들고 있게 된다. 휴무 등록(하루짜리 예외)은 경고 후 강행을 허용하지만, 영업시간은 매장의 기본값이라
+     * 한 번 줄이면 그 뒤 모든 슬롯이 바뀐다. 사장님이 그 예약을 먼저 정리하게 한다.
+     *
+     * 넓히는 방향은 걸리지 않는다(기존 예약이 전부 안에 있다). 상품 시간을 따로 정한 상품도 영향을 받지 않는다.
+     */
+    if (diff.openingHours) {
+      const conflicts = await conflictsForBusinessHours(businessId, next.openingHours, before.timezone, new Date(), tx);
+      if (conflicts.length > 0) throw new HttpError(409, "HOURS_CONFLICT", { reservations: conflicts });
+    }
 
     await tx.update(businesses).set(next).where(eq(businesses.id, businessId));
     // 배치·마이그레이션 등 행위자가 없는 경로도 있으므로 actor 는 선택이다

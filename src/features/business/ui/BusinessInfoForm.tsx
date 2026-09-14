@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { Alert, Button, Field, Input } from "@/components/ui";
 import { fromRows, HoursEditor, toRows, type HourRow } from "./HoursEditor";
+import { HoursConflictNotice, type ConflictItem } from "./HoursConflictNotice";
 import type { OpeningHour } from "@/db/schema";
 import { BUSINESS_CATEGORIES } from "@/features/business/policy-defaults";
 import { checkSlugInput, isTempSlug } from "@/features/business/slug-rules";
@@ -33,6 +34,7 @@ export function BusinessInfoForm({ initial, mode, readOnly, publicBase }: { init
   const [rows, setRows] = useState<HourRow[]>(() => toRows(initial.openingHours));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  const [conflicts, setConflicts] = useState<ConflictItem[]>([]);
   const [busy, setBusy] = useState(false);
 
   const [slug, setSlug] = useState(initial.slug.startsWith("b-") ? "" : initial.slug);
@@ -87,9 +89,14 @@ export function BusinessInfoForm({ initial, mode, readOnly, publicBase }: { init
           const day = typeof hour.path[1] === "number" ? sent[hour.path[1]]?.dow : undefined;
           setMsg({ kind: "error", text: `영업시간${day !== undefined ? ` (${DOW[day]}요일)` : ""}: ${hour.message}` });
         } else setMsg({ kind: "error", text: "입력 내용을 확인해 주세요" });
+      } else if (r.error === "HOURS_CONFLICT") {
+        // 무엇이 걸리는지 보여 준다 — "예약이 있어 바꿀 수 없습니다" 만으로는 무엇을 정리할지 알 수 없다
+        setConflicts(((r.data?.reservations as ConflictItem[] | undefined) ?? []));
+        setMsg(null);
       } else setMsg({ kind: "error", text: describeError(r) });
       return;
     }
+    setConflicts([]);
     if (mode === "wizard" && completeNow) {
       router.push("/console/onboarding/2");
       router.refresh();
@@ -171,6 +178,7 @@ export function BusinessInfoForm({ initial, mode, readOnly, publicBase }: { init
             <b> 항상 승인 대기</b>로 들어옵니다 — 매장이 한 건씩 보고 확정해요.
           </Alert>
         )}
+        <HoursConflictNotice items={conflicts} what="영업시간" />
         <HoursEditor rows={rows} onChange={setRows} disabled={dis} idPrefix="영업" />
         <h2 style={{ marginTop: 6 }}>공개 주소</h2>
         <p className="sub">

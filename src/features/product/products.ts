@@ -2,6 +2,7 @@ import { and, asc, eq, gt, inArray, ne, sql } from "drizzle-orm";
 import { db, type DbLike } from "@/db/client";
 import { businesses, productResources, products, reservations, resources, type FixedStartTime, type OpeningHour } from "@/db/schema";
 import { HttpError } from "@/features/auth/errors";
+import { conflictsForProductHours } from "@/features/business/hours-conflict";
 import { peakOccupancy, type OccupyingReservation } from "@/features/booking/peak-occupancy";
 import { toMin } from "@/features/business/hours";
 import { writeAudit } from "@/lib/audit";
@@ -319,6 +320,18 @@ export async function updateProduct(businessId: string, productId: string, input
     const removed = curRes.filter((id) => !nextRes.includes(id));
     const added = nextRes.filter((id) => !curRes.includes(id));
     const shapeChanged = SHAPE_KEYS.some((k) => JSON.stringify(cur[k]) !== JSON.stringify(next[k])) || removed.length > 0 || added.length > 0;
+
+    /**
+     * **예약 가능 시간을 줄여 기존 예약이 밖으로 나가면 막는다 (9/14 결정 — 영업시간과 같은 규칙).**
+     * 토글을 켜는(빈 배열) 변경도 본다 — 그때는 사업장 영업시간이 적용되므로 범위가 달라질 수 있다.
+     * 넓히는 방향은 걸리지 않는다.
+     */
+    if (JSON.stringify(cur.openingHours) !== JSON.stringify(next.openingHours)) {
+      const [b] = await tx.select({ timezone: businesses.timezone, openingHours: businesses.openingHours }).from(businesses).where(eq(businesses.id, businessId)).limit(1);
+      if (!b) throw new HttpError(404, "NOT_FOUND");
+      const conflicts = await conflictsForProductHours(businessId, productId, next.openingHours, b.openingHours, b.timezone, new Date(), tx);
+      if (conflicts.length > 0) throw new HttpError(409, "HOURS_CONFLICT", { reservations: conflicts });
+    }
 
     let affected = 0;
     if (shapeChanged) {

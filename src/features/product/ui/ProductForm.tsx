@@ -7,6 +7,7 @@ import { Img } from "@/components/Img";
 import { Alert, Button, Field, Input } from "@/components/ui";
 import type { ResourceItem } from "@/features/business/resources";
 import { fromRows, HoursEditor, toRows, type HourRow } from "@/features/business/ui/HoursEditor";
+import { HoursConflictNotice, type ConflictItem } from "@/features/business/ui/HoursConflictNotice";
 import type { OpeningHour } from "@/db/schema";
 import { guessPreset, PRESETS, type PresetKey } from "@/features/product/presets";
 import type { ProductDetail, ProductWarning } from "@/features/product/products";
@@ -129,6 +130,7 @@ export function ProductForm({
    */
   const canFollow = businessHours.length > 0;
   const [followBusiness, setFollowBusiness] = useState(initial ? (initial.openingHours?.length ?? 0) === 0 && canFollow : canFollow);
+  const [conflicts, setConflicts] = useState<ConflictItem[]>([]);
   const [hourRows, setHourRows] = useState<HourRow[]>(() => toRows(initial?.openingHours?.length ? initial.openingHours : businessHours));
   const [d, setD] = useState<Draft>(() => (initial ? fromDetail(initial) : mode === "wizard" ? { ...EMPTY, status: "ACTIVE" } : EMPTY));
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -210,9 +212,14 @@ export function ProductForm({
         setErrors(fe);
         const first = r.issues[0];
         setMsg({ kind: "error", text: first ? `${first.message}` : "입력 내용을 확인해 주세요" });
+      } else if (r.error === "HOURS_CONFLICT") {
+        // 무엇이 걸리는지 보여 준다 — 영업시간 쪽과 같은 규칙이다
+        setConflicts(((r.data?.reservations as ConflictItem[] | undefined) ?? []));
+        setMsg(null);
       } else setMsg({ kind: "error", text: ERR_TEXT[r.error] ?? describeError(r) });
       return;
     }
+    setConflicts([]);
     const w = r.data.warnings ?? [];
     if (initial) {
       setWarnings(w);
@@ -514,6 +521,7 @@ export function ProductForm({
       {!limited && (
         <section style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <h2>예약 가능 시간</h2>
+          <HoursConflictNotice items={conflicts} what="예약 가능 시간" />
           {/*
             기본은 "영업시간과 동일" 이고, 그때는 값을 **저장하지 않는다** — 사업장 영업시간을 그때그때 따른다.
             그래서 나중에 영업시간을 바꾸면 이 상품도 같이 바뀐다. 복사해 두면 그 연결이 끊긴다.
