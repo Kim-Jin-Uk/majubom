@@ -6,9 +6,19 @@ import { loadMyReservationDetail } from "@/features/booking/my-reservations";
 import { customerCancelState } from "@/features/booking/transition-rules";
 import { ReservationActions } from "@/features/booking/ui/ReservationActions";
 import { dayLabel, dayOf, rangeLabel, stampLabel, STATUS_COLOR, STATUS_LABEL } from "@/features/booking/ui/status";
-import { bookingHref, publicHomeHref } from "@/features/site/routing";
+import { myReviewOf, reviewStateFor } from "@/features/review/reviews";
+import { reviewEditState } from "@/features/review/rules";
+import { bookingHref, publicHomeHref, reviewsHref } from "@/features/site/routing";
 
 export const metadata = { title: "예약 상세 — 마주,봄" };
+
+/** 리뷰를 못 쓰는 이유별 문장. "안 됩니다" 하나로는 손님이 뭘 해야 할지 모른다 */
+const REVIEW_BLOCKED: Record<string, string> = {
+  NOT_COMPLETED: "방문을 마치면 리뷰를 남기실 수 있어요.",
+  WALK_IN: "매장에서 대신 잡아 드린 예약은 리뷰를 쓸 수 없어요.",
+  WINDOW_PASSED: "리뷰는 방문 후 30일 안에만 쓸 수 있어요.",
+  ALREADY_WRITTEN: "이 방문에는 이미 리뷰를 남기셨어요.",
+};
 
 /**
  * 예약 상세 (FR-BOOK-090, #89).
@@ -22,6 +32,11 @@ export default async function ReservationDetailPage({ params }: { params: Promis
   if (!s?.user.id) redirect(`/login?next=${encodeURIComponent(`/me/reservations/${id}`)}`);
   const r = await loadMyReservationDetail(s.user.id, id);
   if (!r) notFound();
+
+  // 리뷰 자격은 순수 규칙이 판정한다(`reviewEligibility`) — 화면이 다시 세면 서버와 갈라진다
+  const review = await reviewStateFor(s.user.id, id);
+  const written = review?.reviewId ? await myReviewOf(s.user.id, review.reviewId) : null;
+  const canEdit = written ? reviewEditState(written, new Date()).can : false;
 
   const cancel = customerCancelState(
     { status: r.status, startAt: new Date(r.startInstant), endAt: new Date(r.endInstant), cancelDeadlineHours: r.cancelDeadlineHours },
@@ -104,10 +119,32 @@ export default async function ReservationDetailPage({ params }: { params: Promis
           </ol>
         </section>
 
+        <section style={{ marginTop: 28 }}>
+          <h2 style={{ fontSize: 16, margin: "0 0 8px" }}>리뷰</h2>
+          {written ? (
+            <p className="sub">
+              이 방문에 리뷰를 남기셨어요. <Link href={reviewsHref(r.slug)}>가게 리뷰 보기</Link>
+              {canEdit && (
+                <>
+                  {" · "}
+                  <Link href={`/me/reservations/${r.id}/review`}>고치기</Link> <span className="muted">(한 번만)</span>
+                </>
+              )}
+            </p>
+          ) : review?.eligibility.can ? (
+            <p className="sub">
+              다녀오신 곳은 어떠셨나요? <Link href={`/me/reservations/${r.id}/review`}>리뷰 남기기</Link>
+              {" — "}
+              {new Date(review.eligibility.deadline).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul", month: "long", day: "numeric" })}까지 쓰실 수 있어요.
+            </p>
+          ) : (
+            <p className="sub">{REVIEW_BLOCKED[(review && !review.eligibility.can && review.eligibility.reason) || "NOT_COMPLETED"]}</p>
+          )}
+        </section>
+
         {/* 없는 것을 조용히 빼지 않는다 — 명세에 있는 액션이라 왜 아직 없는지 말한다 */}
         <p className="sub" style={{ marginTop: 20 }}>
-          문의하기(매장 상담방)와 리뷰 쓰기는 아직 없어요. 채팅(에픽 17)·리뷰(에픽 13)가 들어오면 여기에 붙습니다.
-          그때까지는 매장 전화가 가장 빠릅니다.
+          문의하기(매장 상담방)는 아직 없어요. 채팅(에픽 17)이 들어오면 여기에 붙습니다 — 그때까지는 매장 전화가 가장 빠릅니다.
         </p>
       </main>
     </>
