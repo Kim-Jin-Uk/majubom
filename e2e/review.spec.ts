@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { ACCOUNTS, login, publicSlug } from "./helpers";
 
 /**
@@ -8,9 +8,18 @@ import { ACCOUNTS, login, publicSlug } from "./helpers";
  * 그 한 건을 소비하므로 이 파일의 시나리오들은 **순서대로** 한 줄기다: 쓰고 → 공개 화면에서 보고 →
  * 사장님이 답글을 달고 → 고치고 → 지운다. 나눠 놓으면 서로의 상태를 밟는다.
  */
-const DONE = "DONE0001";
-
 test.describe.configure({ mode: "serial" });
+
+/**
+ * 방문을 마친 그 예약으로 간다. **예약번호로 찾지 않는다** — 코드는 시드가 정하는 값이라
+ * 테스트에 박아 두면 시드가 바뀌는 날 조용히 깨진다(실제로 CI 에서 그렇게 깨졌다).
+ * 찾는 기준은 이 시나리오가 뜻하는 것 그대로, **상태가 "완료" 인 카드**다.
+ */
+async function openCompleted(page: Page) {
+  await page.goto("/me/reservations");
+  await page.getByRole("tab", { name: /지난 예약/ }).click();
+  await page.locator("a.myres").filter({ has: page.locator(".myres__badge", { hasText: "완료" }) }).first().click();
+}
 
 test.describe("리뷰", () => {
   test("방문을 마친 예약에만 쓸 수 있다", async ({ page }) => {
@@ -21,9 +30,7 @@ test.describe("리뷰", () => {
     await page.locator("a.myres").first().click();
     await expect(page.getByText("방문을 마치면 리뷰를 남기실 수 있어요.")).toBeVisible();
 
-    await page.goto("/me/reservations");
-    await page.getByRole("tab", { name: /지난 예약/ }).click();
-    await page.locator("a.myres", { hasText: DONE }).click();
+    await openCompleted(page);
     await page.getByRole("link", { name: "리뷰 남기기" }).click();
 
     // 별점 없이는 보낼 수 없다
@@ -74,10 +81,7 @@ test.describe("리뷰", () => {
 
   test("리뷰는 한 번만 고칠 수 있다", async ({ page }) => {
     await login(page, ACCOUNTS.customer);
-    await page.goto("/me/reservations");
-    await page.getByRole("tab", { name: /지난 예약/ }).click();
-    await page.locator("a.myres", { hasText: DONE }).click();
-
+    await openCompleted(page);
     await page.getByRole("link", { name: "고치기" }).click();
     await expect(page.getByText(/한 번만.*고칠 수 있어요/)).toBeVisible();
     await page.getByLabel("어떠셨나요?").fill("생각보다 더 오래가서 다시 적습니다. 추천해요.");
