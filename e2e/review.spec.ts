@@ -6,7 +6,10 @@ import { ACCOUNTS, login, publicSlug } from "./helpers";
  * 나머지 셋은 미래·확정이라 자격이 없다(FR-REV-010 은 `COMPLETED` 만 받는다).
  *
  * 그 한 건을 소비하므로 이 파일의 시나리오들은 **순서대로** 한 줄기다: 쓰고 → 공개 화면에서 보고 →
- * 사장님이 답글을 달고 → 고치고 → 지운다. 나눠 놓으면 서로의 상태를 밟는다.
+ * 사장님이 답글을 달고 → 고치고 → 신고되고 → 지운다. 나눠 놓으면 서로의 상태를 밟는다.
+ *
+ * **이 줄기는 DB 한 번에 한 번만 돈다.** 규칙상 지운 예약에는 리뷰를 다시 쓸 수 없어서다(의도한 것이다).
+ * CI 는 매 실행 새 DB 라 상관없고, 로컬에서 다시 돌리려면 `reviews`·`review_replies`·리뷰 신고를 비워야 한다.
  */
 test.describe.configure({ mode: "serial" });
 
@@ -19,6 +22,17 @@ async function openCompleted(page: Page) {
   await page.goto("/me/reservations");
   await page.getByRole("tab", { name: /지난 예약/ }).click();
   await page.locator("a.myres").filter({ has: page.locator(".myres__badge", { hasText: "완료" }) }).first().click();
+}
+
+/** 사장님이 매니저의 "리뷰 답글" 권한을 켜고 끈다. 권한 칸은 [권한] 을 눌러야 열린다 */
+async function setReplyPermission(page: Page, on: boolean) {
+  await page.goto("/console/members");
+  const row = page.locator("tr", { hasText: "이디자이너" });
+  await row.getByRole("button", { name: "권한" }).click();
+  const box = row.getByRole("checkbox", { name: "리뷰 답글" });
+  if ((await box.isChecked()) !== on) await box.setChecked(on);
+  await row.getByRole("button", { name: "저장" }).click();
+  await expect(row.getByRole("button", { name: "권한" })).toBeVisible();
 }
 
 test.describe("리뷰", () => {
@@ -77,6 +91,21 @@ test.describe("리뷰", () => {
     const slug = await publicSlug(page);
     await page.goto(`/@${slug}/reviews`);
     await expect(page.locator(".review__reply")).toContainText("찾아 주셔서 고맙습니다");
+  });
+
+  test("답글 권한을 끄면 매니저는 읽기만 한다", async ({ page }) => {
+    // 사장님이 매니저별로 끌 수 있는 스위치다. 화면이 버튼을 감추고, API 도 같은 검사를 한다
+    await login(page, ACCOUNTS.owner);
+    await setReplyPermission(page, false);
+
+    await login(page, ACCOUNTS.manager);
+    await page.goto("/console/reviews");
+    await expect(page.getByText("답글 권한이 없어 읽기만 하실 수 있어요.")).toBeVisible();
+    await expect(page.getByRole("button", { name: /답글/ })).toHaveCount(0);
+
+    // 되돌려 둔다 — 뒤따르는 시나리오가 쓰는 권한이다
+    await login(page, ACCOUNTS.owner);
+    await setReplyPermission(page, true);
   });
 
   test("리뷰는 한 번만 고칠 수 있다", async ({ page }) => {

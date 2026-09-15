@@ -1,14 +1,15 @@
 import { expect, test } from "@playwright/test";
-import { ACCOUNTS, login } from "./helpers";
+import { ACCOUNTS, bookOnce, login, publicSlug } from "./helpers";
 
 /**
  * 고객 마이페이지 (에픽 #12). 손님이 스스로 할 수 있는 일이 여기 다 있다 —
  * 그래서 화면을 여는 것만 보지 않고, 취소가 실제로 상태를 바꾸는 데까지 간다.
  *
- * **시드 예약에 기댄다.** 취소 시나리오는 그중 한 건을 소비하는데, 손님은 같은 상품을 3건까지만
- * 잡을 수 있어(FR-BIZ-020 `maxActivePerCustomer`) 테스트가 자기 예약을 새로 만들 수 없다.
- * CI 는 매 실행 새 DB 라 문제가 없고, 로컬에서 반복하려면 `db:reset` → `db:seed:test` 다.
- * 소비하는 건은 **목록의 마지막**이다 — 앞의 저녁 예약들은 `product-hours.spec.ts` 가 쓴다.
+ * **시드 예약에 기대되, 쓴 만큼 돌려놓는다.** 손님은 같은 상품을 3건까지만 잡을 수 있어
+ * (FR-BIZ-020 `maxActivePerCustomer`) 테스트가 미리 자기 예약을 만들 수 없다. 그래서 취소 시나리오는
+ * 시드 한 건을 쓰고 **바로 한 건을 다시 잡아** 개수를 되돌린다 — 안 그러면 로컬에서 두 번째 실행부터
+ * 뒤따르는 시나리오가 빈 목록을 만난다(실제로 그랬다).
+ * 쓰는 건은 **목록의 마지막**이다 — 앞의 저녁 예약들은 `product-hours.spec.ts` 가 쓴다.
  */
 test.describe("내 예약", () => {
   test("목록에서 상세로, 상세에 예약번호와 매장 연락처가 있다", async ({ page }) => {
@@ -71,6 +72,11 @@ test.describe("내 예약", () => {
     await expect(page.locator("a.myres")).toHaveCount(before - 1);
     await page.getByRole("tab", { name: /지난 예약/ }).click();
     await expect(page.locator("a.myres", { hasText: code })).toBeVisible();
+
+    // 쓴 만큼 돌려놓는다. 자리는 방금 취소로 비었다
+    await bookOnce(page, await publicSlug(page));
+    await page.goto("/me/reservations");
+    await expect(page.locator("a.myres")).toHaveCount(before);
   });
 });
 

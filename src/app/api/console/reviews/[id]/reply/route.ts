@@ -14,7 +14,8 @@ import { readJson, uuidParam } from "@/lib/api";
 export const PUT = handle(async (req, ctx) => {
   assertSameOrigin(req);
   assertWritable(req);
-  const v = await requireConsole();
+  // 사장님이 매니저별로 끌 수 있는 권한이다(`replyReview`) — 화면이 버튼을 감춰도 여기서 다시 본다
+  const v = await requireConsole({ permission: "replyReview" });
   const id = uuidParam((await ctx.params).id);
   await upsertReply(v.membership.businessId, v.membership.memberId, id, await readJson(req, replyInputSchema));
   return NextResponse.json({ ok: true });
@@ -23,7 +24,7 @@ export const PUT = handle(async (req, ctx) => {
 export const DELETE = handle(async (req, ctx) => {
   assertSameOrigin(req);
   assertWritable(req);
-  const v = await requireConsole();
+  const v = await requireConsole({ permission: "replyReview" });
   const id = uuidParam((await ctx.params).id);
   await deleteReply(v.membership.businessId, id);
   return NextResponse.json({ ok: true });
