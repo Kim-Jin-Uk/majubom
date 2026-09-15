@@ -108,4 +108,18 @@ test.describe("리뷰", () => {
     await expect(page.getByText("생각보다 더 오래가서 다시 적습니다. 추천해요.")).toHaveCount(0);
     await expect(page.locator(".review-summary__score b")).toHaveText("—");
   });
+
+  test("신고된 글도 본인은 지울 수 있고, 지운 뒤에는 다시 쓰지 못한다", async ({ page }) => {
+    // 명세는 "본인 언제든" 이다. 증거가 사라지는 것도 아니다 — 행은 남고 신고가 그 행을 가리킨다
+    await login(page, ACCOUNTS.customer);
+    await openCompleted(page);
+    await page.getByRole("button", { name: "리뷰 삭제" }).click();
+    // 되돌릴 수 없다는 것을 누르기 전에 말한다
+    await expect(page.getByText(/다시 쓰실 수 없어요/)).toBeVisible();
+    await page.getByRole("button", { name: "리뷰 삭제" }).click();
+
+    // 지운 예약에는 "쓰기" 가 아니라 "이미 쓰셨다" 가 남는다 — 평점을 갈아 치우는 길을 막아 뒀다
+    await expect(page.getByText("이 방문에는 이미 리뷰를 남기셨어요.")).toBeVisible();
+    await expect(page.getByRole("link", { name: "리뷰 남기기" })).toHaveCount(0);
+  });
 });

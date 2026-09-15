@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db/client";
 import { reports, reviews, users } from "@/db/schema";
@@ -45,10 +45,4 @@ export async function reportReview(reporterId: string, reviewId: string, input: 
     // 이미 HIDDEN 인 글을 REPORTED 로 되돌리지 않는다 — 관리자가 내린 판단이 신고 한 건에 뒤집히면 안 된다
     if (r.status === "PUBLISHED") await tx.update(reviews).set({ status: "REPORTED" }).where(eq(reviews.id, reviewId));
   });
-}
-
-/** 관리자 화면(#70)이 생기기 전까지, 큐가 쌓이고 있다는 것만이라도 보이게 하는 집계 */
-export async function pendingReportCount(): Promise<number> {
-  const [row] = await db.select({ n: sql<number>`count(*)::int` }).from(reports).where(eq(reports.status, "PENDING"));
-  return row?.n ?? 0;
 }

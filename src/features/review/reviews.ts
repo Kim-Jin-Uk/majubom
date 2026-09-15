@@ -1,6 +1,6 @@
-import { and, desc, eq, gt, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, sql } from "drizzle-orm";
 import { db } from "@/db/client";
-import { businesses, products, reservations, reviewReplies, reviews, users } from "@/db/schema";
+import { products, reservations, reviewReplies, reviews, users } from "@/db/schema";
 import { HttpError } from "@/features/auth/errors";
 import { maskName } from "@/features/site/public-home";
 import { EDIT_WINDOW_DAYS, ratingHistogram, reviewEditState, reviewEligibility, type ReplyInput, type ReviewInput } from "./rules";
@@ -105,14 +105,18 @@ export async function updateReview(customerId: string, reviewId: string, input: 
 
 /**
  * 본인 삭제 (soft). **행을 지우지 않는다** — `reservation_id` unique 가 "예약 1건당 리뷰 1건" 을 지키고 있고,
- * 지우면 같은 예약으로 다시 쓸 수 있게 되어 평점을 갈아 치우는 길이 열린다.
+ * 진짜로 지우면 같은 예약으로 다시 쓸 수 있게 되어 평점을 갈아 치우는 길이 열린다.
  * 사업자 답글도 같이 가려진다(답글은 리뷰를 통해서만 읽힌다).
+ *
+ * **신고된 글도 본인은 지울 수 있다** (명세: "본인 언제든"). 증거가 사라지는 것이 아니다 —
+ * 행은 그대로 남고 `reports.targetId` 가 그 행을 가리키므로, 관리자는 상태와 무관하게 내용을 읽는다.
+ * 관리자가 이미 내린 판단(`HIDDEN`)만 건드리지 않는다.
  */
 export async function deleteReview(customerId: string, reviewId: string): Promise<void> {
   const r = await db
     .update(reviews)
     .set({ status: "DELETED" })
-    .where(and(eq(reviews.id, reviewId), eq(reviews.customerId, customerId), eq(reviews.status, "PUBLISHED")))
+    .where(and(eq(reviews.id, reviewId), eq(reviews.customerId, customerId), inArray(reviews.status, ["PUBLISHED", "REPORTED"])))
     .returning({ id: reviews.id });
   if (r.length === 0) throw new HttpError(404, "NOT_FOUND");
 }
@@ -243,12 +247,6 @@ export async function upsertReply(businessId: string, memberId: string, reviewId
     .insert(reviewReplies)
     .values({ reviewId, memberId, content: input.content })
     .onConflictDoUpdate({ target: reviewReplies.reviewId, set: { content: input.content, updatedAt: new Date() } });
-}
-
-/** 사업장 id → 공개 리뷰 페이지를 그릴 최소 정보 (`/@{slug}/reviews`) */
-export async function businessNameOf(businessId: string): Promise<string | null> {
-  const [b] = await db.select({ name: businesses.name }).from(businesses).where(eq(businesses.id, businessId)).limit(1);
-  return b?.name ?? null;
 }
 
 /** 답글을 지운다 — 사업자가 자기 답글을 거둘 수는 있다 (리뷰는 못 지운다) */

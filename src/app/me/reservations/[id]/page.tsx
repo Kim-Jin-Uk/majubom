@@ -5,6 +5,7 @@ import { auth } from "@/features/auth/auth";
 import { loadMyReservationDetail } from "@/features/booking/my-reservations";
 import { customerCancelState } from "@/features/booking/transition-rules";
 import { ReservationActions } from "@/features/booking/ui/ReservationActions";
+import { MyReviewActions } from "@/features/review/ui/MyReviewActions";
 import { dayLabel, dayOf, rangeLabel, stampLabel, STATUS_COLOR, STATUS_LABEL } from "@/features/booking/ui/status";
 import { myReviewOf, reviewStateFor } from "@/features/review/reviews";
 import { reviewEditState } from "@/features/review/rules";
@@ -122,15 +123,7 @@ export default async function ReservationDetailPage({ params }: { params: Promis
         <section style={{ marginTop: 28 }}>
           <h2 style={{ fontSize: 16, margin: "0 0 8px" }}>리뷰</h2>
           {written ? (
-            <p className="sub">
-              이 방문에 리뷰를 남기셨어요. <Link href={reviewsHref(r.slug)}>가게 리뷰 보기</Link>
-              {canEdit && (
-                <>
-                  {" · "}
-                  <Link href={`/me/reservations/${r.id}/review`}>고치기</Link> <span className="muted">(한 번만)</span>
-                </>
-              )}
-            </p>
+            <MyReviewActions reservationId={r.id} reviewId={written.id} canEdit={canEdit} reviewsHref={reviewsHref(r.slug)} />
           ) : review?.eligibility.can ? (
             <p className="sub">
               다녀오신 곳은 어떠셨나요? <Link href={`/me/reservations/${r.id}/review`}>리뷰 남기기</Link>
