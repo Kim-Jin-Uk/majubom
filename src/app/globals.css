@@ -2803,6 +2803,12 @@ button {
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface);
+  /* 카드 전체가 상세로 가는 링크다 (#88) — 링크 기본 스타일을 지운다 */
+  color: inherit;
+  text-decoration: none;
+}
+a.myres:hover {
+  border-color: var(--primary-border);
 }
 .myres__top {
   display: flex;
@@ -3040,4 +3046,119 @@ button {
 }
 .metric-mix b {
   font-variant-numeric: tabular-nums;
+}
+
+/* 내 예약 탭 (#88). 다가오는 쪽이 손님이 여기 오는 이유라 기본으로 열려 있다 */
+.myres-tabs {
+  display: flex;
+  gap: 6px;
+  margin: 0 0 14px;
+  border-bottom: 1px solid var(--border);
+}
+.myres-tab {
+  padding: 9px 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  background: none;
+  font: inherit;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.myres-tab.on {
+  color: var(--text);
+  font-weight: 700;
+  border-bottom-color: var(--primary);
+}
+
+/* 예약 상세 (#89) */
+.resdt {
+  margin: 18px 0 0;
+  display: grid;
+  gap: 12px;
+}
+.resdt > div {
+  display: grid;
+  grid-template-columns: 5.5em 1fr;
+  gap: 10px;
+  align-items: start;
+}
+.resdt dt {
+  color: var(--text-2);
+  font-size: 14px;
+}
+.resdt dd {
+  margin: 0;
+}
+.resdt__code {
+  font-family: ui-monospace, monospace;
+  letter-spacing: 0.08em;
+  font-size: 18px;
+}
+.resdt__log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.resdt__log li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 14px;
+}
+.resdt__log li .sub {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 알림 채널 설정 (#90). 그룹 한 줄에 채널 셋 — 표로 만들면 좁은 화면에서 가로 스크롤이 생긴다 */
+.pref-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+}
+.pref-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-2);
+}
+.pref-list li:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.pref-head {
+  display: grid;
+  gap: 2px;
+  min-width: 12em;
+  flex: 1;
+}
+.pref-head .sub {
+  font-size: 13px;
+}
+.pref-switches {
+  display: flex;
+  gap: 12px;
+}
+.pref-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 14px;
+  cursor: pointer;
+}
+/* 끌 수 없는 채널은 눌러 봐야 소용없다는 것이 보여야 한다 — 회색으로만 두면 고장으로 읽힌다 */
+.pref-switch.locked {
+  cursor: not-allowed;
+  color: var(--text-3);
+}
+.pref-switch input {
+  accent-color: var(--primary);
 }

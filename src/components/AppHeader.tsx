@@ -26,6 +26,9 @@ export async function AppHeader() {
             <Link href="/me/reservations">
               <Button size="sm">내 예약</Button>
             </Link>
+            <Link href="/me">
+              <Button size="sm">내 정보</Button>
+            </Link>
             {membership && (
               <Link href="/console">
                 <Button size="sm" variant="primary">

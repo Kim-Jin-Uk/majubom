@@ -60,10 +60,30 @@ export type Rule = {
   revalidate?: boolean;
 };
 
+/**
+ * 취소 마감 순간. **예약 생성 시점 스냅샷**을 따른다 — 사업자가 나중에 24→48시간으로 늘려도
+ * 이미 잡힌 예약의 조건은 그대로다 (FR-BIZ-020).
+ */
+export function cancelDeadlineAt(r: Pick<TransitionSubject, "startAt" | "cancelDeadlineHours">): Date {
+  return new Date(r.startAt.getTime() - r.cancelDeadlineHours * 3_600_000);
+}
+
+/**
+ * 손님이 지금 스스로 취소할 수 있는가. **화면이 서버와 같은 답을 내도록** 여기서 판정한다 —
+ * 상세 화면이 자기 식으로 계산하면 버튼은 살아 있는데 누르면 409 가 나거나, 반대로 될 수 있는 취소를 막는다.
+ */
+export type CancelState = { can: boolean; deadline: Date | null; blocked: "STATUS" | "DEADLINE" | null };
+
+export function customerCancelState(r: TransitionSubject, now: Date): CancelState {
+  if (r.status === "REQUESTED") return { can: true, deadline: null, blocked: null };
+  if (r.status !== "CONFIRMED") return { can: false, deadline: null, blocked: "STATUS" };
+  const deadline = cancelDeadlineAt(r);
+  return now.getTime() >= deadline.getTime() ? { can: false, deadline, blocked: "DEADLINE" } : { can: true, deadline, blocked: null };
+}
+
 const CANCEL_DEADLINE = (r: TransitionSubject, now: Date) => {
-  // 마감은 **예약 생성 시점 스냅샷**을 따른다 — 사업자가 나중에 24→48시간으로 늘려도 이미 잡힌 예약의 조건은 그대로다 (FR-BIZ-020)
-  const deadline = r.startAt.getTime() - r.cancelDeadlineHours * 3_600_000;
-  if (now.getTime() >= deadline) throw new HttpError(409, "CANCEL_DEADLINE_PASSED", { deadline: new Date(deadline).toISOString() });
+  const deadline = cancelDeadlineAt(r);
+  if (now.getTime() >= deadline.getTime()) throw new HttpError(409, "CANCEL_DEADLINE_PASSED", { deadline: deadline.toISOString() });
 };
 
 /**

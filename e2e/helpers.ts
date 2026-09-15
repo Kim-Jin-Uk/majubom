@@ -49,3 +49,4 @@ export async function publicSlug(page: Page): Promise<string> {
   if (!m) throw new Error("공개된 가게를 찾지 못했다 — 시드가 임시 주소 상태이거나 공개 조건을 못 갖췄다");
   return m[1];
 }
+

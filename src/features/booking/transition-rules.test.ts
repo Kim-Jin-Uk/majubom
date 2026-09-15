@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { HttpError } from "@/features/auth/errors";
 import type { ReservationStatus } from "@/features/booking/slot-types";
-import { customerMailFor, RULES, type TransitionSubject } from "./transition-rules";
+import { customerCancelState, customerMailFor, RULES, type TransitionSubject } from "./transition-rules";
 
 /**
  * 전이 표가 명세(02 §2.3)와 같은지 — 표가 조용히 넓어지거나 좁아지는 것을 막는다.
@@ -123,5 +123,31 @@ describe("운영자(ADMIN) 전이 (#66)", () => {
   it("운영자에게 열린 것은 취소뿐 — 승인·완료·노쇼는 매장의 판단이다", () => {
     const adminCan = Object.entries(RULES).filter(([, r]) => r.by.includes("ADMIN")).map(([k]) => k);
     expect(adminCan.sort()).toEqual(["CONFIRMED>CANCELED_BY_BIZ", "REQUESTED>CANCELED_BY_BIZ"]);
+  });
+});
+
+/**
+ * 취소 가능 판정 (#89). 화면이 서버와 **같은 답**을 내야 한다 —
+ * 버튼은 살아 있는데 누르면 409 이거나, 될 수 있는 취소를 화면이 먼저 막으면 손님은 전화를 건다.
+ */
+describe("customerCancelState", () => {
+  const at = (iso: string) => new Date(iso);
+  const base = { startAt: at("2026-09-20T10:00:00Z"), endAt: at("2026-09-20T11:00:00Z"), cancelDeadlineHours: 24 };
+
+  it("승인 대기는 마감과 무관하게 언제든 취소한다", () => {
+    // 아직 매장이 자리를 잡아 두지 않았다 — 마감을 걸 이유가 없다
+    const s = customerCancelState({ ...base, status: "REQUESTED" }, at("2026-09-20T09:59:00Z"));
+    expect(s).toEqual({ can: true, deadline: null, blocked: null });
+  });
+
+  it("확정은 마감 전까지만", () => {
+    expect(customerCancelState({ ...base, status: "CONFIRMED" }, at("2026-09-19T09:00:00Z")).can).toBe(true);
+    const late = customerCancelState({ ...base, status: "CONFIRMED" }, at("2026-09-19T10:00:00Z"));
+    expect(late).toMatchObject({ can: false, blocked: "DEADLINE" });
+    expect(late.deadline?.toISOString()).toBe("2026-09-19T10:00:00.000Z");
+  });
+
+  it("이미 끝난 예약은 상태 때문에 막힌다 — 마감을 들먹이지 않는다", () => {
+    expect(customerCancelState({ ...base, status: "COMPLETED" }, at("2026-09-21T00:00:00Z"))).toMatchObject({ can: false, blocked: "STATUS" });
   });
 });
