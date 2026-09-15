@@ -71,6 +71,11 @@ describe("ratingHistogram", () => {
 });
 
 describe("reviewInputSchema", () => {
+  it("사진은 아예 받지 않는다 — 올리는 길이 없는데 URL 만 받으면 아무 외부 주소나 저장된다", () => {
+    const r = reviewInputSchema.parse({ rating: 5, content: "열 글자는 넘기게 적어 봅니다", images: ["https://evil.example/pixel.gif"] });
+    expect("images" in r).toBe(false);
+  });
+
   it("별점과 10자 이상 본문이 필수다", () => {
     expect(reviewInputSchema.safeParse({ rating: 5, content: "짧다" }).success).toBe(false);
     expect(reviewInputSchema.safeParse({ rating: 0, content: "열 글자는 넘기게 적어 봅니다" }).success).toBe(false);

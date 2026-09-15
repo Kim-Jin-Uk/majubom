@@ -43,7 +43,7 @@ export function ReviewForm({
   async function submit() {
     setBusy(true);
     setErr(null);
-    const body = { rating, content: content.trim(), images: [] };
+    const body = { rating, content: content.trim() };
     const r = review ? await apiPut(`/api/me/reviews/${review.id}`, body) : await apiPost("/api/me/reviews", { reservationId, ...body });
     setBusy(false);
     if (!r.ok) {

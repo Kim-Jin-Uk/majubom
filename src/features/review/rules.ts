@@ -9,12 +9,17 @@ import type { ReservationStatus } from "@/features/booking/slot-types";
  */
 export const REVIEW_WINDOW_DAYS = 30;
 export const EDIT_WINDOW_DAYS = 7;
-export const MAX_REVIEW_IMAGES = 3;
 
+/**
+ * **사진은 받지 않는다** (FR-REV-010 의 "최대 3장" 은 아직 미구현). 컬럼은 비워 둔 채로 있다.
+ *
+ * 스키마에서 통째로 뺀 이유: 올리는 길이 없는데 URL 만 받아 주면 **아무 외부 주소나 저장된다**.
+ * 지금은 그리는 곳이 없어 조용하지만, 나중에 사진을 붙이는 날 그 값들이 공개 페이지에서 그려져
+ * 남의 서버가 우리 손님의 접속을 보게 된다. 받는 자리를 만들 때 함께 연다 (리뷰 지적).
+ */
 export const reviewInputSchema = z.object({
   rating: z.number().int().min(1, "별점을 골라 주세요").max(5),
   content: z.string().trim().min(10, "10자 이상 적어 주세요").max(500, "500자 이내로 적어 주세요"),
-  images: z.array(z.url({ protocol: /^https?$/ }).max(2000)).max(MAX_REVIEW_IMAGES, `사진은 최대 ${MAX_REVIEW_IMAGES}장`).default([]),
 });
 export type ReviewInput = z.output<typeof reviewInputSchema>;
 

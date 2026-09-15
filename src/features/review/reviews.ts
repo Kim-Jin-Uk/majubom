@@ -59,7 +59,8 @@ export async function createReview(customerId: string, reservationId: string, in
 
     const [row] = await tx
       .insert(reviews)
-      .values({ businessId: r.businessId, productId: r.productId, reservationId, customerId, rating: input.rating, content: input.content, images: input.images })
+      // `images` 는 컬럼 기본값(빈 배열) 그대로 둔다 — 올리는 길이 아직 없다
+      .values({ businessId: r.businessId, productId: r.productId, reservationId, customerId, rating: input.rating, content: input.content })
       .returning({ id: reviews.id });
     return { id: row.id };
   });
@@ -79,7 +80,7 @@ export async function updateReview(customerId: string, reviewId: string, input: 
   const since = new Date(now.getTime() - EDIT_WINDOW_DAYS * 86_400_000);
   const done = await db
     .update(reviews)
-    .set({ rating: input.rating, content: input.content, images: input.images })
+    .set({ rating: input.rating, content: input.content })
     .where(
       and(
         eq(reviews.id, reviewId),
@@ -125,7 +126,6 @@ export type PublicReview = {
   id: string;
   rating: number;
   content: string;
-  images: string[];
   author: string;
   at: Date;
   productName: string;
@@ -160,7 +160,6 @@ export async function loadPublicReviews(
         id: reviews.id,
         rating: reviews.rating,
         content: reviews.content,
-        images: reviews.images,
         at: reviews.createdAt,
         author: users.name,
         productName: products.name,
@@ -186,7 +185,6 @@ export async function loadPublicReviews(
       id: r.id,
       rating: r.rating,
       content: r.content,
-      images: r.images,
       // 사업자는 `reservationId` 로 작성자를 특정할 수 있다. 공개 화면에서까지 실명을 드러내면
       // 저평점 고객에 대한 보복 여지가 커진다 (FR-REV-020)
       author: maskName(r.author),
@@ -208,7 +206,6 @@ export async function loadBusinessReviews(businessId: string): Promise<PublicRev
       id: reviews.id,
       rating: reviews.rating,
       content: reviews.content,
-      images: reviews.images,
       at: reviews.createdAt,
       author: users.name,
       productName: products.name,
@@ -226,7 +223,6 @@ export async function loadBusinessReviews(businessId: string): Promise<PublicRev
     id: r.id,
     rating: r.rating,
     content: r.content,
-    images: r.images,
     author: maskName(r.author),
     at: r.at,
     productName: r.productName,
