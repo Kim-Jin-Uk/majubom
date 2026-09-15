@@ -4,7 +4,7 @@ import { Logo } from "@/components/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { LogoutButton } from "@/features/auth/ui/LogoutButton";
 
-export type ConsoleNavKey = "home" | "onboarding" | "reservations" | "resources" | "products" | "schedule" | "settings";
+export type ConsoleNavKey = "home" | "onboarding" | "reservations" | "resources" | "products" | "schedule" | "reviews" | "settings";
 
 const NAV: Array<{ key: ConsoleNavKey; href: string; label: string; ownerOnly?: boolean }> = [
   { key: "home", href: "/console", label: "홈" },
@@ -13,6 +13,7 @@ const NAV: Array<{ key: ConsoleNavKey; href: string; label: string; ownerOnly?: 
   { key: "resources", href: "/console/resources", label: "담당자 · 공간" },
   { key: "products", href: "/console/products", label: "상품" },
   { key: "schedule", href: "/console/schedule", label: "근무표" },
+  { key: "reviews", href: "/console/reviews", label: "리뷰" },
   { key: "settings", href: "/console/settings", label: "설정", ownerOnly: true },
 ];
 
