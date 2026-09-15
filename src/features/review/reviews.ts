@@ -1,9 +1,9 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, gt, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { businesses, products, reservations, reviewReplies, reviews, users } from "@/db/schema";
 import { HttpError } from "@/features/auth/errors";
 import { maskName } from "@/features/site/public-home";
-import { ratingHistogram, reviewEditState, reviewEligibility, type ReplyInput, type ReviewInput } from "./rules";
+import { EDIT_WINDOW_DAYS, ratingHistogram, reviewEditState, reviewEligibility, type ReplyInput, type ReviewInput } from "./rules";
 
 /**
  * 리뷰 읽기·쓰기 (FR-REV-010 · FR-REV-020). 규칙은 `rules.ts` 에 있다.
@@ -65,16 +65,42 @@ export async function createReview(customerId: string, reservationId: string, in
   });
 }
 
+/**
+ * 수정 — **조건부 UPDATE 다** (`deleteReview` 와 같은 꼴).
+ *
+ * 읽고 판정한 뒤 쓰면, 같은 순간에 들어온 두 요청이 **둘 다** 자격 검사를 통과해 "7일 이내 1회" 가 우회된다
+ * (리뷰 지적). "아직 한 번도 고치지 않았다" 를 WHERE 에 넣어 DB 가 한 번만 성립시키게 한다 —
+ * `updated_at`/`created_at` 비교가 그 판정이고, `updated_at` 은 드리즐이 갱신한다(`$onUpdate`).
+ *
+ * 0행이면 **그때 읽어서** 왜 안 됐는지 말해 준다. 문구가 하나면 손님이 뭘 해야 할지 모른다 —
+ * 이미 고쳤는지, 7일이 지났는지, 신고되어 내려간 글인지는 서로 다른 이야기다.
+ */
 export async function updateReview(customerId: string, reviewId: string, input: ReviewInput, now = new Date()): Promise<void> {
+  const since = new Date(now.getTime() - EDIT_WINDOW_DAYS * 86_400_000);
+  const done = await db
+    .update(reviews)
+    .set({ rating: input.rating, content: input.content, images: input.images })
+    .where(
+      and(
+        eq(reviews.id, reviewId),
+        eq(reviews.customerId, customerId),
+        eq(reviews.status, "PUBLISHED"),
+        sql`${reviews.updatedAt} = ${reviews.createdAt}`,
+        gt(reviews.createdAt, since),
+      ),
+    )
+    .returning({ id: reviews.id });
+  if (done.length > 0) return;
+
   const [r] = await db
     .select({ createdAt: reviews.createdAt, updatedAt: reviews.updatedAt, status: reviews.status })
     .from(reviews)
     .where(and(eq(reviews.id, reviewId), eq(reviews.customerId, customerId)))
     .limit(1);
+  // 남의 리뷰든 없는 리뷰든 같은 404 다
   if (!r) throw new HttpError(404, "NOT_FOUND");
-  const state = reviewEditState(r, now);
-  if (!state.can) throw new HttpError(409, state.reason ?? "NOT_EDITABLE");
-  await db.update(reviews).set({ rating: input.rating, content: input.content, images: input.images }).where(eq(reviews.id, reviewId));
+  // 경합에서 밀린 쪽도 여기로 온다 — 다시 읽으면 상대가 고친 뒤라 `EDITED` 라는 정직한 답이 나온다
+  throw new HttpError(409, reviewEditState(r, now).reason ?? "EDITED");
 }
 
 /**
