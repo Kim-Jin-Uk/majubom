@@ -1,9 +1,10 @@
-import { and, count, eq, gte } from "drizzle-orm";
+import { and, count, eq, gte, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { businesses, notificationPreferences, notifications, pushSubscriptions, users, type NotificationChannels } from "@/db/schema";
 import { localToInstant } from "@/features/booking/time";
 import { todayIn } from "@/lib/dates";
 import { decideChannels, type Decision } from "./channels";
+import { sendMail } from "@/lib/mail";
 import { EVENT_GROUP, type EventType } from "./events";
 
 /**
@@ -36,13 +37,25 @@ export type NotifyInput = {
 export const DAILY_LIMIT = { FREE: 200, BASIC: 500 } as const;
 const NOTI_TZ = "Asia/Seoul";
 
-/** 그날(KST) 이 사업장 앞으로 쌓인 알림 수. 경계는 다른 곳과 같이 KST 자정이다 */
+/**
+ * 그날(KST) 이 사업장이 **바깥으로 내보낸** 수. 경계는 다른 곳과 같이 KST 자정이다.
+ *
+ * **인앱만 남은 줄은 세지 않는다.** 한도는 메일·푸시 같은 외부 발송을 막으려고 두는 것인데,
+ * 전체 행을 세면 이메일 한 통 안 나가는 인앱 전용 알림(교대·채팅)만으로 한도에 닿아
+ * **진짜 예약 알림이 조용히 막힌다** (리뷰 지적).
+ */
 export async function sentTodayFor(businessId: string, now = new Date()): Promise<number> {
   const dayStart = new Date(localToInstant(todayIn(NOTI_TZ, now), 0, NOTI_TZ));
   const [row] = await db
     .select({ n: count() })
     .from(notifications)
-    .where(and(eq(notifications.businessId, businessId), gte(notifications.createdAt, dayStart)));
+    .where(
+      and(
+        eq(notifications.businessId, businessId),
+        gte(notifications.createdAt, dayStart),
+        sql`(${notifications.channels} ->> 'email') = 'SENT' or (${notifications.channels} ->> 'push') = 'SENT'`,
+      ),
+    );
   return row?.n ?? 0;
 }
 
@@ -93,7 +106,12 @@ export async function notify(input: NotifyInput, now = new Date()): Promise<Deci
       inApp: decision.inApp,
       // 푸시는 보낼 수단이 아직 없다(에픽 #16). 켜졌다고 `SENT` 로 적으면 이력이 거짓말을 한다
       push: decision.push ? "SKIPPED" : undefined,
-      email: decision.email ? "SENT" : undefined,
+      /**
+       * **템플릿이 없으면 메일은 나가지 않는다.** 예전엔 없을 때 제목·본문으로 한 통을 지어냈는데,
+       * 그러면 매장 담당자에게 "시술 60분 · 김고객" 같은 알맹이 없는 메일이 간다.
+       * 채널이 열려 있었다는 사실은 `SKIPPED` 로 남긴다 — 이력을 보면 "여기 템플릿이 없다" 가 드러난다.
+       */
+      email: decision.email ? (input.mail ? "SENT" : "SKIPPED") : undefined,
     };
 
     // **인앱 줄을 먼저 남긴다** — 메일이 실패해도 알림함에는 남아야 한다
@@ -107,7 +125,7 @@ export async function notify(input: NotifyInput, now = new Date()): Promise<Deci
       channels,
     }).returning({ id: notifications.id });
 
-    if (decision.email) await sendWithRetry(row.id, who.email, input, channels);
+    if (decision.email && input.mail) await sendWithRetry(row.id, who.email, input.mail, input.event, channels);
     return decision;
   } catch (e) {
     // 던지지 않는다 (위 주석). 사라진 알림을 나중에 찾을 수 있게 이벤트와 대상만 남긴다 — 주소는 남기지 않는다
@@ -122,16 +140,14 @@ export async function notify(input: NotifyInput, now = new Date()): Promise<Deci
  */
 const RETRY_DELAYS_MS = [400, 1_600];
 
-async function sendWithRetry(id: string, to: string, input: NotifyInput, channels: NotificationChannels): Promise<void> {
-  const { sendMail } = await import("@/lib/mail");
-  const mail = input.mail ?? { subject: input.title, text: input.body };
+async function sendWithRetry(id: string, to: string, mail: NonNullable<NotifyInput["mail"]>, event: EventType, channels: NotificationChannels): Promise<void> {
   for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
     try {
       await sendMail({ to, ...mail });
       return;
     } catch (e) {
       if (attempt === RETRY_DELAYS_MS.length) {
-        console.error(`[notify] ${input.event} 메일 최종 실패:`, (e as Error).message);
+        console.error(`[notify] ${event} 메일 최종 실패:`, (e as Error).message);
         // **방금 넣은 그 줄만** 고친다. 이벤트·링크로 찾으면 리마인더처럼 링크가 같은 옛 줄까지 함께 뒤집힌다
         await db.update(notifications).set({ channels: { ...channels, email: "FAILED" } }).where(eq(notifications.id, id));
         return;

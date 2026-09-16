@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { eq, inArray } from "drizzle-orm";
 import { afterAll, describe, expect, it } from "vitest";
 import { db, pool } from "@/db/client";
-import { businessSlugHistory, businesses, holidays, productResources, products, reservationLogs, reservations, resources, reviews, sitePages, users, workSchedules } from "@/db/schema";
+import { businessSlugHistory, businesses, holidays, notifications, productResources, products, reservationLogs, reservations, resources, reviews, sitePages, users, workSchedules } from "@/db/schema";
 import { createReservation } from "@/features/booking/create";
 import { DEFAULT_POLICY } from "@/features/business/policy-defaults";
 import { loadPublicHome, resolveSlug } from "@/features/site/public-home";
@@ -81,7 +81,11 @@ describe.skipIf(!enabled)("공개 사업장 홈 (FR-SITE-010)", () => {
       await db.delete(workSchedules).where(eq(workSchedules.businessId, f.businessId));
       await db.delete(resources).where(eq(resources.businessId, f.businessId));
       await db.delete(businessSlugHistory).where(eq(businessSlugHistory.businessId, f.businessId));
+      // 알림은 사용자를 참조한다 — 먼저 지우지 않으면 FK 로 막힌다 (#96)
+      await db.delete(notifications).where(eq(notifications.userId, f.customerId));
       await db.delete(users).where(eq(users.id, f.customerId));
+      // 사업장 앞으로 쌓인 알림도 같이 — `notifications.business_id` 가 FK 다 (#96)
+      await db.delete(notifications).where(eq(notifications.businessId, f.businessId));
       await db.delete(businesses).where(eq(businesses.id, f.businessId));
     }
     await pool.end();

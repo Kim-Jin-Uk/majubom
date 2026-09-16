@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterAll, describe, expect, it } from "vitest";
 import { db, pool } from "@/db/client";
-import { businessSlugHistory, businesses, productResources, products, resources, sitePages, workSchedules } from "@/db/schema";
+import { businessSlugHistory, businesses, notifications, productResources, products, resources, sitePages, workSchedules } from "@/db/schema";
 import { loadBookingWidget } from "@/features/booking/widget/data";
 import { DEFAULT_POLICY } from "@/features/business/policy-defaults";
 import { loadPublicHome } from "@/features/site/public-home";
@@ -67,6 +67,8 @@ describe.skipIf(!dbTestEnabled())("예약 위젯 읽기 계층 (#11)", () => {
       await db.delete(workSchedules).where(eq(workSchedules.businessId, f.businessId));
       await db.delete(resources).where(eq(resources.businessId, f.businessId));
       await db.delete(businessSlugHistory).where(eq(businessSlugHistory.businessId, f.businessId));
+      // 사업장 앞으로 쌓인 알림도 같이 — `notifications.business_id` 가 FK 다 (#96)
+      await db.delete(notifications).where(eq(notifications.businessId, f.businessId));
       await db.delete(businesses).where(eq(businesses.id, f.businessId));
     }
     await pool.end();

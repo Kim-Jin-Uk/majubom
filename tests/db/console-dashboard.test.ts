@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { eq, inArray, sql } from "drizzle-orm";
 import { afterAll, describe, expect, it } from "vitest";
 import { db, pool } from "@/db/client";
-import { businessMembers, businesses, productResources, products, reservationLogs, reservations, resources, users, workSchedules } from "@/db/schema";
+import { businessMembers, businesses, notifications, productResources, products, reservationLogs, reservations, resources, users, workSchedules } from "@/db/schema";
 import { getCalendar } from "@/features/booking/calendar";
 import { getDashboard, utilization } from "@/features/booking/dashboard";
 import { listReservations, type ConsoleActor } from "@/features/booking/console";
@@ -130,7 +130,11 @@ describe.skipIf(!enabled)("대시보드 · 캘린더 (FR-BOOK-080)", () => {
       // 그 순간 루프가 끊겨 뒤 픽스처가 통째로 남는다
       await db.delete(resources).where(eq(resources.businessId, f.businessId));
       await db.delete(businessMembers).where(eq(businessMembers.businessId, f.businessId));
+      // 알림은 사용자를 참조한다 — 먼저 지우지 않으면 FK 로 막힌다 (#96)
+      await db.delete(notifications).where(inArray(notifications.userId, f.userIds));
       await db.delete(users).where(inArray(users.id, f.userIds));
+      // 사업장 앞으로 쌓인 알림도 같이 — `notifications.business_id` 가 FK 다 (#96)
+      await db.delete(notifications).where(eq(notifications.businessId, f.businessId));
       await db.delete(businesses).where(eq(businesses.id, f.businessId));
     }
     await pool.end();

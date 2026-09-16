@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq, inArray } from "drizzle-orm";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { db, pool } from "@/db/client";
-import { auditLogs, businessMembers, businesses, productResources, products, reservationLogs, reservations, resources, shiftSwapRequests, users, workExceptions, workSchedules } from "@/db/schema";
+import { auditLogs, businessMembers, businesses, notifications, productResources, products, reservationLogs, reservations, resources, shiftSwapRequests, users, workExceptions, workSchedules } from "@/db/schema";
 import { createReservation } from "@/features/booking/create";
 import { DEFAULT_POLICY } from "@/features/business/policy-defaults";
 import { actOnSwap, createSwap, expireSwaps, listSwaps } from "@/features/schedule/swaps";
@@ -102,7 +102,11 @@ describe.skipIf(!dbTestEnabled())("근무 교대 (#43)", () => {
       await db.delete(products).where(inArray(products.id, [f.shared, f.onlyA]));
       await db.delete(resources).where(eq(resources.businessId, f.businessId));
       await db.delete(businessMembers).where(inArray(businessMembers.id, f.memberIds));
+      // 알림은 사용자를 참조한다 — 먼저 지우지 않으면 FK 로 막힌다 (#96)
+      await db.delete(notifications).where(inArray(notifications.userId, f.userIds));
       await db.delete(users).where(inArray(users.id, f.userIds));
+      // 사업장 앞으로 쌓인 알림도 같이 — `notifications.business_id` 가 FK 다 (#96)
+      await db.delete(notifications).where(eq(notifications.businessId, f.businessId));
       await db.delete(businesses).where(eq(businesses.id, f.businessId));
     }
     await pool.end();

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { afterAll, describe, expect, it } from "vitest";
 import { db, pool } from "@/db/client";
-import { auditLogs, businessSlugHistory, businesses, users } from "@/db/schema";
+import { auditLogs, businessSlugHistory, businesses, notifications, users } from "@/db/schema";
 import { hashPii } from "@/lib/audit";
 import { DEFAULT_POLICY } from "@/features/business/policy-defaults";
 import { updateBusinessInfo, type BusinessInfoInput } from "@/features/business/settings";
@@ -47,7 +47,11 @@ describe.skipIf(!dbTestEnabled())("사업장 정보 변경 감사 로그 (#56)",
     for (const f of made) {
       await db.delete(auditLogs).where(eq(auditLogs.businessId, f.businessId));
       await db.delete(businessSlugHistory).where(eq(businessSlugHistory.businessId, f.businessId));
+      // 알림은 사용자를 참조한다 — 먼저 지우지 않으면 FK 로 막힌다 (#96)
+      await db.delete(notifications).where(eq(notifications.userId, f.ownerId));
       await db.delete(users).where(eq(users.id, f.ownerId));
+      // 사업장 앞으로 쌓인 알림도 같이 — `notifications.business_id` 가 FK 다 (#96)
+      await db.delete(notifications).where(eq(notifications.businessId, f.businessId));
       await db.delete(businesses).where(eq(businesses.id, f.businessId));
     }
     await pool.end();
