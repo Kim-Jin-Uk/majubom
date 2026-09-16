@@ -69,7 +69,11 @@ export const noShowSourceEnum = pgEnum("no_show_source", ["MANUAL", "AUTO"]);
 export const createdViaEnum = pgEnum("created_via", ["WEB", "CHAT", "WALK_IN"]);
 
 // ── Review ───────────────────────────────────────────────────────────
-export const reviewStatusEnum = pgEnum("review_status", ["PUBLISHED", "HIDDEN", "REPORTED"]);
+/**
+ * `DELETED` 는 **본인 삭제**(soft delete, FR-REV-010)다. 별도 컬럼을 두지 않은 이유는 읽는 쪽이 이미
+ * 전부 `PUBLISHED` 만 거르기 때문이다 — 두 번째 축을 만들면 하나라도 빠뜨리는 날 지운 리뷰가 다시 보인다.
+ */
+export const reviewStatusEnum = pgEnum("review_status", ["PUBLISHED", "HIDDEN", "REPORTED", "DELETED"]);
 
 // ── 알림 ─────────────────────────────────────────────────────────────
 export const pushPlatformEnum = pgEnum("push_platform", ["IOS", "ANDROID", "DESKTOP"]);

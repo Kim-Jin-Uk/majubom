@@ -3162,3 +3162,166 @@ a.myres:hover {
 .pref-switch input {
   accent-color: var(--primary);
 }
+
+/* 리뷰 (에픽 #13). 별점은 라디오 그룹이라 기본 동그라미를 지우고 별만 남긴다 */
+.stars {
+  color: var(--primary);
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+.stars--input {
+  display: inline-flex;
+  gap: 2px;
+  font-size: 30px;
+  line-height: 1;
+}
+.stars--input .star {
+  cursor: pointer;
+  color: var(--border);
+}
+.stars--input .star.on {
+  color: var(--primary);
+}
+.stars--input input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+/* 키보드 초점이 보여야 한다 — 입력을 숨겼으므로 별에 테두리를 준다 */
+.stars--input .star:focus-within {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.review-field {
+  display: grid;
+  gap: 6px;
+  margin: 16px 0;
+}
+.review-label {
+  font-size: 14px;
+  color: var(--text-2);
+}
+
+.review-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+.review {
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.review__top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+.review__at {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+.review__body {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+  line-height: 1.6;
+}
+/* 답글은 리뷰 안에 들여 쓴다 — 별도 줄로 빼면 누구의 말인지 흐려진다 */
+.review__reply {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--primary-border);
+  background: var(--surface-2);
+  border-radius: 0 8px 8px 0;
+}
+.review__reply p {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+}
+.review__report {
+  margin-top: 10px;
+  display: grid;
+  gap: 8px;
+}
+/* 신고는 눈에 띄면 안 된다 — 필요한 사람만 찾으면 되는 길이다 */
+.review__report-link {
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text-3);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.review-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 24px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  margin-bottom: 16px;
+}
+.review-summary__score {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  min-width: 6em;
+}
+.review-summary__score b {
+  font-size: 34px;
+  line-height: 1.1;
+}
+.review-hist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: 1;
+  min-width: 200px;
+  display: grid;
+  gap: 3px;
+}
+.review-hist a {
+  display: grid;
+  grid-template-columns: 2.6em 1fr 2em;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: inherit;
+  text-decoration: none;
+  padding: 1px 4px;
+  border-radius: 6px;
+}
+.review-hist a:hover,
+.review-hist a.on {
+  background: var(--primary-tint);
+}
+.review-hist__bar {
+  display: block;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--muted-fill);
+  overflow: hidden;
+}
+.review-hist__bar i {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+}
+.review-hist__n {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+}

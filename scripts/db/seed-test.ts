@@ -10,6 +10,7 @@
  *   - 자원: 김디자이너·이디자이너(STAFF), A룸(SPACE) · 영업시간 월~토 10–20 (휴게 13–14) · 타임존 Asia/Seoul
  *   - 근무 패턴: 두 담당자 월~금 10–19 (휴게 13–14), 오늘부터
  *   - 상품 "젤네일"(60분) + 다음 주 예약 3건 (화 15:00 · 화 23:00→수 01:00 자정 넘김 · 이디자이너 수 11:00) — 그리드 '예약 N건'·휴무 충돌 확인용
+ *     + 지난주 방문 완료 1건 — 리뷰(FR-REV-010)를 쓸 수 있는 유일한 예약
  *   - 이디자이너의 휴가 신청 1건 (다음 주 목 종일, 승인 대기) — 사장님 근무표 상단 '승인 대기' 패널 확인용
  *
  * 가입 흐름(OTP)·초대 흐름(링크)은 건너뛰고 검증 완료 상태로 직접 놓는다. 나머지는 실제 서비스 함수를 그대로 써서 불변식을 지킨다.
@@ -111,10 +112,14 @@ async function main() {
   while (new Date(`${d}T00:00:00Z`).getUTCDay() !== 2) d = addDays(d, 1); // 다음 화요일
   const tue = d;
   const wed = addDays(tue, 1);
+  // 지난주 방문 완료 한 건 — **리뷰(#92)를 쓸 수 있는 유일한 예약**이다.
+  // 앞의 셋은 전부 미래·CONFIRMED 라 리뷰 자격이 없다(FR-REV-010 은 COMPLETED 만 받는다)
+  const past = addDays(today, -7);
   const seed = [
-    { resourceId: s1, start: `${tue} 15:00+09`, end: `${tue} 16:00+09` },
-    { resourceId: s1, start: `${tue} 23:00+09`, end: `${wed} 01:00+09` },
-    { resourceId: s2, start: `${wed} 11:00+09`, end: `${wed} 12:00+09` },
+    { resourceId: s1, start: `${tue} 15:00+09`, end: `${tue} 16:00+09`, status: "CONFIRMED" as const },
+    { resourceId: s1, start: `${tue} 23:00+09`, end: `${wed} 01:00+09`, status: "CONFIRMED" as const },
+    { resourceId: s2, start: `${wed} 11:00+09`, end: `${wed} 12:00+09`, status: "CONFIRMED" as const },
+    { resourceId: s1, start: `${past} 14:00+09`, end: `${past} 15:00+09`, status: "COMPLETED" as const },
   ];
   for (const [i, r] of seed.entries()) {
     const mins = (new Date(r.end.replace(" ", "T").replace("+09", "+09:00")).getTime() - new Date(r.start.replace(" ", "T").replace("+09", "+09:00")).getTime()) / 60000;
@@ -131,11 +136,11 @@ async function main() {
       durationMin: mins,
       cancelDeadlineHours: 24,
       partySize: 1,
-      status: "CONFIRMED",
+      status: r.status,
       createdVia: "WEB",
     });
   }
-  console.log(`✓ 상품 '젤네일' + 예약 ${seed.length}건 (${tue} 화 15:00 · 화 23:00→수 01:00 · 이디자이너 수 11:00)`);
+  console.log(`✓ 상품 '젤네일' + 예약 ${seed.length}건 (${tue} 화 15:00 · 화 23:00→수 01:00 · 이디자이너 수 11:00 · ${past} 방문 완료)`);
 
   // 7) 이디자이너의 휴가 신청 (승인 대기) — 사장님 화면의 '승인 대기' 패널
   const thu = addDays(wed, 1);

@@ -1,11 +1,9 @@
 import Link from "next/link";
 import { Img } from "@/components/Img";
-import { Logo } from "@/components/Logo";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import type { PublicHome } from "../public-home";
-import { bookingHref, publicHomeHref } from "../routing";
-import { SITE_THEME_KEY } from "../theme";
+import { bookingHref, reviewsHref } from "../routing";
 import { hourText } from "./hours";
+import { SiteTopBar } from "./SiteTopBar";
 
 /**
  * 시작 템플릿 (FR-SITE-010, #72·#73). 빌더(에픽 #15)가 오기 전까지 모든 공개 홈이 이 한 벌이다.
@@ -76,26 +74,7 @@ export function PublicHomeView({ home }: { home: PublicHome }) {
         본문 바깥에 둔다 — 본문(main)도 아니다. 커버 사진 위에 투명하게 띄우지 않는 이유는,
         사진이 밝으면 글자가 사라지기 때문. 자바스크립트 없이 sticky 하나로 끝난다
       */}
-      <div className="site-top">
-        {/*
-          "마주,봄 / 가게" 두 조각이다. 검색으로 들어온 손님이 **여기가 마주,봄이라는 걸** 알아야
-          다른 가게도 찾아볼 수 있고, 길을 잃었을 때 돌아갈 곳이 있어야 한다.
-          가게 이름 쪽도 링크다 — 예약 화면(`/book`)에서 홈으로 돌아오는 길이 된다
-        */}
-        <nav className="site-top-crumb" aria-label="위치">
-          <Link href="/" className="site-top-brand" aria-label="마주,봄 홈">
-            <Logo size={18} />
-          </Link>
-          <span className="site-top-sep" aria-hidden="true">
-            /
-          </span>
-          <Link href={publicHomeHref(home.slug)} className="site-top-name">
-            {home.name}
-          </Link>
-        </nav>
-        {/* 사업자가 고른 밝기를 손님이 되돌릴 수 있는 자리 (#76 · 01 §10) */}
-        <ThemeToggle size={34} storageKey={SITE_THEME_KEY} label="화면 밝기 바꾸기" />
-      </div>
+      <SiteTopBar slug={home.slug} name={home.name} />
 
       <main className="site site--bar">
         <header className="site-cover">
@@ -188,6 +167,10 @@ export function PublicHomeView({ home }: { home: PublicHome }) {
                 </li>
               ))}
             </ul>
+            {/* 홈에는 최신 3건만 둔다 — 나머지는 전용 화면에서 별점으로 좁혀 본다 (#93) */}
+            <p className="sub">
+              <Link href={reviewsHref(home.slug)}>리뷰 {home.reviews.count}개 모두 보기 →</Link>
+            </p>
           </section>
         )}
 

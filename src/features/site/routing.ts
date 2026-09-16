@@ -40,6 +40,7 @@ export function internalSitePath(pathname: string): string | null {
 
 /** 손님에게 보여 줄 주소 (링크·canonical·301 목적지) */
 export const publicHomeHref = (slug: string): string => `/@${slug}`;
+export const reviewsHref = (slug: string): string => `/@${slug}/reviews`;
 /**
  * 예약 위젯 주소. `replaces` 는 **예약 변경**(FR-BOOK-050)이다 — 새 예약에 원 예약 id 를 달아 보내면
  * 서버가 한 트랜잭션에서 옛 것을 취소하고 새 것을 만든다. 쿼리를 손으로 이어 붙이지 않고 여기서 만드는 이유는,

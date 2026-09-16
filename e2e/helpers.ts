@@ -50,3 +50,29 @@ export async function publicSlug(page: Page): Promise<string> {
   return m[1];
 }
 
+/**
+ * 위젯으로 예약 한 건을 만들고 예약번호를 돌려준다. **화면을 통해서** 한다.
+ *
+ * 손님은 같은 상품을 3건까지만 잡을 수 있어(`maxActivePerCustomer`) 아무 때나 부를 수는 없다 —
+ * 한 건을 취소한 **직후**에만 자리가 난다. 취소 시나리오가 시드를 갉아먹지 않게 되돌리는 용도다.
+ */
+export async function bookOnce(page: Page, slug: string): Promise<string> {
+  await page.goto(`/@${slug}/book`);
+  await page.locator(".bw-product").first().click();
+  // 고를 수 있는 날 중 첫 칸. `aria-disabled` 라 눌리기는 하므로 명시적으로 걸러 낸다
+  await page.locator('.bw-day:not([aria-disabled="true"])').first().click();
+  await page.locator(".bw-time").first().click();
+  /**
+   * 4단계(담당자)는 상품 설정에 따라 있기도 없기도 하다. `isVisible()` 로 바로 묻지 않는다 —
+   * 시간을 고른 직후에는 다음 화면이 아직 안 그려져 있어 언제나 false 가 나오고, 그대로 4단계에 갇힌다.
+   * 둘 중 **먼저 나타나는 쪽**을 기다린 다음에 판단한다.
+   */
+  const any = page.getByRole("button", { name: /상관없음/ });
+  const book = page.getByRole("button", { name: "예약하기" });
+  await expect(any.or(book).first()).toBeVisible({ timeout: 15_000 });
+  if (await any.isVisible()) await any.click();
+  await book.click();
+  const code = page.locator(".bw-done .bw-summary b").first();
+  await expect(code).toBeVisible({ timeout: 15_000 });
+  return (await code.innerText()).trim();
+}
