@@ -63,7 +63,8 @@ export async function notifyReservation(id: string, event: ReservationMailEvent,
     };
     const reason = opts.reason ?? null;
     const mail =
-      event === "REQUESTED" ? reservationRequestedMail(r.email, info)
+      event === "CANCELED_BY_USER" ? null
+      : event === "REQUESTED" ? reservationRequestedMail(r.email, info)
       : event === "CONFIRMED" ? reservationConfirmedMail(r.email, info)
       : event === "REJECTED" ? reservationRejectedMail(r.email, info, reason)
       : event === "CANCELED_BY_BIZ" ? reservationCanceledByBizMail(r.email, info, reason)
@@ -75,22 +76,28 @@ export async function notifyReservation(id: string, event: ReservationMailEvent,
      * 없는 코드를 지어내면 수신 설정의 그룹도, 알림함의 이름도 우리 마음대로가 된다 (`LATER.md` L-47).
      */
     if (event === "REASSIGNED") {
-      await sendMail(mail);
+      await sendMail(mail!);
       return;
     }
 
     const type = CUSTOMER_EVENT[event];
-    await notify({
-      userId: r.customerId,
-      event: type,
-      businessId: r.businessId,
-      title: `${r.businessName} · ${r.productName}`,
-      body: bodyFor(info.when, r.code, reason),
-      linkUrl: `/me/reservations/${id}`,
-      mail: { subject: mail.subject, text: mail.text, html: mail.html },
-    });
+    // 손님에게 보낼 메일이 없는 갈래(본인 취소)는 손님 쪽을 건너뛴다 — 스스로 한 일을 다시 알릴 이유가 없다
+    if (mail) {
+      await notify({
+        userId: r.customerId,
+        event: type,
+        businessId: r.businessId,
+        title: `${r.businessName} · ${r.productName}`,
+        body: bodyFor(info.when, r.code, reason),
+        linkUrl: `/me/reservations/${id}`,
+        mail: { subject: mail.subject, text: mail.text, html: mail.html },
+      });
+    }
 
-    // **매장에도 알린다.** 손님이 잡거나 취소한 것을 매장이 늦게 아는 것이 이 서비스의 원래 문제다
+    /**
+     * **매장에도 알린다.** 손님이 잡거나 취소한 것을 매장이 늦게 아는 것이 이 서비스의 원래 문제다.
+     * 취소는 특히 그렇다 — 그 자리가 다시 비었다는 뜻이라, 늦게 알수록 못 파는 시간이 길어진다.
+     */
     for (const to of await handlersFor(event, r.businessId, r.resourceId)) {
       await notify({
         userId: to.userId,
@@ -110,6 +117,7 @@ export async function notifyReservation(id: string, event: ReservationMailEvent,
 /** 손님에게 가는 전이 → 알림 이벤트 코드 */
 const CUSTOMER_EVENT = {
   REQUESTED: "RESERVATION_REQUESTED",
+  CANCELED_BY_USER: "RESERVATION_CANCELED_BY_USER",
   CONFIRMED: "RESERVATION_CONFIRMED",
   REJECTED: "RESERVATION_REJECTED",
   CANCELED_BY_BIZ: "RESERVATION_CANCELED_BY_BIZ",
@@ -121,7 +129,8 @@ const CUSTOMER_EVENT = {
  * 알려야 하는 것은 **매장이 아직 모르는 일**뿐이다: 새 요청, 그리고 배치가 흘려보낸 만료.
  */
 async function handlersFor(event: ReservationMailEvent, businessId: string, resourceId: string | null) {
-  return event === "REQUESTED" || event === "EXPIRED" ? reservationHandlers(businessId, resourceId) : [];
+  const tellShop = event === "REQUESTED" || event === "EXPIRED" || event === "CANCELED_BY_USER";
+  return tellShop ? reservationHandlers(businessId, resourceId) : [];
 }
 
 /**

@@ -14,6 +14,8 @@ test.describe.configure({ mode: "serial" });
 
 test.describe("알림", () => {
   let code = "";
+  /** 첫 시나리오가 자리를 만들려고 취소한 예약 — 그 취소는 매장에 알려져야 한다 */
+  let canceled = "";
 
   test("예약을 잡으면 손님 알림함에 쌓이고 배지가 오른다", async ({ page }) => {
     const slug = await publicSlug(page);
@@ -22,6 +24,7 @@ test.describe("알림", () => {
     // 자리를 만든다 — 한도가 3건이라 시드 상태에서는 새로 잡을 수 없다
     await page.goto("/me/reservations");
     await page.locator("a.myres").last().click();
+    canceled = (await page.locator(".resdt__code").innerText()).trim();
     await page.getByRole("button", { name: "예약 취소" }).click();
     await page.getByRole("button", { name: "예약 취소" }).click();
     await expect(page.locator(".myres__badge")).toHaveText("고객 취소");
@@ -72,5 +75,11 @@ test.describe("알림", () => {
      * (승인 대기로 들어오는 건은 `RESERVATION_REQUESTED` 로 매장에 간다.)
      */
     await expect(page.locator(".noti", { hasText: code })).toHaveCount(0);
+
+    /**
+     * **손님 취소는 온다.** 손님에게는 메일도 알림도 없지만(스스로 한 일이다) 매장은 알아야 한다 —
+     * 그 자리가 다시 비었다는 뜻이라, 늦게 알수록 못 파는 시간이 길어진다 (FR-NOTI-010).
+     */
+    await expect(page.locator(".noti", { hasText: canceled })).toBeVisible();
   });
 });
