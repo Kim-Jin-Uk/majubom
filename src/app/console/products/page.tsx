@@ -11,7 +11,7 @@ export default async function ProductsPage() {
   const products = await listProducts(v.membership.businessId);
   const canEdit = v.isOwner || Boolean(v.membership.permissions.editProduct);
   return (
-    <ConsoleShell current="products" viewer={{ name: v.name, role: v.membership.role }}>
+    <ConsoleShell userId={v.uid} current="products" viewer={{ name: v.name, role: v.membership.role }}>
       <h1>상품</h1>
       <section className="panel">
         <p className="sub">고객이 예약 페이지에서 고르는 메뉴입니다. 자원(담당자·공간)이 무엇을 점유하는지라면, 상품은 언제·얼마나·몇 명이 예약하는지를 정해요.</p>

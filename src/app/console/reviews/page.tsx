@@ -13,7 +13,7 @@ export default async function ConsoleReviewsPage() {
   // API 도 같은 검사를 한다(화면만 감추면 직접 호출이 남는다)
   const canReply = v.isOwner || v.membership.permissions.replyReview === true;
   return (
-    <ConsoleShell current="reviews" viewer={{ name: v.name, role: v.membership.role }}>
+    <ConsoleShell userId={v.uid} current="reviews" viewer={{ name: v.name, role: v.membership.role }}>
       <h1>리뷰</h1>
       <p className="sub" style={{ margin: "0 0 16px" }}>
         리뷰는 <b>지우거나 숨길 수 없습니다.</b> 사장님이 임의로 지울 수 있으면 리뷰를 믿을 이유가 없어져요 —

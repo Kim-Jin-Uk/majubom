@@ -51,7 +51,11 @@ export const notifications = pgTable(
     retryCount: integer("retry_count").notNull().default(0),
     ...createdAtOnly,
   },
-  (t) => [index("notifications_user_created_idx").on(t.userId, t.createdAt)],
+  (t) => [
+    index("notifications_user_created_idx").on(t.userId, t.createdAt),
+    // 사업장 일일 발송 한도를 셀 때 쓴다 (FR-NOTI-020) — 없으면 알림 한 건 보낼 때마다 테이블을 훑는다
+    index("notifications_business_created_idx").on(t.businessId, t.createdAt),
+  ],
 );
 
 /**

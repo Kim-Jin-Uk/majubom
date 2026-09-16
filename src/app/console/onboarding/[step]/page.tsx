@@ -108,7 +108,7 @@ export default async function OnboardingStep({ params }: { params: Promise<{ ste
   }
 
   return (
-    <ConsoleShell current="onboarding" viewer={{ name: v.name, role: v.membership.role }} wide>
+    <ConsoleShell userId={v.uid} current="onboarding" viewer={{ name: v.name, role: v.membership.role }} wide>
       <div className="wizard">
         <WizardSide steps={steps} current={n} status={status} />
         <main className="wizard-main">

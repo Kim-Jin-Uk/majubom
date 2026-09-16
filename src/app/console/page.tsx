@@ -28,7 +28,7 @@ export default async function ConsoleHome() {
   // 예약을 받을 수 있는 상태일 때만 대시보드가 뜻이 있다 — 준비 중인 매장에 "가동률 0%" 를 보여줄 이유가 없다
   const dash = status.readyToPublish ? await getDashboard(consoleActor(v), todayIn(b.timezone)) : null;
   return (
-    <ConsoleShell current="home" viewer={{ name: v.name, role: v.membership.role }}>
+    <ConsoleShell userId={v.uid} current="home" viewer={{ name: v.name, role: v.membership.role }}>
       <h1>{b.name}</h1>
       {b.status === "REJECTED" ? (
         <Alert kind="error">

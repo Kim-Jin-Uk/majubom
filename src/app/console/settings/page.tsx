@@ -14,7 +14,7 @@ export default async function SettingsPage() {
   if (!v.isOwner) notFound();
   const { settings: b, policy, status, colorScheme } = await loadConsoleBusiness(v.membership.businessId);
   return (
-    <ConsoleShell current="settings" viewer={{ name: v.name, role: v.membership.role }}>
+    <ConsoleShell userId={v.uid} current="settings" viewer={{ name: v.name, role: v.membership.role }}>
       <h1>설정</h1>
       <BusinessInfoForm initial={b} mode="settings" readOnly={v.readOnly} publicBase={publicBase()} />
       <SiteThemeForm initial={colorScheme} publicUrl={status.publicUrl} live={status.live} readOnly={v.readOnly} />

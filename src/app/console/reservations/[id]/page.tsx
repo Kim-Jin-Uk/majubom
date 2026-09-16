@@ -25,7 +25,7 @@ export default async function ReservationDetailPage({ params }: { params: Promis
   const resources = v.isOwner ? await listResources(v.membership.businessId) : [];
 
   return (
-    <ConsoleShell current="reservations" viewer={{ name: v.name, role: v.membership.role }}>
+    <ConsoleShell userId={v.uid} current="reservations" viewer={{ name: v.name, role: v.membership.role }}>
       <p style={{ margin: 0, fontSize: 13.5 }}>
         <Link href="/console/reservations">← 예약 목록</Link>
       </p>

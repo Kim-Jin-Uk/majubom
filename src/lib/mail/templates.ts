@@ -199,3 +199,18 @@ export function businessBlockedMail(to: string, businessName: string, reason: st
 export function businessRestoredMail(to: string, businessName: string): Mail {
   return mail(to, `${businessName} 이(가) 다시 열렸습니다`, `${businessName} 의 예약 페이지와 콘솔이 정상으로 돌아왔습니다. 다시 로그인해 주세요.`);
 }
+
+/**
+ * 방문 리마인더 — 시작 24시간 전 (FR-NOTI-010, #99).
+ *
+ * **취소 안내를 같이 싣는다.** 이 메일을 받고 손님이 하는 일은 둘 중 하나다: 그대로 가거나, 못 가게 됐음을
+ * 이제야 떠올리거나. 두 번째 사람이 이 자리에서 취소하면 매장이 그 자리를 다시 팔 수 있다 —
+ * 노쇼 한 건과 취소 한 건의 차이가 여기서 갈린다.
+ */
+export function reservationReminderMail(to: string, i: ReservationMailInfo): Mail {
+  return mail(
+    to,
+    `내일 방문 예정이에요 — ${i.businessName}`,
+    `내일 예약이 있어요.\n\n${block(i)}\n\n예약 내용 보기·취소: ${i.url}\n\n못 가시게 됐다면 미리 알려 주세요. 기다리는 다른 손님이 그 시간을 쓸 수 있습니다.`,
+  );
+}

@@ -59,8 +59,13 @@ export async function publicSlug(page: Page): Promise<string> {
 export async function bookOnce(page: Page, slug: string): Promise<string> {
   await page.goto(`/@${slug}/book`);
   await page.locator(".bw-product").first().click();
-  // 고를 수 있는 날 중 첫 칸. `aria-disabled` 라 눌리기는 하므로 명시적으로 걸러 낸다
-  await page.locator('.bw-day:not([aria-disabled="true"])').first().click();
+  /**
+   * 고를 수 있는 날 중 **마지막** 칸. 첫 칸(대개 오늘·내일)을 고르면 그 예약은 태어나자마자
+   * 취소 마감(기본 24시간)을 지나 버려서, 취소·시간 변경 시나리오가 쓸 수 없는 예약이 된다.
+   * 마지막 칸은 예약 가능 기간(`maxAdvanceDays`) 안이면서 마감과 한참 떨어져 있다.
+   * (`aria-disabled` 라 눌리기는 하므로 명시적으로 걸러 낸다.)
+   */
+  await page.locator('.bw-day:not([aria-disabled="true"])').last().click();
   await page.locator(".bw-time").first().click();
   /**
    * 4단계(담당자)는 상품 설정에 따라 있기도 없기도 하다. `isVisible()` 로 바로 묻지 않는다 —

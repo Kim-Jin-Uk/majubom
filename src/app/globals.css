@@ -3325,3 +3325,85 @@ a.myres:hover {
   font-variant-numeric: tabular-nums;
   color: var(--text-2);
 }
+
+/* 알림 (에픽 #14). 벨은 헤더 안에서 버튼들과 같은 높이로 선다 */
+.bell {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  font-size: 16px;
+  line-height: 1;
+  text-decoration: none;
+}
+.bell:hover {
+  background: var(--muted-fill);
+}
+/* 배지는 벨 위에 얹되 잘리지 않게 — 세 자리가 되면 벨보다 커지므로 99+ 에서 멈춘다 */
+.bell__dot {
+  position: absolute;
+  top: -2px;
+  right: -4px;
+  min-width: 17px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--bad-strong);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 17px;
+  text-align: center;
+}
+
+.noti-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface);
+}
+.noti-list li + li {
+  border-top: 1px solid var(--border);
+}
+.noti {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.noti:hover {
+  background: var(--surface-2);
+}
+/* 안 읽은 줄은 배경으로 구분한다 — 점 하나로는 목록에서 훑을 때 안 보인다 */
+.noti.unread {
+  background: var(--primary-tint);
+}
+.noti.unread:hover {
+  background: var(--primary-border);
+}
+.noti__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+.noti__at {
+  margin-left: auto;
+  white-space: nowrap;
+}
+.noti__body {
+  font-size: 13.5px;
+  color: var(--text-2);
+  line-height: 1.5;
+}
