@@ -2,6 +2,7 @@ import { and, eq, gte, lt, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { businesses, notifications, products, reservations, resources, users } from "@/db/schema";
 import { whenText } from "@/features/booking/notify-text";
+import { inBatches, MAIL_CONCURRENCY } from "@/lib/batches";
 import { reservationReminderMail } from "@/lib/mail/templates";
 import { notify } from "./notify";
 
@@ -58,8 +59,12 @@ export async function sendReminders(now = new Date(), limit = 500): Promise<numb
     .orderBy(reservations.startAt)
     .limit(limit);
 
+  /**
+   * **하나씩 기다리지 않는다.** 500건이 메일 왕복을 순차로 기다리면 매시 틱이 그만큼 길어지고,
+   * 같은 틱에 든 교대 만료까지 밀린다 — `expireRequests` 가 먼저 세운 규약을 그대로 쓴다 (리뷰 지적).
+   */
   let sent = 0;
-  for (const r of due) {
+  await inBatches(due, MAIL_CONCURRENCY, async (r) => {
     const when = whenText(r.startAt, r.endAt, r.timezone);
     const url = `${(process.env.AUTH_URL ?? "http://localhost:3000").replace(/\/$/, "")}/me/reservations/${r.id}`;
     const d = await notify(
@@ -82,6 +87,6 @@ export async function sendReminders(now = new Date(), limit = 500): Promise<numb
       now,
     );
     if (d) sent++;
-  }
+  });
   return sent;
 }
