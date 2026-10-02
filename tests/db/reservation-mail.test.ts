@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { eq, inArray } from "drizzle-orm";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { db, pool } from "@/db/client";
-import { auditLogs, businessMembers, businesses, productResources, products, reservationLogs, reservations, resources, users, workSchedules } from "@/db/schema";
+import { auditLogs, businessMembers, businesses, notifications, productResources, products, reservationLogs, reservations, resources, users, workSchedules } from "@/db/schema";
 import { createReservation, createWalkIn } from "@/features/booking/create";
 import { transitionReservation } from "@/features/booking/transitions";
 import { DEFAULT_POLICY } from "@/features/business/policy-defaults";
@@ -103,7 +103,11 @@ describe.skipIf(!dbTestEnabled())("예약 메일 (#57)", () => {
       await db.delete(workSchedules).where(eq(workSchedules.businessId, f.businessId));
       await db.delete(resources).where(eq(resources.id, f.resourceId));
       await db.delete(businessMembers).where(inArray(businessMembers.id, f.memberIds));
+      // 알림은 사용자를 참조한다 — 먼저 지우지 않으면 FK 로 막힌다 (#96)
+      await db.delete(notifications).where(inArray(notifications.userId, f.userIds));
       await db.delete(users).where(inArray(users.id, f.userIds));
+      // 사업장 앞으로 쌓인 알림도 같이 — `notifications.business_id` 가 FK 다 (#96)
+      await db.delete(notifications).where(eq(notifications.businessId, f.businessId));
       await db.delete(businesses).where(eq(businesses.id, f.businessId));
     }
     await pool.end();
@@ -117,9 +121,8 @@ describe.skipIf(!dbTestEnabled())("예약 메일 (#57)", () => {
     expect(sent[0].subject).toContain("예약이 확정되었습니다");
     expect(sent[0].text).toContain(r.code);
     expect(sent[0].text).toContain("시술 60분");
-    // 링크는 매장 공개 홈 — 손님용 예약 상세(#89)가 아직 없어 404 로 보내지 않는다
-    expect(sent[0].text).toMatch(/\/@ml-[0-9a-f]{8}(\s|$)/m);
-    expect(sent[0].text).not.toContain("/me/reservations");
+    // 링크는 **예약 상세**다 (#89 가 들어와 원래 자리로 돌아왔다) — 거기서 취소·시간 변경을 바로 한다
+    expect(sent[0].text).toContain(`/me/reservations/${r.id}`);
     // 가게 시각(KST) 로 적힌다 — 서버 시계(UTC)가 아니다
     expect(sent[0].text).toMatch(/\d{4}년 \d+월 \d+일 \(.\) \d{2}:\d{2} – \d{2}:\d{2}/);
   }, 30_000);

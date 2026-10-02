@@ -14,7 +14,7 @@ export default async function NewProductPage() {
   const resources = await listResources(v.membership.businessId);
   const { settings } = await loadConsoleBusiness(v.membership.businessId);
   return (
-    <ConsoleShell current="products" viewer={{ name: v.name, role: v.membership.role }}>
+    <ConsoleShell userId={v.uid} current="products" viewer={{ name: v.name, role: v.membership.role }}>
       <h1>상품 등록</h1>
       <ProductForm businessId={v.membership.businessId} businessHours={settings.openingHours} resources={resources} initial={null} mode="page" limited={false} readOnly={v.readOnly} />
     </ConsoleShell>

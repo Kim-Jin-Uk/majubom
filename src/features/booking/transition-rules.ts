@@ -107,7 +107,11 @@ export const CUSTOMER_MAIL_ON = {
  * 손님 메일 갈래. 전이가 아닌 둘이 섞여 있다 — `REQUESTED` 는 생성(`create.ts`),
  * `REASSIGNED` 는 상태가 그대로인 채 담당자만 바뀌는 근무 교대(`schedule/swaps.ts`)다.
  */
-export type ReservationMailEvent = "REQUESTED" | "REASSIGNED" | (typeof CUSTOMER_MAIL_ON)[keyof typeof CUSTOMER_MAIL_ON];
+/**
+ * 전이 뒤 알림을 일으키는 갈래. 이름은 메일에서 왔지만 이제 **메일이 없는 것도 들어 있다** —
+ * `CANCELED_BY_USER` 는 손님에게 보낼 메일이 없고(스스로 한 일이다) 매장에만 간다.
+ */
+export type ReservationMailEvent = "REQUESTED" | "REASSIGNED" | "CANCELED_BY_USER" | (typeof CUSTOMER_MAIL_ON)[keyof typeof CUSTOMER_MAIL_ON];
 
 export function customerMailFor(to: ReservationStatus): ReservationMailEvent | null {
   return CUSTOMER_MAIL_ON[to as keyof typeof CUSTOMER_MAIL_ON] ?? null;

@@ -54,7 +54,7 @@ export default async function ReservationsPage({ searchParams }: { searchParams:
   const next = span === "day" ? addDays(anchor, 1) : addDays(anchor, 7);
 
   return (
-    <ConsoleShell current="reservations" viewer={{ name: v.name, role: v.membership.role }}>
+    <ConsoleShell userId={v.uid} current="reservations" viewer={{ name: v.name, role: v.membership.role }}>
       <h1>예약</h1>
       <p className="sub" style={{ margin: 0 }}>
         {v.isOwner ? "들어온 예약을 승인하고, 완료·노쇼를 정리하는 곳이에요. 시간을 눌러 상세로 들어가면 처리할 수 있어요." : "내가 담당하는 예약이에요. 시간을 눌러 상세로 들어가면 승인·완료·노쇼를 처리할 수 있어요."}

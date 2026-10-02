@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db, pool } from "@/db/client";
-import { businesses, productResources, products, reservationLogs, reservations, resources, users } from "@/db/schema";
+import { businesses, notifications, productResources, products, reservationLogs, reservations, resources, users } from "@/db/schema";
 import { DEFAULT_POLICY } from "@/features/business/policy-defaults";
 import { createReservation } from "@/features/booking/create";
 import { HttpError } from "@/features/auth/errors";
@@ -77,7 +77,11 @@ async function cleanup(f: Fixture) {
   await db.delete(productResources).where(eq(productResources.productId, f.productId));
   await db.delete(products).where(eq(products.id, f.productId));
   await db.delete(resources).where(inArray(resources.id, f.resourceIds));
+  // 알림은 사용자를 참조한다 — 먼저 지우지 않으면 FK 로 막힌다 (#96)
+  await db.delete(notifications).where(inArray(notifications.userId, f.customerIds));
   await db.delete(users).where(inArray(users.id, f.customerIds));
+  // 사업장 앞으로 쌓인 알림도 같이 — `notifications.business_id` 가 FK 다 (#96)
+  await db.delete(notifications).where(eq(notifications.businessId, f.businessId));
   await db.delete(businesses).where(eq(businesses.id, f.businessId));
 }
 

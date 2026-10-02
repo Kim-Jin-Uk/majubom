@@ -5,6 +5,7 @@ import { productResources, products, reservationLogs, reservations, resources } 
 import type { ReservationStatus } from "@/features/booking/slot-types";
 import { HttpError } from "@/features/auth/errors";
 import { writeAudit } from "@/lib/audit";
+import { inBatches, MAIL_CONCURRENCY } from "@/lib/batches";
 import type { RequestMeta } from "@/lib/request-meta";
 import { notifyReservation } from "./notify";
 import { peakOccupancy } from "./peak-occupancy";
@@ -299,8 +300,12 @@ export async function transitionReservation(
   //
   // 배치는 `notify: false` 로 부르고 발송을 직접 모아서 한다 — 500건짜리 루프가 메일 왕복을 하나씩 기다리면
   // 5분 주기 배치가 메일 지연만큼 길어진다 (리뷰 지적).
-  const mailEvent = opts.notify === false ? null : customerMailFor(result.to);
-  if (mailEvent) await notifyReservation(result.id, mailEvent, { reason: opts.reason ?? null });
+  //
+  // **손님 취소는 메일이 없어도 알린다.** 손님에게 "취소되었습니다" 를 보내면 매장이 취소한 줄 알기에
+  // 메일은 없지만(`CUSTOMER_MAIL_ON` 에 없다), 매장은 그 사실을 알아야 한다 — 자리가 비었다는 뜻이다
+  // (FR-NOTI-010 "예약 취소(고객) → 담당 MANAGER, OWNER"). 그 판단은 `notifyReservation` 안에 있다.
+  const event = opts.notify === false ? null : (customerMailFor(result.to) ?? (result.to === "CANCELED_BY_USER" ? "CANCELED_BY_USER" : null));
+  if (event) await notifyReservation(result.id, event, { reason: opts.reason ?? null });
   return result;
 }
 
@@ -335,15 +340,6 @@ export async function expireRequests(now = new Date(), limit = 500): Promise<num
   // 손님에게는 알려야 한다 — 안 보내면 "접수됨" 에서 소식이 끊긴다. 다만 하나씩 기다리지는 않는다
   await inBatches(expired, MAIL_CONCURRENCY, (id) => notifyReservation(id, "EXPIRED"));
   return expired.length;
-}
-
-/** 메일 왕복을 겹쳐서 보낸다. 한 번에 다 던지면 Resend 쪽 속도 제한에 걸린다 */
-const MAIL_CONCURRENCY = 8;
-
-async function inBatches<T>(items: T[], size: number, fn: (item: T) => Promise<void>): Promise<void> {
-  for (let i = 0; i < items.length; i += size) {
-    await Promise.all(items.slice(i, i + size).map(fn));
-  }
 }
 
 /**

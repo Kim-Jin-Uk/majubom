@@ -23,7 +23,7 @@ export default async function SwapsPage() {
   const staff = resources.filter((r) => r.type === "STAFF" && r.isActive && r.memberId && r.member?.status === "ACTIVE" && r.id !== mine?.id).map((r) => ({ id: r.id, name: r.name }));
 
   return (
-    <ConsoleShell current="schedule" viewer={{ name: v.name, role: v.membership.role }}>
+    <ConsoleShell userId={v.uid} current="schedule" viewer={{ name: v.name, role: v.membership.role }}>
       <h1>근무 교대</h1>
       <p className="sub" style={{ margin: "0 0 8px" }}>
         동료와 근무를 바꿔요. <b>그날 예약을 어떻게 할지</b> 함께 정해야 요청할 수 있어요 — 근무만 넘기고 예약을 두면 그날 손님이 빈 가게에 옵니다.

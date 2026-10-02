@@ -23,7 +23,7 @@ export default async function PatternPage({ searchParams }: { searchParams: Prom
   const today = todayIn(settings.timezone);
   const view = selected ? await getPatterns(v.membership.businessId, selected, today) : null;
   return (
-    <ConsoleShell current="schedule" viewer={{ name: v.name, role: v.membership.role }}>
+    <ConsoleShell userId={v.uid} current="schedule" viewer={{ name: v.name, role: v.membership.role }}>
       <h1>주간 근무 패턴</h1>
       <p className="sub" style={{ margin: 0 }}>요일별 출퇴근·휴게를 정하면 매주 반복돼요. 특정 날만 다르면 근무표에서 그 칸을 눌러 예외를 두세요.</p>
       {/* 9/14 이전에는 "영업시간을 먼저 정하라" 고 했다. 지금은 정반대다 — 미정이면 하루 전체가 열리고 자동 확정만 꺼진다.

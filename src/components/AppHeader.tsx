@@ -4,6 +4,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui";
 import { auth } from "@/features/auth/auth";
 import { LogoutButton } from "@/features/auth/ui/LogoutButton";
+import { NotificationBell } from "@/features/notification/ui/NotificationBell";
 
 /**
  * 서비스 헤더. 로그인 진입이 **여기** 있다 — 메인은 검색이고, 로그인은 둘러본 뒤에 하는 일이다.
@@ -23,6 +24,7 @@ export async function AppHeader() {
       <nav className="app-header__nav">
         {signedIn ? (
           <>
+            <NotificationBell userId={s!.user.id} href="/me/notifications" />
             <Link href="/me/reservations">
               <Button size="sm">내 예약</Button>
             </Link>

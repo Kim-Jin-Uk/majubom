@@ -6,6 +6,7 @@ import { HttpError } from "@/features/auth/errors";
 import { revokeAllSessions } from "@/features/auth/session-store";
 import { transitionReservation } from "@/features/booking/transitions";
 import { writeAudit, type AuditAction } from "@/lib/audit";
+import { notify as sendNotification } from "@/features/notification/notify";
 import { sendMail } from "@/lib/mail";
 import { businessApprovedMail, businessBlockedMail, businessRejectedMail, businessRestoredMail, businessSuspendedMail } from "@/lib/mail/templates";
 import type { RequestMeta } from "@/lib/request-meta";
@@ -155,8 +156,19 @@ export async function decideApplication(id: string, input: DecisionInput, actor:
     return { status, name: cur.name, slug: cur.slug, owner };
   });
 
-  // 메일은 커밋 뒤에 — 롤백된 승인 메일이 나가면 사업자는 열리지도 않은 URL 을 안내받는다
-  await notify(input.decision === "APPROVE" ? businessApprovedMail(done.owner.email, done.name, publicUrl(done.slug), consoleUrl()) : businessRejectedMail(done.owner.email, done.name, input.reason ?? ""));
+  // 메일은 커밋 뒤에 — 롤백된 승인 메일이 나가면 사업자는 열리지도 않은 URL 을 안내받는다.
+  // **알림 계층을 거친다**(#96): 사장님의 알림함에도 남아야 "승인 메일을 못 봤다" 가 막다른 길이 되지 않는다
+  const approved = input.decision === "APPROVE";
+  const mail = approved ? businessApprovedMail(done.owner.email, done.name, publicUrl(done.slug), consoleUrl()) : businessRejectedMail(done.owner.email, done.name, input.reason ?? "");
+  await sendNotification({
+    userId: done.owner.userId,
+    event: approved ? "BUSINESS_APPROVED" : "BUSINESS_REJECTED",
+    businessId: id,
+    title: done.name,
+    body: approved ? "가입이 승인됐어요. 예약 페이지가 공개됐습니다." : `가입이 반려됐어요${input.reason ? ` — ${input.reason}` : ""}`,
+    linkUrl: approved ? "/console" : "/console/onboarding",
+    mail: { subject: mail.subject, text: mail.text, html: mail.html },
+  });
   return { status: done.status };
 }
 

@@ -12,7 +12,7 @@ export default async function ResourcesPage() {
   const v = await consoleViewer("/console/resources");
   const [resources, members] = await Promise.all([listResources(v.membership.businessId), listMembers(v.membership.businessId)]);
   return (
-    <ConsoleShell current="resources" viewer={{ name: v.name, role: v.membership.role }}>
+    <ConsoleShell userId={v.uid} current="resources" viewer={{ name: v.name, role: v.membership.role }}>
       <h1>담당자 · 공간</h1>
       <section className="panel">
         <h2>자원</h2>

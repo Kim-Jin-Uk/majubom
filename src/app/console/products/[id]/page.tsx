@@ -32,7 +32,7 @@ export default async function EditProductPage({ params, searchParams }: { params
   const limited = !v.isOwner && Boolean(v.membership.permissions.editProduct) && (await isAssignedManager(id, v.membership.memberId));
   const readOnly = v.readOnly || (!v.isOwner && !limited) || product.status === "ARCHIVED";
   return (
-    <ConsoleShell current="products" viewer={{ name: v.name, role: v.membership.role }}>
+    <ConsoleShell userId={v.uid} current="products" viewer={{ name: v.name, role: v.membership.role }}>
       <h1>{product.name}</h1>
       {sp.saved && <Alert kind="ok">등록했어요.{sp.warn ? " 영업시간 밖 회차가 있어 아래에 표시했어요 — 그 회차는 예약 페이지에 보이지 않습니다." : ""}</Alert>}
       {product.status === "ARCHIVED" && <Alert kind="warn">보관된 상품이에요. 예약 페이지에 보이지 않고 수정할 수 없습니다. 과거 예약·리뷰의 기록을 위해 남아 있어요.</Alert>}

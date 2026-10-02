@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, describe, expect, it } from "vitest";
 import { db, pool } from "@/db/client";
-import { bookingSelections, businessSlugHistory, businesses, productResources, products, resources, workSchedules } from "@/db/schema";
+import { bookingSelections, businessSlugHistory, businesses, notifications, productResources, products, resources, workSchedules } from "@/db/schema";
 import { HttpError } from "@/features/auth/errors";
 import { createSelection, purgeExpiredSelections, loadSelection, SELECTIONS_PER_IP_PER_HOUR } from "@/features/booking/widget/selection";
 import { DEFAULT_POLICY } from "@/features/business/policy-defaults";
@@ -75,6 +75,8 @@ describe.skipIf(!dbTestEnabled())("선택 토큰 (#83)", () => {
       await db.delete(workSchedules).where(eq(workSchedules.businessId, f.businessId));
       await db.delete(resources).where(eq(resources.businessId, f.businessId));
       await db.delete(businessSlugHistory).where(eq(businessSlugHistory.businessId, f.businessId));
+      // 사업장 앞으로 쌓인 알림도 같이 — `notifications.business_id` 가 FK 다 (#96)
+      await db.delete(notifications).where(eq(notifications.businessId, f.businessId));
       await db.delete(businesses).where(eq(businesses.id, f.businessId));
     }
     await pool.end();

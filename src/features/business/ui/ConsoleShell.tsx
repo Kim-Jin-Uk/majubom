@@ -1,10 +1,11 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Logo } from "@/components/Logo";
+import { NotificationBell } from "@/features/notification/ui/NotificationBell";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { LogoutButton } from "@/features/auth/ui/LogoutButton";
 
-export type ConsoleNavKey = "home" | "onboarding" | "reservations" | "resources" | "products" | "schedule" | "reviews" | "settings";
+export type ConsoleNavKey = "home" | "onboarding" | "reservations" | "resources" | "products" | "schedule" | "reviews" | "notifications" | "settings";
 
 const NAV: Array<{ key: ConsoleNavKey; href: string; label: string; ownerOnly?: boolean }> = [
   { key: "home", href: "/console", label: "홈" },
@@ -22,6 +23,7 @@ const NAV: Array<{ key: ConsoleNavKey; href: string; label: string; ownerOnly?: 
  * 매니저에게는 OWNER 전용 메뉴(설정)를 감춘다 — API 가 403 을 내지만 보이지 않는 게 낫다.
  */
 export function ConsoleShell({
+  userId,
   current,
   viewer,
   children,
@@ -29,6 +31,8 @@ export function ConsoleShell({
 }: {
   current: ConsoleNavKey;
   viewer: { name: string; role: "OWNER" | "MANAGER" };
+  /** 미읽음 배지를 그릴 사람. 없으면 벨을 감춘다 (온보딩 위저드처럼 아직 알림이 의미 없는 화면) */
+  userId?: string;
   children: ReactNode;
   /** 위저드처럼 본문이 직접 폭을 관리할 때 */
   wide?: boolean;
@@ -47,6 +51,7 @@ export function ConsoleShell({
           ))}
         </nav>
         <div className="actions actions--end">
+          {userId && <NotificationBell userId={userId} href="/console/notifications" />}
           <span className="who" style={{ fontSize: 13, color: "var(--text-2)", whiteSpace: "nowrap" }}>
             {viewer.name} · {viewer.role === "OWNER" ? "사업자" : "매니저"}
           </span>
